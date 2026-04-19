@@ -1,0 +1,47 @@
+<section id="clientsView" class="view">
+  <section class="panel clients-toolbar-panel">
+    <div class="panel-head panel-head-row">
+      <div>
+        <h3>Klijenti</h3>
+        <p>Baza klijenata, pretraga i brzi pristup detaljima.</p>
+      </div>
+
+      <div class="clients-toolbar-actions">
+        <button id="addClientBtnMobilePanel" class="btn btn-primary">+ Novi klijent</button>
+        <label for="importClientsInputMobilePanel" class="btn btn-secondary import-label">Import baze</label>
+        <button id="exportClientsBtnMobilePanel" class="btn btn-secondary">Export baze</button>
+        <input id="importClientsInputMobilePanel" type="file" accept="application/json" class="hidden-file-input" />
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head panel-head-row">
+      <div>
+        <h3>Lista klijenata</h3>
+        <p>Jednostavan pregled statusa saradnje.</p>
+      </div>
+
+      <div class="panel-tools">
+        <input
+          type="search"
+          id="clientSearch"
+          class="input search-input"
+          placeholder="Pretraga klijenata..."
+        />
+      </div>
+    </div>
+
+    <div id="clientsModeBar" class="clients-mode-bar hidden">
+      <span id="clientsModeLabel" class="badge info">Prikaz</span>
+      <button id="clearClientsModeBtn" class="btn btn-secondary btn-sm" type="button">Prikaži sve</button>
+    </div>
+
+    <div id="clientsList" class="cards-list"></div>
+
+    <div id="clientsEmpty" class="empty-state hidden">
+      <h4>Nema klijenata</h4>
+      <p>Klikni na “Novi klijent” i kreiraj prvi zapis.</p>
+    </div>
+  </section>
+</section>

@@ -1,0 +1,88 @@
+<div id="activityModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="activityModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="activityModalTitle">Nova aktivnost</h3>
+        <p id="activityModalSubtitle">Evidentiraj sledeci korak ili internu napomenu za klijenta.</p>
+      </div>
+
+      <button id="closeActivityModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <form id="activityForm" class="modal-body" novalidate>
+      <div class="action-meta">
+        <span id="activityClientBadge" class="badge">Klijent</span>
+      </div>
+
+      <div class="field">
+        <label for="activityType">Tip aktivnosti</label>
+        <select id="activityType" class="input" required>
+          <option value="">Izaberi aktivnost</option>
+          <option value="phone_call">Poziv</option>
+          <option value="meeting_scheduled">Zakazan sastanak</option>
+          <option value="reminder">Podsetnik</option>
+          <option value="inactive_checkin">Reaktivacija neaktivnog klijenta</option>
+          <option value="internal_note">Interna beleska</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="activityStage">Status nakon aktivnosti</label>
+        <select id="activityStage" class="input">
+          <option value="">Bez promene statusa</option>
+          <option value="new">Novi</option>
+          <option value="meeting_done">Odrzan sastanak</option>
+          <option value="offer_sent">Poslata ponuda</option>
+          <option value="waiting">Ceka odgovor</option>
+          <option value="negotiation">Pregovori</option>
+          <option value="won">Dobijen</option>
+          <option value="lost">Izgubljen</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="activityNote">Napomena</label>
+        <textarea
+          id="activityNote"
+          class="input textarea textarea-lg"
+          placeholder="Npr. Cujemo se sa klijentom u cetvrtak ili cekamo interni odgovor."
+        ></textarea>
+      </div>
+
+      <div class="field">
+        <label for="activityNextStepText">Sledeci korak</label>
+        <input
+          id="activityNextStepText"
+          class="input"
+          type="text"
+          placeholder="npr. Poslati finalnu ponudu"
+        />
+      </div>
+
+      <div class="field">
+        <label for="activityNextStepType">Tip sledeceg koraka</label>
+        <select id="activityNextStepType" class="input">
+          <option value="">Izaberi</option>
+          <option value="followup">Follow-up</option>
+          <option value="call">Poziv</option>
+          <option value="meeting">Sastanak</option>
+          <option value="offer">Ponuda</option>
+          <option value="decision">Odluka</option>
+          <option value="task">Interni task</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="activityNextStepDate">Datum sledeceg koraka</label>
+        <input id="activityNextStepDate" class="input" type="date" />
+      </div>
+
+      <div class="action-modal-actions">
+        <button type="button" id="cancelActivityBtn" class="btn btn-secondary">Otkazi</button>
+        <button type="submit" class="btn btn-primary">Sacuvaj aktivnost</button>
+      </div>
+    </form>
+  </div>
+</div>

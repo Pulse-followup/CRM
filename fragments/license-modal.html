@@ -1,0 +1,46 @@
+<div id="licenseModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="licenseModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3>Otkljucaj Pro</h3>
+        <p>Unesi aktivacioni kod da otkljucas napredne CRM funkcije.</p>
+      </div>
+
+      <button id="closeLicenseModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <form id="licenseForm" class="modal-body">
+      <div class="payment-summary-box">
+        <div class="screening-badges">
+          <span class="badge warning">Pro funkcija</span>
+        </div>
+        <p class="muted"><strong id="licenseFeatureName">Pro funkcije</strong></p>
+        <p class="muted" id="licenseFeatureHint">Otkljucaj napredne funkcije za ozbiljniji CRM rad.</p>
+      </div>
+
+      <div class="field">
+        <label for="licenseCodeInput">Aktivacioni kod</label>
+        <input
+          id="licenseCodeInput"
+          class="input"
+          type="text"
+          placeholder="npr. PULSE-PRO-2026"
+          autocomplete="off"
+        />
+      </div>
+
+      <p id="licenseError" class="modal-inline-error hidden">Kod nije validan. Proveri unos i pokusaj ponovo.</p>
+
+      <div class="form-actions">
+        <button type="button" id="startTrialBtn" class="btn btn-secondary">Pokreni trial</button>
+
+        <div class="form-actions-right">
+          <button type="button" id="cancelLicenseBtn" class="btn btn-secondary">Kasnije</button>
+          <button type="submit" class="btn btn-primary">Otkljucaj Pro</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,46 @@
+<div id="paymentModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="paymentModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="paymentModalTitle">Naplata</h3>
+        <p id="paymentModalSubtitle">Praćenje fakture i discipline plaćanja.</p>
+      </div>
+
+      <button id="closePaymentModalBtn" class="icon-btn" aria-label="Zatvori">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="payment-summary-box">
+        <div class="screening-badges">
+          <span id="paymentSummaryBadge" class="badge">Naplata</span>
+        </div>
+        <p class="muted" id="paymentSummaryText">Nema podataka o naplati.</p>
+      </div>
+
+      <div class="payment-actions-grid">
+        <button id="markInvoiceSentBtn" class="btn btn-secondary">Evidentiraj poslatu fakturu</button>
+
+        <button id="generatePaymentReminderBtn" class="btn btn-secondary">Pošalji podsetnik</button>
+
+        <button id="markPaidOnTimeBtn" class="btn btn-primary">Plaćeno u roku</button>
+
+        <button id="markPaidLateBtn" class="btn btn-secondary">Plaćeno sa kašnjenjem</button>
+      </div>
+
+      <div class="field">
+        <label for="paymentMessage">Predlog poruke za mail / Viber</label>
+        <textarea id="paymentMessage" class="input textarea">
+Samo da proverim status fakture koju smo poslali.
+
+Ako je potrebno još nešto sa naše strane, slobodno javite.
+        </textarea>
+      </div>
+
+      <div class="action-modal-actions">
+        <button id="copyPaymentMessageBtn" class="btn btn-secondary">Copy poruke</button>
+      </div>
+    </div>
+  </div>
+</div>

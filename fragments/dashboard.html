@@ -1,0 +1,89 @@
+<section id="dashboardView" class="view active">
+  <section class="dashboard-stack home-dashboard-stack">
+    <section class="panel panel-today dashboard-area-today">
+      <div class="panel-head home-panel-head">
+        <div>
+          <h3>Aktivnosti za danas - <span id="homeTodayDate">--.--</span></h3>
+          <p class="panel-subtext">Klijenti kojima je sledeci korak zakazan za danas.</p>
+        </div>
+      </div>
+
+      <div id="todayList" class="cards-list"></div>
+
+      <div id="todayEmpty" class="empty-state hidden">
+        <h4>Nema akcija za danas</h4>
+        <p>Dodaj klijente i aktivnosti da bi Pulse imao sta da predlozi.</p>
+      </div>
+    </section>
+
+    <section class="panel panel-overdue dashboard-area-overdue">
+      <div class="panel-head home-panel-head">
+        <div>
+          <h3>Kasni</h3>
+          <p class="panel-subtext">Sledeci korak je probijen i trazi reakciju.</p>
+        </div>
+      </div>
+
+      <div id="overdueList" class="cards-list"></div>
+
+      <div id="overdueEmpty" class="empty-state hidden">
+        <h4>Nema kasnjenja</h4>
+        <p>Trenutno nema klijenata kojima je probijen rok sledeceg koraka.</p>
+      </div>
+    </section>
+
+    <section class="panel panel-waiting dashboard-area-waiting">
+      <div class="panel-head home-panel-head">
+        <div>
+          <h3>Na cekanju</h3>
+          <p class="panel-subtext">Klijenti kojima je poslata poruka i sada cekamo odgovor.</p>
+        </div>
+      </div>
+
+      <div id="waitingList" class="cards-list"></div>
+
+      <div id="waitingEmpty" class="empty-state hidden">
+        <h4>Nema klijenata na cekanju</h4>
+        <p>Kada posaljes follow-up ili status check, klijent ce se pojaviti ovde.</p>
+      </div>
+    </section>
+
+    <section class="panel panel-week dashboard-area-week">
+      <div class="panel-head home-panel-head">
+        <div>
+          <h3>Ove nedelje</h3>
+          <p class="panel-subtext">Sledeci koraci koji dolaze u narednih 7 dana.</p>
+        </div>
+      </div>
+
+      <div id="weekList" class="cards-list"></div>
+
+      <div id="weekEmpty" class="empty-state hidden">
+        <h4>Nema zakazanih koraka</h4>
+        <p>Kada upises sledeci korak i datum, pojavljivace se ovde.</p>
+      </div>
+    </section>
+
+    <section class="home-shortcuts-grid" aria-label="Home precice">
+      <div id="homeCardTodayActions" class="home-shortcut-card home-shortcut-card-static" aria-hidden="true">
+        <span class="home-shortcut-label">Danas akcija</span>
+        <strong id="homeStatTodayActionsValue" class="home-shortcut-value">0</strong>
+      </div>
+
+      <button id="homeCardHighPriority" class="home-shortcut-card" type="button">
+        <span class="home-shortcut-label">Prioritet VISOK</span>
+        <strong id="homeStatHighPriorityValue" class="home-shortcut-value danger">0</strong>
+      </button>
+
+      <button id="homeCardTotalClients" class="home-shortcut-card" type="button">
+        <span class="home-shortcut-label">Ukupno klijenata</span>
+        <strong id="homeStatTotalClientsValue" class="home-shortcut-value">0</strong>
+      </button>
+
+      <button id="homeCardWeeklyActions" class="home-shortcut-card" type="button" data-pro-feature="weekly_actions">
+        <span class="home-shortcut-label">Akcija ove nedelje</span>
+        <strong id="homeStatWeeklyActionsValue" class="home-shortcut-value">0</strong>
+      </button>
+    </section>
+  </section>
+</section>

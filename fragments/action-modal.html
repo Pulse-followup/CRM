@@ -1,0 +1,44 @@
+<div id="actionModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="actionModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="actionModalTitle">Akcija</h3>
+        <p id="actionModalSubtitle">Predlog poruke i sledeci korak.</p>
+      </div>
+
+      <button id="closeActionModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="action-meta">
+        <span id="actionClientBadge" class="badge">Klijent</span>
+        <span id="actionStageBadge" class="badge">Status</span>
+        <span id="actionPriorityBadge" class="badge">Prioritet</span>
+        <span id="actionCadenceBadge" class="badge">Follow-up</span>
+      </div>
+
+      <div class="followup-tier-picker">
+        <button type="button" class="btn btn-secondary btn-sm" data-followup-tier="light">Blagi</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-followup-tier="medium">Srednji</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-followup-tier="final">Finalni</button>
+      </div>
+
+      <div class="field">
+        <label for="actionType">Tip akcije</label>
+        <input id="actionType" class="input" type="text" readonly />
+      </div>
+
+      <div class="field">
+        <label for="actionMessage">Poruka</label>
+        <textarea id="actionMessage" class="input textarea textarea-lg"></textarea>
+      </div>
+
+      <div class="action-modal-actions">
+        <button id="copyMessageBtn" class="btn btn-secondary">Copy</button>
+        <button id="markSentBtn" class="btn btn-primary">Oznaci kao poslato</button>
+      </div>
+    </div>
+  </div>
+</div>
