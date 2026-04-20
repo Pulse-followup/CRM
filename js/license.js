@@ -265,4 +265,8 @@ function renderLicenseUI() {
   document.querySelectorAll("#dealInfoSection input, #dealInfoSection select").forEach(el => {
     el.disabled = !hasAccess;
   });
+
+  if (typeof renderSettingsUI === "function") {
+    renderSettingsUI();
+  }
 }

@@ -35,6 +35,7 @@ async function initSupabase() {
   supabaseClient.auth.onAuthStateChange((_event, session) => {
     supabaseSession = session || null;
     supabaseUser = supabaseSession?.user || null;
+    initWorkspaceContext();
     syncCloudStatusUI();
   });
 
@@ -98,12 +99,15 @@ async function handleCloudSignIn(e) {
 
   supabaseSession = data.session || null;
   supabaseUser = data.user || null;
+  await initWorkspaceContext();
   await hydrateClientsFromCloud();
   migrateClients();
   renderLicenseUI();
+  renderSettingsUI();
   renderAll();
   syncCloudStatusUI();
   closeAuthModal();
+  maybeOpenOnboarding();
   showToast("Cloud sync je povezan.");
 }
 
@@ -117,7 +121,7 @@ async function handleCloudSignUp() {
   const password = getValue("authPasswordInput");
   const errorEl = document.getElementById("authError");
 
-  const { error } = await supabaseClient.auth.signUp({ email, password });
+  const { data, error } = await supabaseClient.auth.signUp({ email, password });
   if (error) {
     if (errorEl) {
       errorEl.textContent = error.message;
@@ -126,7 +130,14 @@ async function handleCloudSignUp() {
     return;
   }
 
-  showToast("Nalog je kreiran. Sada mozes odmah da se prijavis.");
+  supabaseSession = data.session || null;
+  supabaseUser = data.user || null;
+  await initWorkspaceContext();
+  renderSettingsUI();
+  syncCloudStatusUI();
+  closeAuthModal();
+  maybeOpenOnboarding();
+  showToast("Nalog je kreiran.");
 }
 
 async function handleCloudLogout() {
@@ -135,6 +146,8 @@ async function handleCloudLogout() {
   await supabaseClient.auth.signOut();
   supabaseSession = null;
   supabaseUser = null;
+  resetWorkspaceContext();
+  renderSettingsUI();
   syncCloudStatusUI();
   showToast("Cloud nalog je odjavljen.");
 }
@@ -228,5 +241,9 @@ function syncCloudStatusUI(overrideText = "") {
 
   if (logoutBtn) {
     logoutBtn.classList.toggle("hidden", !isCloudEnabled());
+  }
+
+  if (typeof renderSettingsUI === "function") {
+    renderSettingsUI();
   }
 }

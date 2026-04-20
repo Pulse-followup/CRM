@@ -33,7 +33,9 @@ const MODAL_FRAGMENTS = [
   "./fragments/weekly-actions-modal.html",
   "./fragments/license-modal.html",
   "./fragments/welcome-modal.html",
-  "./fragments/auth-modal.html"
+  "./fragments/auth-modal.html",
+  "./fragments/onboarding-modal.html",
+  "./fragments/settings-modal.html"
 ];
 
 let clients = [];
@@ -50,10 +52,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadLicenseState();
   loadClients();
   await initSupabase();
+  await initWorkspaceContext();
   migrateClients();
   renderLicenseUI();
+  renderSettingsUI();
   renderAll();
   showWelcomeModalIfNeeded();
+  maybeOpenOnboarding();
 });
 
 async function bootFragments() {
@@ -131,6 +136,27 @@ function bindStaticEvents() {
   bindClickIfExists("authCancelBtn", closeAuthModal);
   bindClickIfExists("authModalBackdrop", closeAuthModal);
   bindClickIfExists("authSignUpBtn", handleCloudSignUp);
+  bindClickIfExists("openSettingsBtn", openSettingsModal);
+  bindClickIfExists("openSettingsBtnTop", openSettingsModal);
+  bindClickIfExists("closeSettingsModalBtn", closeSettingsModal);
+  bindClickIfExists("settingsModalBackdrop", closeSettingsModal);
+  bindClickIfExists("settingsOpenLicenseBtn", () => openLicenseModal());
+  bindClickIfExists("settingsConnectCloudBtn", openAuthModal);
+  bindClickIfExists("settingsLogoutBtn", handleCloudLogout);
+  bindClickIfExists("openOnboardingFromSettingsBtn", () => openOnboardingModal("choice"));
+  bindClickIfExists("onboardingContinueProfileBtn", handleOnboardingProfileContinue);
+  bindClickIfExists("onboardingChooseCreateBtn", handleOnboardingChooseCreate);
+  bindClickIfExists("onboardingChooseJoinBtn", handleOnboardingChooseJoin);
+  bindClickIfExists("createWorkspaceBtn", handleOnboardingCreateWorkspace);
+  bindClickIfExists("acceptInviteBtn", handleAcceptInvite);
+  bindClickIfExists("onboardingBackToChoiceBtn", () => {
+    onboardingStep = "choice";
+    renderOnboardingStep();
+  });
+  bindClickIfExists("onboardingBackFromJoinBtn", () => {
+    onboardingStep = "choice";
+    renderOnboardingStep();
+  });
 
   const licenseForm = document.getElementById("licenseForm");
   if (licenseForm) {
