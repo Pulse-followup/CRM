@@ -12,6 +12,8 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .brand {
@@ -31,6 +33,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 .license-card {
@@ -41,6 +44,7 @@
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025));
   border: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 0;
 }
 
 .license-card p {
@@ -59,6 +63,7 @@
   transition: var(--transition);
   border: 1px solid transparent;
   font-weight: 700;
+  min-width: 0;
 }
 
 .nav-btn:hover {
@@ -78,6 +83,7 @@
 .main-content {
   padding: calc(28px + var(--safe-top)) calc(28px + var(--safe-right)) calc(36px + var(--safe-bottom)) calc(28px + var(--safe-left));
   min-width: 0;
+  overflow-x: clip;
 }
 
 /* ------------------------- TOPBAR ------------------------- */

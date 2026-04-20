@@ -14,19 +14,22 @@
   .sidebar {
     position: relative;
     height: auto;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 12px;
     padding: calc(12px + var(--safe-top)) calc(14px + var(--safe-right)) 12px calc(14px + var(--safe-left));
   }
 
   .nav {
     flex-direction: row;
     gap: 8px;
+    width: 100%;
   }
 
   .brand {
     padding: 0;
+    justify-content: center;
   }
 
   .brand-logo-image {
@@ -35,12 +38,15 @@
 
   .license-card {
     margin-top: 0;
-    max-width: 220px;
+    max-width: none;
+    width: 100%;
     padding: 10px;
     gap: 6px;
   }
 
   .nav-btn {
+    flex: 1;
+    text-align: center;
     padding: 10px 12px;
     font-size: 0.9rem;
   }
@@ -166,12 +172,20 @@
 
   .license-card {
     max-width: none;
-    min-width: 118px;
+    min-width: 0;
   }
 
   .license-card .btn {
     font-size: 0.8rem;
     padding: 8px 8px;
+  }
+
+  .main-content {
+    padding: 14px calc(10px + var(--safe-right)) calc(18px + var(--safe-bottom)) calc(10px + var(--safe-left));
+  }
+
+  .panel {
+    padding: 14px;
   }
 
   .clients-mode-bar {
