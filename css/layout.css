@@ -4,6 +4,7 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   padding: 22px 16px;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   background: linear-gradient(180deg, rgba(8, 13, 24, 0.92), rgba(10, 16, 30, 0.88));
@@ -75,7 +76,7 @@
 /* ------------------------- MAIN ------------------------- */
 
 .main-content {
-  padding: 28px 28px 36px;
+  padding: calc(28px + var(--safe-top)) calc(28px + var(--safe-right)) calc(36px + var(--safe-bottom)) calc(28px + var(--safe-left));
   min-width: 0;
 }
 
