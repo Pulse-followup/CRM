@@ -1,0 +1,28 @@
+<div id="authModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="authModalBackdrop"></div>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="authModalTitle">Povezi Pulse cloud</h3>
+        <p id="authStatusText">Prijavi se ili napravi nalog za cloud sync.</p>
+      </div>
+      <button id="closeAuthModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+    <form id="authForm" class="modal-body">
+      <div class="field">
+        <label for="authEmailInput">Email</label>
+        <input id="authEmailInput" class="input" type="email" placeholder="ime@firma.rs" autocomplete="email" />
+      </div>
+      <div class="field">
+        <label for="authPasswordInput">Lozinka</label>
+        <input id="authPasswordInput" class="input" type="password" placeholder="Unesi lozinku" autocomplete="current-password" />
+      </div>
+      <p id="authError" class="modal-inline-error hidden">Prijava nije uspela.</p>
+      <div class="welcome-actions">
+        <button id="authSignUpBtn" class="btn btn-secondary" type="button">Napravi nalog</button>
+        <button id="authCancelBtn" class="btn btn-secondary" type="button">Kasnije</button>
+        <button class="btn btn-primary" type="submit">Prijavi se</button>
+      </div>
+    </form>
+  </div>
+</div>
