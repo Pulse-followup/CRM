@@ -221,6 +221,31 @@ button {
   gap: 10px;
 }
 
+.key-value-list {
+  display: grid;
+  gap: 12px;
+}
+
+.key-value-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.key-value-row span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.key-value-row strong {
+  text-align: right;
+}
+
 /* === STYLES END PART 1/3 === */
 /* === STYLES START PART 2/3 === */
 
