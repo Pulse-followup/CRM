@@ -20,8 +20,9 @@
 .modal-panel {
   position: relative;
   width: min(760px, calc(100% - 28px));
-  max-height: calc(100vh - 40px);
-  margin: 20px auto;
+  max-height: calc(100vh - 40px - var(--safe-top) - var(--safe-bottom));
+  max-height: calc(100dvh - 40px - var(--safe-top) - var(--safe-bottom));
+  margin: calc(20px + var(--safe-top)) auto calc(20px + var(--safe-bottom));
   background: linear-gradient(
     180deg,
     rgba(18, 26, 46, 0.97),
@@ -62,7 +63,7 @@
 }
 
 .modal-body {
-  padding: 18px 20px 22px;
+  padding: 18px 20px calc(22px + var(--safe-bottom));
   overflow: auto;
   display: grid;
   gap: 16px;
@@ -228,8 +229,9 @@
   .modal-panel,
   .modal-lg {
     width: calc(100% - 16px);
-    max-height: calc(100vh - 16px);
-    margin: 8px auto;
+    max-height: calc(100vh - 16px - var(--safe-top) - var(--safe-bottom));
+    max-height: calc(100dvh - 16px - var(--safe-top) - var(--safe-bottom));
+    margin: calc(8px + var(--safe-top)) auto calc(8px + var(--safe-bottom));
     border-radius: 18px;
   }
 
