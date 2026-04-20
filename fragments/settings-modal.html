@@ -1,0 +1,72 @@
+<div id="settingsModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="settingsModalBackdrop"></div>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3>Settings</h3>
+        <p>Profil, workspace, cloud status i plan na jednom mestu.</p>
+      </div>
+      <button id="closeSettingsModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+    <div class="modal-body">
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Moj profil</h3>
+          <p id="settingsProfileHint">Prijavi se u Pulse cloud da bismo povezali nalog i workspace.</p>
+        </div>
+        <div class="key-value-list">
+          <div class="key-value-row">
+            <span>Ime</span>
+            <strong id="settingsUserName">Nije uneto</strong>
+          </div>
+          <div class="key-value-row">
+            <span>Email</span>
+            <strong id="settingsUserEmail">Nije prijavljen</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Workspace</h3>
+          <p id="settingsWorkspaceHint">Ako jos nemas tim, onboarding ce ponuditi kreiranje workspace-a.</p>
+        </div>
+        <div class="key-value-list">
+          <div class="key-value-row">
+            <span>Naziv</span>
+            <strong id="settingsWorkspaceName">Nije povezan</strong>
+          </div>
+          <div class="key-value-row">
+            <span>Uloga</span>
+            <strong id="settingsWorkspaceRole">-</strong>
+          </div>
+        </div>
+        <div class="welcome-actions">
+          <button id="openOnboardingFromSettingsBtn" class="btn btn-secondary" type="button">Workspace setup</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Plan i cloud</h3>
+          <p>Trenutni paket, cloud status i pristup nalogu.</p>
+        </div>
+        <div class="key-value-list">
+          <div class="key-value-row">
+            <span>Plan</span>
+            <strong id="settingsPlanName">FREE</strong>
+          </div>
+          <div class="key-value-row">
+            <span>Cloud</span>
+            <strong id="settingsCloudState">Offline</strong>
+          </div>
+        </div>
+        <div class="welcome-actions">
+          <button id="settingsOpenLicenseBtn" class="btn btn-secondary" type="button">Plan i trial</button>
+          <button id="settingsConnectCloudBtn" class="btn btn-secondary" type="button">Prijava</button>
+          <button id="settingsLogoutBtn" class="btn btn-secondary hidden" type="button">Odjava</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>

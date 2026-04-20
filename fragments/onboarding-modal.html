@@ -1,0 +1,64 @@
+<div id="onboardingModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="onboardingModalBackdrop"></div>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="onboardingTitle">Dobro dosli u Pulse Team</h3>
+        <p id="onboardingSubtitle">Hajde da povezemo tvoj nalog sa profilom i workspace-om.</p>
+      </div>
+    </div>
+    <div class="modal-body">
+      <section id="onboardingStepProfile" class="onboarding-step">
+        <div class="field">
+          <label for="onboardingFullName">Ime i prezime</label>
+          <input id="onboardingFullName" class="input" type="text" placeholder="Kako da te oslovljavamo?" />
+        </div>
+        <div class="welcome-actions">
+          <button id="onboardingContinueProfileBtn" class="btn btn-primary" type="button">Nastavi</button>
+        </div>
+      </section>
+
+      <section id="onboardingStepChoice" class="onboarding-step hidden">
+        <div class="upgrade-note-box">
+          <strong>Izaberi kako zelis da udjes u Pulse Team.</strong>
+          <p>Mozeš da kreiraš novi tim ili da prihvatiš postojeću pozivnicu za workspace.</p>
+        </div>
+        <div class="welcome-plan-grid">
+          <article class="welcome-plan-card">
+            <strong>Kreiraj novi tim</strong>
+            <p>Postajes admin workspace-a i pozivas ostale clanove kad budes spreman.</p>
+            <button id="onboardingChooseCreateBtn" class="btn btn-primary" type="button">Kreiraj tim</button>
+          </article>
+          <article class="welcome-plan-card">
+            <strong>Pridruzi se timu</strong>
+            <p>Ako za tvoj email postoji pozivnica, ovde je prihvatas i ulazis u isti CRM prostor.</p>
+            <button id="onboardingChooseJoinBtn" class="btn btn-secondary" type="button">Prihvati poziv</button>
+          </article>
+        </div>
+      </section>
+
+      <section id="onboardingStepCreate" class="onboarding-step hidden">
+        <div class="field">
+          <label for="workspaceNameInput">Naziv firme ili tima</label>
+          <input id="workspaceNameInput" class="input" type="text" placeholder="Na primer: RMC Sales" />
+        </div>
+        <div class="welcome-actions">
+          <button id="onboardingBackToChoiceBtn" class="btn btn-secondary" type="button">Nazad</button>
+          <button id="createWorkspaceBtn" class="btn btn-primary" type="button">Kreiraj workspace</button>
+        </div>
+      </section>
+
+      <section id="onboardingStepJoin" class="onboarding-step hidden">
+        <div id="pendingInviteBox" class="upgrade-note-box hidden">
+          <strong id="pendingInviteWorkspaceName">Pozivnica je spremna.</strong>
+          <p id="pendingInviteHint">Za tvoj email postoji pozivnica za ovaj workspace.</p>
+        </div>
+        <p id="noInviteText" class="inline-upsell-note hidden">Za tvoj email trenutno ne postoji aktivna pozivnica. Zamoli admina da te pozove u tim.</p>
+        <div class="welcome-actions">
+          <button id="onboardingBackFromJoinBtn" class="btn btn-secondary" type="button">Nazad</button>
+          <button id="acceptInviteBtn" class="btn btn-primary hidden" type="button">Prihvati poziv</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
