@@ -32,7 +32,8 @@ const MODAL_FRAGMENTS = [
   "./fragments/payment-modal.html",
   "./fragments/weekly-actions-modal.html",
   "./fragments/license-modal.html",
-  "./fragments/welcome-modal.html"
+  "./fragments/welcome-modal.html",
+  "./fragments/auth-modal.html"
 ];
 
 let clients = [];
@@ -48,6 +49,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindStaticEvents();
   loadLicenseState();
   loadClients();
+  await initSupabase();
   migrateClients();
   renderLicenseUI();
   renderAll();
@@ -123,10 +125,21 @@ function bindStaticEvents() {
   bindClickIfExists("welcomeContinueBtn", dismissWelcomeModal);
   bindClickIfExists("welcomeStartTrialBtn", startTrialFromWelcome);
   bindClickIfExists("welcomeUnlockBtn", openLicenseFromWelcome);
+  bindClickIfExists("cloudConnectBtn", openAuthModal);
+  bindClickIfExists("cloudLogoutBtn", handleCloudLogout);
+  bindClickIfExists("closeAuthModalBtn", closeAuthModal);
+  bindClickIfExists("authCancelBtn", closeAuthModal);
+  bindClickIfExists("authModalBackdrop", closeAuthModal);
+  bindClickIfExists("authSignUpBtn", handleCloudSignUp);
 
   const licenseForm = document.getElementById("licenseForm");
   if (licenseForm) {
     licenseForm.addEventListener("submit", handleLicenseSubmit);
+  }
+
+  const authForm = document.getElementById("authForm");
+  if (authForm) {
+    authForm.addEventListener("submit", handleCloudSignIn);
   }
 
   bindClickIfExists("closeWeeklyActionsModalBtn", closeWeeklyActionsModal);

@@ -9,6 +9,11 @@ function loadClients() {
 }
 
 function saveClients() {
+  saveClientsLocalOnly();
+  queueCloudSync();
+}
+
+function saveClientsLocalOnly() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
 }
 
