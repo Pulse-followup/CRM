@@ -32,7 +32,7 @@
 .client-card,
 .simple-card {
   position: relative;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.018));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.035));
   border: 1px solid var(--card-border);
   border-radius: 18px;
   padding: 16px;
@@ -174,7 +174,7 @@
 
 .home-shortcut-card {
   text-align: left;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.024));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.04));
   border: 1px solid var(--card-border);
   border-radius: 18px;
   padding: 14px;

@@ -12,19 +12,24 @@
   }
 
   .sidebar {
-    position: relative;
+    position: sticky;
+    top: 0;
+    z-index: 35;
     height: auto;
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
     gap: 14px;
-    padding: calc(12px + var(--safe-top)) calc(14px + var(--safe-right)) 12px calc(14px + var(--safe-left));
+    padding: calc(8px + var(--safe-top)) calc(10px + var(--safe-right)) 10px calc(10px + var(--safe-left));
+    border-right: 0;
+    border-bottom: 1px solid rgba(207, 223, 255, 0.12);
+    box-shadow: 0 14px 30px rgba(8, 16, 29, 0.22);
   }
 
   .sidebar-header {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(44px, auto) minmax(0, 1fr) minmax(76px, auto) minmax(52px, auto);
     grid-template-areas: "plan user sync logo";
-    gap: 10px;
+    gap: 8px;
     align-items: center;
   }
 
@@ -37,15 +42,27 @@
   #licensePlanBadge {
     grid-area: plan;
     justify-self: start;
+    min-height: 36px;
+    min-width: 48px;
+    max-width: 64px;
+    justify-content: center;
+    padding: 6px 8px;
+    font-size: 0.72rem;
   }
 
   #headerAuthBtn {
     grid-area: user;
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 0.82rem;
   }
 
   #headerSyncBtn {
     grid-area: sync;
-    min-width: 98px;
+    min-width: 76px;
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 0.8rem;
   }
 
   .brand {
@@ -57,6 +74,7 @@
     flex-direction: row;
     gap: 8px;
     width: 100%;
+    grid-column: 1 / -1;
   }
 
   .brand {
@@ -64,19 +82,20 @@
   }
 
   .brand-button {
-    min-width: 78px;
-    min-height: 68px;
+    min-width: 54px;
+    min-height: 46px;
+    border-radius: 14px;
   }
 
   .brand-logo-image {
-    width: 54px;
+    width: 34px;
   }
 
   .nav-btn {
     flex: 1;
     text-align: center;
-    padding: 10px 12px;
-    font-size: 0.9rem;
+    padding: 9px 10px;
+    font-size: 0.84rem;
   }
 
   .main-content {
@@ -137,9 +156,20 @@
   }
 
   .hero-summary-grid,
-  .summary-grid,
   .summary-grid-4 {
     grid-template-columns: 1fr;
+  }
+
+  #dashboardView .summary-grid,
+  #actionsView .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  #dashboardView .summary-card,
+  #actionsView .summary-card {
+    min-height: 76px;
+    padding: 12px;
   }
 
   .timeline-item {
@@ -186,7 +216,7 @@
   }
 
   .brand-logo-image {
-    width: 64px;
+    width: 34px;
   }
 
   .main-content {
@@ -215,16 +245,26 @@
   }
 
   .sidebar-header {
-    gap: 10px;
+    gap: 7px;
   }
 
   .brand-button {
-    min-width: 70px;
-    min-height: 62px;
+    min-width: 50px;
+    min-height: 44px;
     padding: 6px;
   }
 
   .brand-logo-image {
-    width: 46px;
+    width: 32px;
+  }
+
+  .panel-head h3,
+  .workspace-view-title h2 {
+    font-size: 1rem;
+  }
+
+  .panel-head p,
+  .workspace-view-subtitle {
+    font-size: 0.86rem;
   }
 }
