@@ -17,8 +17,40 @@
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    gap: 12px;
+    gap: 14px;
     padding: calc(12px + var(--safe-top)) calc(14px + var(--safe-right)) 12px calc(14px + var(--safe-left));
+  }
+
+  .sidebar-header {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "plan user sync logo";
+    gap: 10px;
+    align-items: center;
+  }
+
+  .sidebar-header-top,
+  .sidebar-status-row,
+  .sidebar-control-row {
+    display: contents;
+  }
+
+  #licensePlanBadge {
+    grid-area: plan;
+    justify-self: start;
+  }
+
+  #headerAuthBtn {
+    grid-area: user;
+  }
+
+  #headerSyncBtn {
+    grid-area: sync;
+    min-width: 98px;
+  }
+
+  .brand {
+    grid-area: logo;
+    justify-self: end;
   }
 
   .nav {
@@ -28,20 +60,16 @@
   }
 
   .brand {
-    padding: 0;
     justify-content: center;
   }
 
-  .brand-logo-image {
-    width: 120px;
+  .brand-button {
+    min-width: 78px;
+    min-height: 68px;
   }
 
-  .license-card {
-    margin-top: 0;
-    max-width: none;
-    width: 100%;
-    padding: 10px;
-    gap: 6px;
+  .brand-logo-image {
+    width: 54px;
   }
 
   .nav-btn {
@@ -51,17 +79,8 @@
     font-size: 0.9rem;
   }
 
-  .license-card p {
-    display: none;
-  }
-
-  .license-card .btn {
-    padding: 8px 10px;
-    font-size: 0.84rem;
-  }
-
   .main-content {
-    padding: 16px calc(14px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(14px + var(--safe-left));
+    padding: 12px calc(14px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(14px + var(--safe-left));
   }
 
   .topbar {
@@ -167,17 +186,7 @@
   }
 
   .brand-logo-image {
-    width: 104px;
-  }
-
-  .license-card {
-    max-width: none;
-    min-width: 0;
-  }
-
-  .license-card .btn {
-    font-size: 0.8rem;
-    padding: 8px 8px;
+    width: 64px;
   }
 
   .main-content {
@@ -203,5 +212,19 @@
 
   .btn {
     min-height: 44px;
+  }
+
+  .sidebar-header {
+    gap: 10px;
+  }
+
+  .brand-button {
+    min-width: 70px;
+    min-height: 62px;
+    padding: 6px;
+  }
+
+  .brand-logo-image {
+    width: 46px;
   }
 }

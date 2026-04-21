@@ -93,6 +93,53 @@
   margin-bottom: 4px;
 }
 
+.task-builder-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.task-builder-toggle span {
+  display: grid;
+  gap: 4px;
+}
+
+.task-builder-toggle strong,
+.task-builder-toggle small {
+  margin: 0;
+}
+
+.task-builder-toggle small {
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.task-builder-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: #4da3ff;
+  flex-shrink: 0;
+}
+
+.modal-subsection {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.project-form-grid {
+  display: grid;
+  gap: 14px;
+}
+
 .action-modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -125,6 +172,51 @@
   padding: 14px;
   display: grid;
   gap: 10px;
+}
+
+.locked-project-context {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(77, 163, 255, 0.10);
+  border: 1px solid rgba(77, 163, 255, 0.20);
+}
+
+.locked-project-context span,
+.locked-project-context small {
+  color: var(--text-soft);
+}
+
+.locked-project-context strong {
+  color: var(--text);
+}
+
+.billing-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.billing-history-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.billing-history-item strong,
+.billing-history-item p {
+  margin: 0;
+}
+
+.billing-history-item p,
+.billing-history-item span {
+  color: var(--text-soft);
+  font-size: 0.9rem;
 }
 
 .modal-inline-error {
@@ -225,6 +317,50 @@
   gap: 10px;
 }
 
+.account-sheet-panel {
+  width: min(460px, calc(100% - 20px));
+  max-height: calc(100vh - 20px - var(--safe-top) - var(--safe-bottom));
+  max-height: calc(100dvh - 20px - var(--safe-top) - var(--safe-bottom));
+  margin: auto auto calc(10px + var(--safe-bottom));
+  border-radius: 24px;
+}
+
+.account-sheet-head {
+  padding-bottom: 12px;
+}
+
+.account-sheet-body {
+  gap: 14px;
+}
+
+.account-sheet-summary {
+  gap: 6px;
+}
+
+.account-sheet-summary strong,
+.account-sheet-summary p {
+  margin: 0;
+}
+
+.account-sheet-summary strong {
+  font-size: 1.08rem;
+}
+
+.account-sheet-summary p {
+  color: var(--text-soft);
+  word-break: break-word;
+}
+
+.account-sheet-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.account-sheet-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
 @media (max-width: 640px) {
   .modal-panel,
   .modal-lg {
@@ -280,5 +416,11 @@
 
   .welcome-actions .btn {
     width: 100%;
+  }
+
+  .account-sheet-panel {
+    width: calc(100% - 12px);
+    margin-bottom: calc(6px + var(--safe-bottom));
+    border-radius: 22px 22px 18px 18px;
   }
 }

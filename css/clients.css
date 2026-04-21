@@ -72,6 +72,30 @@
   font-weight: 800;
 }
 
+.form-section-hint {
+  margin: -6px 0 4px;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.form-subgroup {
+  display: grid;
+  gap: 12px;
+}
+
+.form-subgroup-title {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.form-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -117,6 +141,12 @@
   gap: 10px;
 }
 
+@media (max-width: 640px) {
+  .form-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ------------------------- TOOLBAR FIX (IMPORT/EXPORT) ------------------------- */
 
 .panel-tools .btn,
@@ -155,6 +185,30 @@
 
 .card-body-simple {
   gap: 6px;
+}
+
+.client-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.client-card-metrics span {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.client-card-metrics small {
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+.client-card-metrics strong {
+  color: var(--text-main);
 }
 
 .card-actions-simple {
