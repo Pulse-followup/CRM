@@ -305,7 +305,14 @@ with check (
   or (
     user_id = auth.uid()
     and status = 'active'
-    and public.has_pending_workspace_invite(workspace_id)
+    and exists (
+      select 1
+      from public.workspace_invites wi
+      where wi.workspace_id = workspace_members.workspace_id
+        and wi.status = 'pending'
+        and lower(wi.email) = lower(coalesce(auth.jwt()->>'email', ''))
+        and wi.role = workspace_members.role
+    )
   )
 );
 
