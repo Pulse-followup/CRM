@@ -219,7 +219,7 @@ function renderLicenseUI() {
   const hasAccess = hasPremiumAccess();
   const effectivePlan = getEffectivePlan();
   const badgeText =
-    effectivePlan === "pro" ? "PRO VERZIJA" :
+    effectivePlan === "pro" ? "PRO" :
     effectivePlan === "trial" ? "TRIAL" :
     "FREE";
   const badgeClass =

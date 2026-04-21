@@ -60,7 +60,8 @@ function clearRememberedInviteCode() {
 function buildWorkspaceInviteLink(invite) {
   const code = invite?.id || "";
   if (!code) return "";
-  const url = new URL(window.location.href);
+  const publicAppUrl = window.PULSE_PUBLIC_APP_URL || window.location.href;
+  const url = new URL(publicAppUrl, window.location.href);
   url.searchParams.set(WORKSPACE_INVITE_QUERY_PARAM, code);
   return url.toString();
 }
