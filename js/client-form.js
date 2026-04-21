@@ -13,7 +13,7 @@ function openAddClientModal() {
   const deleteBtn = document.getElementById("deleteClientBtn");
 
   setTextIfExists("clientModalTitle", "Novi klijent");
-  setTextIfExists("clientModalSubtitle", "Brz unos osnovnih podataka i komercijalne procene.");
+  setTextIfExists("clientModalSubtitle", "Azuriraj osnovne podatke i komercijalni pregled.");
 
   if (form) form.reset();
   setValueIfExists("clientId", "");
@@ -33,14 +33,16 @@ function openEditClientModal(id) {
   currentClientId = id;
 
   setTextIfExists("clientModalTitle", "Izmeni klijenta");
-  setTextIfExists("clientModalSubtitle", "Azuriraj osnovne podatke i komercijalnu procenu.");
+  setTextIfExists("clientModalSubtitle", "Azuriraj osnovne podatke i komercijalni pregled.");
 
   setValueIfExists("clientId", client.id);
   setValueIfExists("clientName", client.name || "");
   setValueIfExists("clientCity", client.clientCity || client.city || "");
+  setValueIfExists("clientAddress", client.clientAddress || "");
   setValueIfExists("contactPerson", client.contactPerson || "");
   setValueIfExists("contactPhone", client.contactPhone || "");
   setValueIfExists("contactEmail", client.contactEmail || "");
+  setValueIfExists("contactRole", client.contactRole || "");
   setValueIfExists("companySize", client.companySize || "");
   setValueIfExists("decisionModel", client.decisionModel || "");
   setValueIfExists("revenueDriverPrimary", client.revenueDriverPrimary || "");
@@ -50,9 +52,6 @@ function openEditClientModal(id) {
   setValueIfExists("pilotReadiness", client.pilotReadiness || "");
   setValueIfExists("relationshipStrength", client.relationshipStrength || "");
   setValueIfExists("lastActionNote", client.lastActionNote || "");
-  setValueIfExists("nextStepText", client.nextStepText || "");
-  setValueIfExists("nextStepType", client.nextStepType || "");
-  setValueIfExists("nextStepDate", client.nextStepDate || "");
   setValueIfExists("dealValue", client.dealValue || "");
   setValueIfExists("dealProbability", client.dealProbability || "");
   setValueIfExists("expectedDecisionDate", client.expectedDecisionDate || "");
@@ -72,9 +71,11 @@ function handleClientSubmit(e) {
   const id = getValue("clientId");
   const clientName = getValue("clientName").trim();
   const clientCity = getValue("clientCity").trim();
+  const clientAddress = getValue("clientAddress").trim();
   const contactPerson = getValue("contactPerson").trim();
   const contactPhone = getValue("contactPhone").trim();
   const contactEmail = getValue("contactEmail").trim();
+  const contactRole = getValue("contactRole").trim();
   const companySize = getValue("companySize");
   const decisionModel = getValue("decisionModel");
   const revenueDriverPrimary = getValue("revenueDriverPrimary");
@@ -84,9 +85,6 @@ function handleClientSubmit(e) {
   const pilotReadiness = getValue("pilotReadiness");
   const relationshipStrength = getValue("relationshipStrength");
   const lastActionNote = getValue("lastActionNote").trim();
-  const nextStepText = getValue("nextStepText").trim();
-  const nextStepType = getValue("nextStepType");
-  const nextStepDate = getValue("nextStepDate");
   const dealValue = Number(getValue("dealValue") || 0);
   const dealProbability = getValue("dealProbability");
   const expectedDecisionDate = getValue("expectedDecisionDate");
@@ -115,9 +113,11 @@ function handleClientSubmit(e) {
     name: clientName,
     clientCity,
     city: clientCity,
+    clientAddress,
     contactPerson,
     contactPhone,
     contactEmail,
+    contactRole,
     companySize,
     decisionModel,
     revenueDriverPrimary,
@@ -127,17 +127,10 @@ function handleClientSubmit(e) {
     pilotReadiness,
     relationshipStrength,
     lastActionNote,
-    nextStepText,
-    nextStepType,
-    nextStepDate,
     dealValue,
     dealProbability,
     expectedDecisionDate,
-
-    /* Zadrzavamo kompatibilnost sa ostatkom app-a */
     businessType: "other",
-    clientAddress: "",
-    contactRole: "",
     clientType: "",
     internationalFlag: "",
     revenueFocusTags: [],
@@ -213,13 +206,17 @@ function handleClientSubmit(e) {
     ...baseClient,
     createdAt,
     stage: "new",
+    nextStepText: "",
+    nextStepType: "",
+    nextStepDate: "",
     lastActionAt: createdAt,
     lastActionHuman: "Kreiran klijent",
     payment: {
       lastInvoiceDate: null,
       lastReminderDate: null,
       lastPaidDate: null,
-      paymentSpeed: null
+      paymentSpeed: null,
+      workflow: {}
     },
     activityLog: [
       {

@@ -4,6 +4,7 @@ let supabaseClient = null;
 let supabaseSession = null;
 let supabaseUser = null;
 let cloudSyncTimer = null;
+let cloudSyncState = "idle";
 
 function isSupabaseConfigured() {
   const config = window.SUPABASE_CONFIG || {};
@@ -16,6 +17,7 @@ function isCloudEnabled() {
 
 async function initSupabase() {
   if (!isSupabaseConfigured() || !window.supabase?.createClient) {
+    cloudSyncState = "idle";
     syncCloudStatusUI();
     return;
   }
@@ -43,6 +45,7 @@ async function initSupabase() {
     await hydrateClientsFromCloud();
   }
 
+  cloudSyncState = "idle";
   syncCloudStatusUI();
 }
 
@@ -100,7 +103,9 @@ async function handleCloudSignIn(e) {
   supabaseSession = data.session || null;
   supabaseUser = data.user || null;
   await initWorkspaceContext();
-  await hydrateClientsFromCloud();
+  if (!(typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore())) {
+    await hydrateClientsFromCloud();
+  }
   migrateClients();
   renderLicenseUI();
   renderSettingsUI();
@@ -146,10 +151,46 @@ async function handleCloudLogout() {
   await supabaseClient.auth.signOut();
   supabaseSession = null;
   supabaseUser = null;
+  cloudSyncState = "idle";
   resetWorkspaceContext();
   renderSettingsUI();
   syncCloudStatusUI();
   showToast("Cloud nalog je odjavljen.");
+}
+
+async function handleManualCloudSync() {
+  if (!isSupabaseConfigured()) {
+    showToast("Prvo unesi Supabase URL i publishable key.");
+    return;
+  }
+
+  if (!isCloudEnabled()) {
+    openAuthModal();
+    return;
+  }
+
+  if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
+    await hydrateClientsFromWorkspace({ pushIfEmpty: false });
+    if (typeof loadWorkspaceMembers === "function") {
+      await loadWorkspaceMembers();
+    }
+    if (typeof loadWorkspaceInvites === "function") {
+      await loadWorkspaceInvites();
+    }
+    if (typeof renderAll === "function") {
+      renderAll();
+    }
+    if (typeof renderSessionUI === "function") {
+      renderSessionUI();
+    }
+    cloudSyncState = "synced";
+    syncCloudStatusUI("Workspace osvezen");
+    showToast("Workspace je osvezen iz baze.");
+    return;
+  }
+
+  await pushClientsToCloud();
+  showToast("Cloud sync je zavrsen.");
 }
 
 async function hydrateClientsFromCloud() {
@@ -182,8 +223,15 @@ async function hydrateClientsFromCloud() {
 function queueCloudSync() {
   if (!isCloudEnabled()) return;
 
+  cloudSyncState = "idle";
+  syncCloudStatusUI();
   clearTimeout(cloudSyncTimer);
   cloudSyncTimer = setTimeout(() => {
+    if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
+      pushClientsToWorkspace();
+      return;
+    }
+
     pushClientsToCloud();
   }, 500);
 }
@@ -206,6 +254,7 @@ async function pushClientsToCloud() {
     return;
   }
 
+  cloudSyncState = "synced";
   syncCloudStatusUI("Sinhronizovano");
 }
 
@@ -214,6 +263,24 @@ function syncCloudStatusUI(overrideText = "") {
   const text = document.getElementById("cloudStatusText");
   const connectBtn = document.getElementById("cloudConnectBtn");
   const logoutBtn = document.getElementById("cloudLogoutBtn");
+  const headerAuthBtn = document.getElementById("headerAuthBtn");
+  const headerSyncBtn = document.getElementById("headerSyncBtn");
+  const headerAccountLabel =
+    currentProfile?.full_name ||
+    currentProfile?.email?.split("@")[0] ||
+    supabaseUser?.email?.split("@")[0] ||
+    "LOGIN";
+  const stateLabel =
+    isCloudEnabled() ? "Cloud povezan" :
+    isSupabaseConfigured() ? "Spreman za login" :
+    "Lokalni rad";
+  const stateText = overrideText || (
+    isCloudEnabled()
+      ? `Povezano kao ${supabaseUser.email}.`
+      : isSupabaseConfigured()
+        ? "Supabase je spreman, ali nisi prijavljen."
+        : "App radi lokalno dok ne uneses Supabase podatke."
+  );
 
   if (badge) {
     const label =
@@ -225,13 +292,7 @@ function syncCloudStatusUI(overrideText = "") {
   }
 
   if (text) {
-    text.textContent = overrideText || (
-      isCloudEnabled()
-        ? `Povezano kao ${supabaseUser.email}.`
-        : isSupabaseConfigured()
-          ? "Supabase je spreman, ali nisi prijavljen."
-          : "App radi lokalno dok ne uneses Supabase podatke."
-    );
+    text.textContent = stateText;
   }
 
   if (connectBtn) {
@@ -241,6 +302,18 @@ function syncCloudStatusUI(overrideText = "") {
 
   if (logoutBtn) {
     logoutBtn.classList.toggle("hidden", !isCloudEnabled());
+  }
+
+  if (headerAuthBtn) {
+    headerAuthBtn.textContent = isCloudEnabled() ? headerAccountLabel : "LOGIN";
+  }
+
+  if (headerSyncBtn) {
+    const canSyncNow = isCloudEnabled();
+    headerSyncBtn.disabled = !canSyncNow;
+    headerSyncBtn.classList.toggle("is-disabled", !canSyncNow);
+    headerSyncBtn.classList.toggle("is-synced", canSyncNow && cloudSyncState === "synced");
+    headerSyncBtn.classList.toggle("is-idle", !canSyncNow || cloudSyncState !== "synced");
   }
 
   if (typeof renderSettingsUI === "function") {

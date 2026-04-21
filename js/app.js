@@ -22,6 +22,7 @@ const FRAGMENTS = {
   topbarRoot: "./fragments/topbar.html",
   dashboardRoot: "./fragments/dashboard.html",
   clientsRoot: "./fragments/clients.html",
+  actionsRoot: "./fragments/actions.html",
   drawerRoot: "./fragments/customer-drawer.html"
 };
 
@@ -34,6 +35,7 @@ const MODAL_FRAGMENTS = [
   "./fragments/license-modal.html",
   "./fragments/welcome-modal.html",
   "./fragments/auth-modal.html",
+  "./fragments/account-sheet.html",
   "./fragments/onboarding-modal.html",
   "./fragments/settings-modal.html"
 ];
@@ -115,9 +117,6 @@ function bindStaticEvents() {
     clientSearch.addEventListener("input", renderClientsList);
   }
 
-  bindClickIfExists("homeCardHighPriority", () => toggleHomeHighPriorityFilter());
-  bindClickIfExists("homeCardTotalClients", () => switchToClientsMode("all"));
-  bindClickIfExists("homeCardWeeklyActions", openWeeklyActionsModal);
   bindClickIfExists("unlockPlanBtn", () => openLicenseModal());
 
   bindClickIfExists("closeLicenseModalBtn", closeLicenseModal);
@@ -132,18 +131,27 @@ function bindStaticEvents() {
   bindClickIfExists("welcomeUnlockBtn", openLicenseFromWelcome);
   bindClickIfExists("cloudConnectBtn", openAuthModal);
   bindClickIfExists("cloudLogoutBtn", handleCloudLogout);
+  bindClickIfExists("headerAuthBtn", handleHeaderAuthAction);
+  bindClickIfExists("headerSyncBtn", handleManualCloudSync);
   bindClickIfExists("closeAuthModalBtn", closeAuthModal);
   bindClickIfExists("authCancelBtn", closeAuthModal);
   bindClickIfExists("authModalBackdrop", closeAuthModal);
   bindClickIfExists("authSignUpBtn", handleCloudSignUp);
+  bindClickIfExists("closeAccountSheetBtn", closeAccountSheet);
+  bindClickIfExists("accountSheetBackdrop", closeAccountSheet);
+  bindClickIfExists("openWorkspaceFromAccountBtn", handleAccountWorkspaceAction);
+  bindClickIfExists("openPlanFromAccountBtn", handleAccountPlanAction);
+  bindClickIfExists("accountSheetLogoutBtn", handleAccountLogout);
   bindClickIfExists("openSettingsBtn", openSettingsModal);
   bindClickIfExists("openSettingsBtnTop", openSettingsModal);
   bindClickIfExists("closeSettingsModalBtn", closeSettingsModal);
   bindClickIfExists("settingsModalBackdrop", closeSettingsModal);
-  bindClickIfExists("settingsOpenLicenseBtn", () => openLicenseModal());
-  bindClickIfExists("settingsConnectCloudBtn", openAuthModal);
-  bindClickIfExists("settingsLogoutBtn", handleCloudLogout);
-  bindClickIfExists("openOnboardingFromSettingsBtn", () => openOnboardingModal("choice"));
+  bindClickIfExists("settingsOpenLicenseBtn", handleSettingsPlanAndTrial);
+  bindClickIfExists("settingsConnectCloudBtn", handleSettingsCloudConnect);
+  bindClickIfExists("settingsLogoutBtn", handleSettingsLogout);
+  bindClickIfExists("openOnboardingFromSettingsBtn", handleSettingsWorkspaceSetup);
+  bindClickIfExists("saveWorkspaceNameBtn", handleWorkspaceNameSave);
+  bindClickIfExists("sendWorkspaceInviteBtn", handleWorkspaceInviteSend);
   bindClickIfExists("onboardingContinueProfileBtn", handleOnboardingProfileContinue);
   bindClickIfExists("onboardingChooseCreateBtn", handleOnboardingChooseCreate);
   bindClickIfExists("onboardingChooseJoinBtn", handleOnboardingChooseJoin);
@@ -197,10 +205,15 @@ function bindStaticEvents() {
 
   bindClickIfExists("openActionFromDrawerBtn", () => {
     const client = getClientById(currentClientId);
-    if (client) openActionModal(client.id);
+    if (client) openActivityModal(client.id);
   });
 
   bindClickIfExists("openNewActivityFromDrawerBtn", () => {
+    const client = getClientById(currentClientId);
+    if (client) openActivityModal(client.id);
+  });
+
+  bindClickIfExists("openNewActivityFromDrawerBtnSecondary", () => {
     const client = getClientById(currentClientId);
     if (client) openActivityModal(client.id);
   });
@@ -236,8 +249,19 @@ function bindStaticEvents() {
     activityForm.addEventListener("submit", handleActivitySubmit);
   }
 
+  bindChangeIfExists("activityCreateTask", toggleActivityTaskFields);
+  bindChangeIfExists("activityProjectMode", toggleActivityProjectFields);
+  bindDatePickerIfExists("activityProjectEndDate");
+  bindDatePickerIfExists("activityTaskDueDate");
+
   bindClickIfExists("closePaymentModalBtn", closePaymentModal);
   bindClickIfExists("paymentModalBackdrop", closePaymentModal);
+  bindChangeIfExists("paymentProjectSelect", renderSelectedPaymentProject);
+  bindClickIfExists("createBillingRequestBtn", handleCreateBillingRequest);
+  bindClickIfExists("saveBillingRecordBtn", handleSaveBillingRecord);
+  bindClickIfExists("markBillingPaidBtn", handleMarkBillingPaid);
+  bindDatePickerIfExists("billingInvoiceDate");
+  bindDatePickerIfExists("billingDueDate");
   bindClickIfExists("markInvoiceSentBtn", markInvoiceSent);
   bindClickIfExists("generatePaymentReminderBtn", generatePaymentReminder);
   bindClickIfExists("copyPaymentMessageBtn", copyPaymentMessage);
@@ -248,6 +272,29 @@ function bindStaticEvents() {
 function bindClickIfExists(id, handler) {
   const el = document.getElementById(id);
   if (el) el.addEventListener("click", handler);
+}
+
+function bindChangeIfExists(id, handler) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("change", handler);
+}
+
+function bindDatePickerIfExists(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  const openPicker = () => {
+    if (typeof el.showPicker === "function") {
+      try {
+        el.showPicker();
+      } catch {
+        el.focus();
+      }
+    }
+  };
+
+  el.addEventListener("click", openPicker);
+  el.addEventListener("focus", openPicker);
 }
 
 function bindImportInput(id) {

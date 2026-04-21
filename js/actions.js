@@ -2,6 +2,7 @@
 let currentFollowupTier = "light";
 let currentFollowupMeta = null;
 let currentActionTypeKey = "followup_light";
+let currentActivityContext = null;
 
 function openActionModal(clientId, forcedActionType = null, forcedPriority = null) {
   const client = getClientById(clientId);
@@ -353,21 +354,168 @@ function getDrawerActionRecommendation(client) {
 }
 
 /* ------------------------- NEW ACTIVITY MODAL ------------------------- */
-function openActivityModal(clientId) {
+function renderActivityTaskOwnerOptions(selectedUserId = "") {
+  const ownerSelect = document.getElementById("activityTaskOwner");
+  if (!ownerSelect) return;
+
+  const members = getAssignableWorkspaceMembers();
+  ownerSelect.innerHTML = members.length
+    ? members.map(member => `
+        <option value="${escapeHtml(member.id)}"${member.id === selectedUserId ? " selected" : ""}>
+          ${escapeHtml(member.email ? `${member.name} (${member.email})` : member.name)}
+        </option>
+      `).join("")
+    : '<option value="">Izaberi clana tima</option>';
+}
+
+function getSelectedActivityTaskOwnerMeta() {
+  const ownerSelect = document.getElementById("activityTaskOwner");
+  const members = getAssignableWorkspaceMembers();
+  const fallbackMember = members.find(member => member.id === supabaseUser?.id) || members[0] || null;
+  const selectedMember =
+    members.find(member => member.id === ownerSelect?.value) ||
+    fallbackMember;
+
+  return {
+    id: selectedMember?.id || supabaseUser?.id || "",
+    name: selectedMember?.name || selectedMember?.email || getCurrentUserDisplayName(),
+    email: selectedMember?.email || ""
+  };
+}
+
+function buildTaskTitleFromActivity(activityType, note = "") {
+  const cleanedNote = String(note || "").replace(/\s+/g, " ").trim();
+  if (cleanedNote) {
+    return cleanedNote.length > 72 ? `${cleanedNote.slice(0, 69).trim()}...` : cleanedNote;
+  }
+
+  switch (activityType) {
+    case "phone_call":
+      return "Pozvati klijenta";
+    case "email":
+      return "Poslati email klijentu";
+    case "meeting_held":
+      return "Nastaviti nakon sastanka";
+    case "offer_sent":
+      return "Ispratiti ponudu";
+    case "message":
+      return "Poslati poruku klijentu";
+    case "production":
+      return "Izrada / operativni zadatak";
+    case "internal_note":
+      return "Interna akcija";
+    default:
+      return "Sledeci zadatak";
+  }
+}
+
+function renderActivityProjectOptions(client) {
+  const projectSelect = document.getElementById("activityProjectSelect");
+  if (!projectSelect) return;
+
+  const projects = getClientOpenProjects(client);
+  projectSelect.innerHTML = `<option value="">Izaberi projekat</option>`;
+  projects.forEach(project => {
+    const option = document.createElement("option");
+    option.value = project.id;
+    option.textContent = projectDisplayName(project);
+    projectSelect.appendChild(option);
+  });
+
+  const mode = document.getElementById("activityProjectMode");
+  if (mode && projects.length === 0) {
+    mode.value = "new";
+  }
+}
+
+function toggleActivityProjectFields() {
+  const mode = getValue("activityProjectMode") || "new";
+  const newFields = document.getElementById("activityNewProjectFields");
+  const existingWrap = document.getElementById("activityExistingProjectWrap");
+  const modeWrap = document.getElementById("activityProjectModeWrap");
+  const lockedWrap = document.getElementById("activityLockedProjectWrap");
+  const isLocked = Boolean(currentActivityContext?.lockProject);
+
+  if (modeWrap) modeWrap.classList.toggle("hidden", isLocked);
+  if (lockedWrap) lockedWrap.classList.toggle("hidden", !isLocked);
+  if (newFields) newFields.classList.toggle("hidden", isLocked || mode !== "new");
+  if (existingWrap) existingWrap.classList.toggle("hidden", isLocked || mode !== "existing");
+}
+
+function toggleActivityTaskFields() {
+  const checkbox = document.getElementById("activityCreateTask");
+  const taskFields = document.getElementById("activityTaskFields");
+  if (!checkbox || !taskFields) return;
+
+  taskFields.classList.toggle("hidden", !checkbox.checked);
+}
+
+function getAutoStageFromActivity(client, activityType) {
+  switch (activityType) {
+    case "meeting_held":
+      return "meeting_done";
+    case "offer_sent":
+      return "offer_sent";
+    default:
+      return client.stage || "new";
+  }
+}
+
+function openActivityModal(clientId, options = {}) {
   const client = getClientById(clientId);
   if (!client) return;
 
   currentActivityClientId = clientId;
+  currentActivityContext = options || {};
+  const activeTask = options.taskId
+    ? getClientOpenTasks(client).find(task => task.id === options.taskId)
+    : getClientDashboardTask(client) || getClientActiveTask(client);
+  const lockedProject = options.projectId ? getClientProjectById(client, options.projectId) : null;
+  const defaultOwnerId = activeTask?.ownerId || supabaseUser?.id || "";
+  const openProjects = getClientOpenProjects(client);
 
   setTextIfExists("activityModalTitle", `Nova aktivnost - ${client.name}`);
-  setTextIfExists("activityModalSubtitle", "Evidentiraj poziv, sastanak, podsetnik ili internu belesku.");
+  setTextIfExists(
+    "activityModalSubtitle",
+    lockedProject
+      ? "Evidentiraj sta je uradjeno u ovom projektu i po potrebi delegiraj sledeci zadatak."
+      : "Izaberi projekat, evidentiraj aktivnost i po potrebi delegiraj zadatak."
+  );
   setTextIfExists("activityClientBadge", client.name);
+  setTextIfExists("activityLockedProjectName", projectDisplayName(lockedProject));
+  setValueIfExists("activityProjectMode", openProjects.length ? "existing" : "new");
+  setValueIfExists("activityProjectName", "");
+  setValueIfExists("activityProjectUrgency", "medium");
+  setValueIfExists("activityProjectBudget", "unknown");
+  setValueIfExists("activityProjectValue", "");
+  setValueIfExists("activityProjectEndDate", "");
   setValueIfExists("activityType", "");
-  setValueIfExists("activityStage", "");
   setValueIfExists("activityNote", "");
-  setValueIfExists("activityNextStepText", client.nextStepText || "");
-  setValueIfExists("activityNextStepType", client.nextStepType || "");
-  setValueIfExists("activityNextStepDate", client.nextStepDate || "");
+  setValueIfExists("activityTaskDueDate", activeTask?.dueDate || dateOnlyValue(client.nextStepDate || ""));
+  setValueIfExists("activityTaskStatus", activeTask?.status || "open");
+  renderActivityProjectOptions(client);
+  if (lockedProject?.id) {
+    setValueIfExists("activityProjectSelect", lockedProject.id);
+  } else if (activeTask?.projectId) {
+    setValueIfExists("activityProjectSelect", activeTask.projectId);
+  }
+  toggleActivityProjectFields();
+  renderActivityTaskOwnerOptions(defaultOwnerId);
+
+  const completeTaskWrap = document.getElementById("activityCompleteTaskWrap");
+  const completeTaskCheckbox = document.getElementById("activityCompleteCurrentTask");
+  if (completeTaskWrap) {
+    completeTaskWrap.classList.toggle("hidden", !(activeTask?.id && lockedProject?.id));
+  }
+  if (completeTaskCheckbox) {
+    completeTaskCheckbox.checked = Boolean(activeTask?.id && lockedProject?.id);
+  }
+
+  const createTaskCheckbox = document.getElementById("activityCreateTask");
+  if (createTaskCheckbox) {
+    createTaskCheckbox.checked = false;
+  }
+  toggleActivityTaskFields();
 
   const modal = document.getElementById("activityModal");
   if (modal) {
@@ -379,51 +527,197 @@ function openActivityModal(clientId) {
 function closeActivityModal() {
   const modal = document.getElementById("activityModal");
   if (modal) {
+    if (modal.contains(document.activeElement)) document.activeElement.blur();
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
   }
   currentActivityClientId = null;
+  currentActivityContext = null;
 }
 
-function handleActivitySubmit(e) {
+async function handleActivitySubmit(e) {
   e.preventDefault();
 
-  const client = getClientById(currentActivityClientId);
-  if (!client) return;
+  const submitBtn = e.submitter;
+  if (submitBtn) submitBtn.disabled = true;
 
-  const activityType = getValue("activityType");
-  const nextStage = getValue("activityStage");
-  const note = getValue("activityNote").trim();
-  const nextStepText = getValue("activityNextStepText").trim();
-  const nextStepType = getValue("activityNextStepType");
-  const nextStepDate = getValue("activityNextStepDate");
+  try {
+    const client = getClientById(currentActivityClientId);
+    if (!client) return;
 
-  if (!activityType) {
-    showToast("Izaberi tip aktivnosti.");
-    return;
+    const activityType = getValue("activityType");
+    const note = getValue("activityNote").trim();
+    const projectMode = getValue("activityProjectMode") || "new";
+    const selectedProjectId = getValue("activityProjectSelect");
+    const createTask = Boolean(document.getElementById("activityCreateTask")?.checked);
+    const completeCurrentTask = Boolean(document.getElementById("activityCompleteCurrentTask")?.checked);
+    const taskDueDate = normalizeDateInputValue(getValue("activityTaskDueDate"));
+    const expectedEndDate = normalizeDateInputValue(getValue("activityProjectEndDate"));
+    const taskStatus = normalizeTaskStatus(getValue("activityTaskStatus"));
+    const actorName = getCurrentUserDisplayName();
+    const selectedOwner = getSelectedActivityTaskOwnerMeta();
+    const taskOwnerId = selectedOwner.id;
+    const taskOwnerEmail = selectedOwner.email;
+    const taskTitle = buildTaskTitleFromActivity(activityType, note);
+
+    if (!activityType) {
+      showToast("Izaberi tip aktivnosti.");
+      return;
+    }
+
+    let project = null;
+    let projectFields = null;
+    if (currentActivityContext?.lockProject && currentActivityContext.projectId) {
+      project = getClientProjectById(client, currentActivityContext.projectId);
+      if (!project) {
+        showToast("Projekat za ovaj zadatak vise ne postoji.");
+        return;
+      }
+    } else if (projectMode === "existing") {
+      project = getClientProjectById(client, selectedProjectId);
+      if (!project) {
+        showToast("Izaberi projekat za ovu aktivnost.");
+        return;
+      }
+    } else {
+      const projectName = getValue("activityProjectName").trim() || `${actionHumanLabel(activityType)} projekat`;
+      projectFields = {
+        name: projectName,
+        urgency: getValue("activityProjectUrgency") || "medium",
+        budgetStatus: getValue("activityProjectBudget") || "unknown",
+        estimatedValue: getValue("activityProjectValue"),
+        expectedEndDate
+      };
+    }
+
+    if (createTask && !taskDueDate) {
+      showToast("Izaberi rok za zadatak.");
+      return;
+    }
+
+    if (projectFields) {
+      project = createClientProject(client, projectFields);
+    }
+
+    client.stage = getAutoStageFromActivity(client, activityType);
+    client.lastActionAt = nowISO();
+    client.lastActionHuman = actionHumanLabel(activityType);
+    if (note) {
+      client.lastActionNote = note;
+    }
+
+    addActivity(client, activityType, actionHumanLabel(activityType), note, {
+      actorId: supabaseUser?.id || "",
+      actorName,
+      actorEmail: supabaseUser?.email || "",
+      projectId: project?.id || "",
+      projectName: projectDisplayName(project)
+    });
+
+    if (completeCurrentTask && currentActivityContext?.taskId && project?.id) {
+      const completedTask = completeClientTask(client, project.id, currentActivityContext.taskId);
+      if (completedTask) {
+        addActivity(client, "task_done", "Zavrsen zadatak", completedTask.title, {
+          actorId: supabaseUser?.id || "",
+          actorName,
+          actorEmail: supabaseUser?.email || "",
+          projectId: project.id,
+          projectName: projectDisplayName(project),
+          relatedTaskId: completedTask.id
+        });
+
+        if (completedTask.type === "project_review") {
+          project.status = "billing";
+          const billingRecord = createBillingRequest(client, project.id, {
+            note: "Admin je potvrdio da na projektu nema otvorenih zadataka. Pripremiti naplatu."
+          });
+          if (billingRecord) {
+            addActivity(client, "project_billing_ready", "Projekat prebacen na naplatu", projectDisplayName(project), {
+              actorId: supabaseUser?.id || "",
+              actorName,
+              actorEmail: supabaseUser?.email || "",
+              projectId: project.id,
+              projectName: projectDisplayName(project),
+              billingId: billingRecord.id
+            });
+          }
+        } else if (completedTask.type !== "billing") {
+          ensureProjectReviewTask(client, project);
+        }
+      }
+    }
+
+    if (createTask) {
+      const ownerName = selectedOwner.name;
+      const taskId = createLocalEntityId("task");
+
+      ensureClientWorkflow(client);
+
+      const task = {
+        id: taskId,
+        title: taskTitle,
+        dueDate: taskDueDate,
+        ownerId: taskOwnerId,
+        ownerName,
+        ownerEmail: taskOwnerEmail,
+        delegatedById: supabaseUser?.id || "",
+        delegatedByName: actorName,
+        delegatedByEmail: supabaseUser?.email || "",
+        projectId: project?.id || "",
+        projectName: projectDisplayName(project),
+        status: taskStatus,
+        note,
+        createdAt: nowISO()
+      };
+
+      addTaskToProject(client, project, task);
+
+      client.nextStepText = taskTitle;
+      client.nextStepType = "task";
+      client.nextStepDate = taskDueDate;
+
+      const taskLabel = taskOwnerId && supabaseUser?.id && taskOwnerId !== supabaseUser.id
+        ? "Delegiran zadatak"
+        : "Kreiran zadatak";
+      const ownerLabel = ownerName && ownerName !== "Clan tima"
+        ? ownerName
+        : (taskOwnerEmail || ownerName);
+      const taskNote = `${projectDisplayName(project)} - ${taskTitle} - Vlasnik: ${ownerLabel} - Rok: ${formatDate(taskDueDate)}`;
+
+      addActivity(client, "task_created", taskLabel, taskNote, {
+        actorId: supabaseUser?.id || "",
+        actorName,
+        actorEmail: supabaseUser?.email || "",
+        ownerId: taskOwnerId,
+        ownerName,
+        ownerEmail: taskOwnerEmail,
+        projectId: project?.id || "",
+        projectName: projectDisplayName(project),
+        relatedTaskId: taskId
+      });
+    }
+
+    if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
+      saveClientsLocalOnly();
+      const synced = await pushClientsToWorkspace();
+      if (!synced) {
+        showToast("Aktivnost je sacuvana lokalno, ali nije upisana u workspace.");
+        return;
+      }
+    } else {
+      saveClients();
+    }
+    closeActivityModal();
+    renderAll();
+
+    if (currentClientId === client.id) openClientDrawer(client.id);
+    showToast("Aktivnost je sacuvana.");
+  } catch (error) {
+    console.error("[Pulse Activity] save failed", error);
+    showToast(`Aktivnost nije sacuvana: ${error?.message || "greska"}`);
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
-
-  if (nextStage) {
-    client.stage = nextStage;
-  }
-
-  client.lastActionAt = nowISO();
-  client.lastActionHuman = actionHumanLabel(activityType);
-  if (note) {
-    client.lastActionNote = note;
-  }
-
-  client.nextStepText = nextStepText;
-  client.nextStepType = nextStepType;
-  client.nextStepDate = nextStepDate;
-
-  addActivity(client, activityType, actionHumanLabel(activityType), note);
-  saveClients();
-  closeActivityModal();
-  renderAll();
-
-  if (currentClientId === client.id) openClientDrawer(client.id);
-  showToast("Aktivnost je sacuvana.");
 }
 
 function getDefaultNextStepForAction(actionType) {

@@ -29,6 +29,32 @@ let licenseState = {
   trialEndsAt: ""
 };
 
+function getWorkspaceTrialDaysLeft() {
+  if (!currentWorkspacePlan?.trial_ends_at) return 0;
+  const days = daysUntil(currentWorkspacePlan.trial_ends_at);
+  return days === null ? 0 : Math.max(0, days + 1);
+}
+
+function hasWorkspacePlanState() {
+  return Boolean(currentWorkspacePlan?.plan);
+}
+
+function getEffectivePlan() {
+  if (hasWorkspacePlanState()) {
+    if (currentWorkspacePlan.plan === "trial" && getWorkspaceTrialDaysLeft() <= 0) {
+      return "free";
+    }
+
+    return currentWorkspacePlan.plan;
+  }
+
+  if (licenseState.plan === "trial" && getTrialDaysLeft() <= 0) {
+    return "free";
+  }
+
+  return licenseState.plan || "free";
+}
+
 function loadLicenseState() {
   try {
     const raw = localStorage.getItem(LICENSE_STORAGE_KEY);
@@ -62,11 +88,11 @@ function normalizeLicenseState() {
 }
 
 function isProUnlocked() {
-  return licenseState.plan === "pro";
+  return getEffectivePlan() === "pro";
 }
 
 function isTrialActive() {
-  return licenseState.plan === "trial" && getTrialDaysLeft() > 0;
+  return getEffectivePlan() === "trial";
 }
 
 function hasPremiumAccess() {
@@ -92,7 +118,8 @@ function isFreeClientLimitReached(nextCount = clients.length) {
 }
 
 function getFreePlanLimitText() {
-  return `Do ${FREE_CLIENT_LIMIT} klijenata u Free verziji.`;
+  const clientLimit = currentWorkspacePlan?.client_limit || FREE_CLIENT_LIMIT;
+  return `Do ${clientLimit} klijenata u Free verziji.`;
 }
 
 function requireProFeature(featureKey) {
@@ -170,38 +197,12 @@ function handleLicenseSubmit(e) {
     return;
   }
 
-  licenseState = {
-    plan: "pro",
-    activatedAt: nowISO(),
-    trialEndsAt: ""
-  };
-
-  saveLicenseState();
-  closeLicenseModal();
-  renderLicenseUI();
-  renderAll();
-  if (currentClientId) openClientDrawer(currentClientId);
-  showToast("Pro funkcije su otkljucane.");
+  activateProPlan();
 }
 
 function startTrial() {
   if (hasPremiumAccess()) return;
-
-  const trialEnds = new Date();
-  trialEnds.setDate(trialEnds.getDate() + TRIAL_DURATION_DAYS - 1);
-
-  licenseState = {
-    plan: "trial",
-    activatedAt: nowISO(),
-    trialEndsAt: trialEnds.toISOString().slice(0, 10)
-  };
-
-  saveLicenseState();
-  closeLicenseModal();
-  renderLicenseUI();
-  renderAll();
-  if (currentClientId) openClientDrawer(currentClientId);
-  showToast("Trial je pokrenut.");
+  activateTrialPlan();
 }
 
 function startTrialFromWelcome() {
@@ -216,34 +217,35 @@ function openLicenseFromWelcome() {
 
 function renderLicenseUI() {
   const hasAccess = hasPremiumAccess();
+  const effectivePlan = getEffectivePlan();
   const badgeText =
-    isProUnlocked() ? "PRO VERZIJA" :
-    isTrialActive() ? "TRIAL" :
+    effectivePlan === "pro" ? "PRO VERZIJA" :
+    effectivePlan === "trial" ? "TRIAL" :
     "FREE";
   const badgeClass =
-    isProUnlocked() ? "success" :
-    isTrialActive() ? "warning" :
+    effectivePlan === "pro" ? "success" :
+    effectivePlan === "trial" ? "warning" :
     "neutral";
   const summaryText =
-    isTrialActive()
-      ? `Probni period traje jos ${getTrialDaysLeft()} ${getTrialDaysLeft() === 1 ? "dan" : "dana"}.`
+    effectivePlan === "trial"
+      ? `Probni period traje jos ${hasWorkspacePlanState() ? getWorkspaceTrialDaysLeft() : getTrialDaysLeft()} ${(hasWorkspacePlanState() ? getWorkspaceTrialDaysLeft() : getTrialDaysLeft()) === 1 ? "dan" : "dana"}.`
       : getFreePlanLimitText();
 
   setTextIfExists("licensePlanBadge", badgeText);
   setClassIfExists("licensePlanBadge", `badge ${badgeClass}`);
   setTextIfExists("licensePlanText", summaryText);
-  setTextIfExists("unlockPlanBtn", isTrialActive() ? "Aktiviraj Pro" : "Otkljucaj Pro");
+  setTextIfExists("unlockPlanBtn", effectivePlan === "trial" ? "Aktiviraj Pro" : "Otkljucaj Pro");
 
   const licenseText = document.getElementById("licensePlanText");
   if (licenseText) {
-    licenseText.classList.toggle("hidden", isProUnlocked());
+    licenseText.classList.toggle("hidden", effectivePlan === "pro");
   }
 
   const unlockBtn = document.getElementById("unlockPlanBtn");
   if (unlockBtn) {
-    unlockBtn.disabled = isProUnlocked();
-    unlockBtn.classList.toggle("is-disabled", isProUnlocked());
-    unlockBtn.classList.toggle("hidden", isProUnlocked());
+    unlockBtn.disabled = effectivePlan === "pro";
+    unlockBtn.classList.toggle("is-disabled", effectivePlan === "pro");
+    unlockBtn.classList.toggle("hidden", effectivePlan === "pro");
   }
 
   const dealSection = document.getElementById("dealInfoSection");
@@ -269,4 +271,91 @@ function renderLicenseUI() {
   if (typeof renderSettingsUI === "function") {
     renderSettingsUI();
   }
+}
+
+async function saveWorkspacePlanUpdate(nextPlan) {
+  if (!hasWorkspacePlanState() || !canUseTeamFeatures() || !currentWorkspace?.id) {
+    return false;
+  }
+
+  const trialEnds = new Date();
+  trialEnds.setDate(trialEnds.getDate() + TRIAL_DURATION_DAYS - 1);
+
+  const payload =
+    nextPlan === "pro"
+      ? {
+          plan: "pro",
+          status: "active",
+          trial_started_at: null,
+          trial_ends_at: null,
+          client_limit: null,
+          updated_at: nowISO()
+        }
+      : {
+          plan: "trial",
+          status: "active",
+          trial_started_at: nowISO(),
+          trial_ends_at: trialEnds.toISOString(),
+          client_limit: null,
+          updated_at: nowISO()
+        };
+
+  const { data, error } = await supabaseClient
+    .from("workspace_subscriptions")
+    .update(payload)
+    .eq("workspace_id", currentWorkspace.id)
+    .select("workspace_id, plan, status, trial_started_at, trial_ends_at, client_limit")
+    .single();
+
+  if (error) {
+    showToast(nextPlan === "pro" ? "Pro plan nije sacuvan." : "Trial nije sacuvan.");
+    return false;
+  }
+
+  currentWorkspacePlan = data || null;
+  return true;
+}
+
+async function activateProPlan() {
+  if (hasWorkspacePlanState()) {
+    const saved = await saveWorkspacePlanUpdate("pro");
+    if (!saved) return;
+  } else {
+    licenseState = {
+      plan: "pro",
+      activatedAt: nowISO(),
+      trialEndsAt: ""
+    };
+    saveLicenseState();
+  }
+
+  closeLicenseModal();
+  renderLicenseUI();
+  renderAll();
+  if (currentClientId) openClientDrawer(currentClientId);
+  showToast("Pro funkcije su otkljucane.");
+}
+
+async function activateTrialPlan() {
+  if (hasWorkspacePlanState()) {
+    const saved = await saveWorkspacePlanUpdate("trial");
+    if (!saved) return;
+  } else {
+    const trialEnds = new Date();
+    trialEnds.setDate(trialEnds.getDate() + TRIAL_DURATION_DAYS - 1);
+
+    licenseState = {
+      plan: "trial",
+      activatedAt: nowISO(),
+      trialEndsAt: trialEnds.toISOString().slice(0, 10)
+    };
+
+    saveLicenseState();
+  }
+
+  closeLicenseModal();
+  renderLicenseUI();
+  renderAll();
+  if (currentClientId) openClientDrawer(currentClientId);
+  showToast("Trial je pokrenut.");
 }

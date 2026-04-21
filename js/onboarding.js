@@ -1,5 +1,12 @@
 let onboardingStep = "profile";
 
+function resolveDefaultOnboardingStep() {
+  if (!currentProfile?.full_name) return "profile";
+  if (currentPendingInvite) return "join";
+  if (!currentMembership) return "choice";
+  return "choice";
+}
+
 function getOnboardingSectionId(step) {
   if (step === "profile") return "onboardingStepProfile";
   if (step === "choice") return "onboardingStepChoice";
@@ -11,7 +18,7 @@ function openOnboardingModal(forceStep = "") {
   const modal = document.getElementById("onboardingModal");
   if (!modal || !isCloudEnabled() || !teamSchemaReady) return;
 
-  onboardingStep = forceStep || (!currentProfile?.full_name ? "profile" : currentMembership ? "choice" : "choice");
+  onboardingStep = forceStep || resolveDefaultOnboardingStep();
   renderOnboardingStep();
   modal.classList.remove("hidden");
   modal.setAttribute("aria-hidden", "false");
@@ -44,9 +51,9 @@ function renderOnboardingStep() {
   setTextIfExists(
     "onboardingSubtitle",
     onboardingStep === "profile" ? "Prvo nam reci kako da te oslovljavamo." :
-    onboardingStep === "choice" ? "Biramo da li otvaras novi tim ili ulazis u postojeci." :
+    onboardingStep === "choice" ? (currentPendingInvite ? "Za ovaj nalog vec postoji pozivnica, pa je najbolje da prvo udjes u postojeci tim." : "Biramo da li otvaras novi tim ili ulazis u postojeci.") :
     onboardingStep === "create" ? "Naziv workspace-a postaje zajednicki CRM prostor tvog tima." :
-    "Ako je za tvoj email vec kreirana pozivnica, ovde je prihvatas."
+    "Ako si otvorio invite link ili za tvoj email postoji pozivnica, ovde je prihvatas."
   );
 
   setValueIfExists("onboardingFullName", currentProfile?.full_name || "");
@@ -64,7 +71,7 @@ function renderPendingInviteState() {
 
   if (currentPendingInvite?.workspace?.name) {
     setTextIfExists("pendingInviteWorkspaceName", currentPendingInvite.workspace.name);
-    setTextIfExists("pendingInviteHint", `Pozvani ste kao ${currentPendingInvite.role || "member"} u ovaj workspace.`);
+    setTextIfExists("pendingInviteHint", `Pozvan si kao ${workspaceRoleLabel(currentPendingInvite.role)} u ovaj workspace.`);
   }
 }
 
@@ -83,6 +90,13 @@ async function handleOnboardingProfileContinue() {
 }
 
 function handleOnboardingChooseCreate() {
+  if (currentPendingInvite) {
+    showToast("Za ovaj nalog vec postoji pozivnica. Prihvati poziv umesto kreiranja novog tima.");
+    onboardingStep = "join";
+    renderOnboardingStep();
+    return;
+  }
+
   onboardingStep = "create";
   renderOnboardingStep();
 }
@@ -117,7 +131,11 @@ async function handleAcceptInvite() {
 }
 
 function maybeOpenOnboarding() {
+  if (currentMembership?.workspace?.id || currentWorkspace?.id) {
+    return;
+  }
+
   if (userNeedsOnboarding()) {
-    openOnboardingModal();
+    openOnboardingModal(currentPendingInvite ? "join" : "");
   }
 }

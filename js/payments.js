@@ -1,13 +1,20 @@
-/* ------------------------- PAYMENT ------------------------- */
-function openPaymentModal(clientId) {
+/* ------------------------- PAYMENT WORKFLOW ------------------------- */
+let currentPaymentProjectId = "";
+
+function openPaymentModal(clientId, options = {}) {
   if (!requireProFeature("payments")) return;
 
   const client = getClientById(clientId);
   if (!client) return;
-  currentPaymentClientId = clientId;
-  renderPaymentSummary(client);
 
-  setTextIfExists("paymentModalTitle", `Naplata — ${client.name}`);
+  currentPaymentClientId = clientId;
+  currentPaymentProjectId = options.projectId || getClientOpenProjects(client)[0]?.id || getClientProjects(client)[0]?.id || "";
+
+  setTextIfExists("paymentModalTitle", `Naplata - ${client.name}`);
+  renderPaymentSummary(client);
+  renderPaymentProjectOptions(client);
+  renderBillingForm(client);
+  renderBillingHistory(client);
 
   const modal = document.getElementById("paymentModal");
   if (modal) {
@@ -19,118 +26,233 @@ function openPaymentModal(clientId) {
 function closePaymentModal() {
   const modal = document.getElementById("paymentModal");
   if (modal) {
+    if (modal.contains(document.activeElement)) document.activeElement.blur();
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
   }
   currentPaymentClientId = null;
+  currentPaymentProjectId = "";
+}
+
+function getSelectedPaymentProject(client) {
+  const selectedId = getValue("paymentProjectSelect") || currentPaymentProjectId;
+  return getClientProjectById(client, selectedId) || getClientProjects(client)[0] || null;
+}
+
+function renderPaymentProjectOptions(client) {
+  const select = document.getElementById("paymentProjectSelect");
+  if (!select) return;
+
+  const projects = getClientProjects(client);
+  select.innerHTML = projects.length
+    ? projects.map(project => `
+        <option value="${escapeHtml(project.id)}"${project.id === currentPaymentProjectId ? " selected" : ""}>
+          ${escapeHtml(projectDisplayName(project))}
+        </option>
+      `).join("")
+    : '<option value="">Nema projekata</option>';
 }
 
 function renderPaymentSummary(client) {
+  const records = getBillingRecords(client);
+  const openRecords = records.filter(record => !["paid", "canceled"].includes(record.status));
+  const paidRecords = records.filter(record => record.status === "paid");
   const discipline = computePaymentDiscipline(client);
-  const badgeClass =
-    discipline === "Dobra" ? "success" :
-    discipline === "Promenljiva" ? "warning" : "neutral";
 
-  setTextIfExists("paymentSummaryBadge", `Finansijska disciplina: ${discipline}`);
-  setClassIfExists("paymentSummaryBadge", `badge ${badgeClass}`);
+  setTextIfExists("paymentSummaryBadge", `Naplata: ${discipline}`);
+  setClassIfExists("paymentSummaryBadge", `badge ${discipline === "Dobra" ? "success" : discipline === "Promenljiva" ? "warning" : "neutral"}`);
 
-  const parts = [];
-  if (client.payment.lastInvoiceDate) parts.push(`Poslata faktura: ${formatDate(client.payment.lastInvoiceDate)}`);
-  if (client.payment.lastReminderDate) parts.push(`Podsetnik: ${formatDate(client.payment.lastReminderDate)}`);
-  if (client.payment.lastPaidDate) parts.push(`Plaćeno: ${formatDate(client.payment.lastPaidDate)}`);
-  if (!parts.length) parts.push("Nema podataka o naplati.");
-
-  setTextIfExists("paymentSummaryText", parts.join(" • "));
+  const parts = [
+    `Otvoreno: ${openRecords.length}`,
+    `Placeno: ${paidRecords.length}`
+  ];
+  if (client.payment?.lastPaidDate) parts.push(`Poslednja uplata: ${formatDate(client.payment.lastPaidDate)}`);
+  setTextIfExists("paymentSummaryText", parts.join(" - "));
 }
 
 function renderPaymentSummaryInline(client) {
+  const records = getBillingRecords(client);
+  const openRecords = records.filter(record => !["paid", "canceled"].includes(record.status));
+  const latest = records[0] || null;
   const discipline = computePaymentDiscipline(client);
-  const badgeClass =
-    discipline === "Dobra" ? "success" :
-    discipline === "Promenljiva" ? "warning" : "neutral";
 
   setTextIfExists("paymentSummaryBadgeInline", `Naplata: ${discipline}`);
-  setClassIfExists("paymentSummaryBadgeInline", `badge ${badgeClass}`);
+  setClassIfExists("paymentSummaryBadgeInline", `badge ${openRecords.length ? "warning" : "neutral"}`);
 
-  const parts = [];
-  if (client.payment.lastInvoiceDate) parts.push(`Faktura: ${formatDate(client.payment.lastInvoiceDate)}`);
-  if (client.payment.lastReminderDate) parts.push(`Reminder: ${formatDate(client.payment.lastReminderDate)}`);
-  if (client.payment.lastPaidDate) parts.push(`Plaćeno: ${formatDate(client.payment.lastPaidDate)}`);
-  if (!parts.length) parts.push("Nema podataka o naplati.");
+  const text = latest
+    ? `${billingStatusLabel(latest.status)} - ${latest.projectName || "projekat"}${latest.dueDate ? ` - valuta ${formatDate(latest.dueDate)}` : ""}`
+    : "Nema podataka o naplati.";
+  setTextIfExists("paymentSummaryTextInline", text);
+}
 
-  setTextIfExists("paymentSummaryTextInline", parts.join(" • "));
+function renderSelectedPaymentProject() {
+  const client = getClientById(currentPaymentClientId);
+  if (!client) return;
+  currentPaymentProjectId = getValue("paymentProjectSelect") || "";
+  renderBillingForm(client);
+}
+
+function getCurrentBillingRecord(client) {
+  const project = getSelectedPaymentProject(client);
+  if (!project) return null;
+  return getProjectBillingRecord(client, project.id) ||
+    getBillingRecords(client).find(record => record.projectId === project.id) ||
+    null;
+}
+
+function renderBillingForm(client) {
+  const wrap = document.getElementById("billingFormWrap");
+  const project = getSelectedPaymentProject(client);
+  const record = getCurrentBillingRecord(client);
+  const hasRecord = Boolean(record);
+
+  if (wrap) wrap.classList.toggle("hidden", !hasRecord);
+  if (!project) {
+    setTextIfExists("createBillingRequestBtn", "Nema projekta za naplatu");
+    return;
+  }
+
+  setTextIfExists("createBillingRequestBtn", hasRecord ? "Zahtev vec postoji" : "Kreiraj zahtev za naplatu");
+  const requestBtn = document.getElementById("createBillingRequestBtn");
+  if (requestBtn) requestBtn.disabled = hasRecord;
+
+  const paidBtn = document.getElementById("markBillingPaidBtn");
+  if (paidBtn) paidBtn.disabled = !hasRecord || record.status === "paid";
+
+  if (!hasRecord) return;
+
+  setValueIfExists("billingStatusSelect", record.status || "requested");
+  setValueIfExists("billingInvoiceNumber", record.invoiceNumber || "");
+  setValueIfExists("billingAmount", record.amount || "");
+  setValueIfExists("billingInvoiceDate", dateOnlyValue(record.invoiceDate || ""));
+  setValueIfExists("billingDueDate", dateOnlyValue(record.dueDate || ""));
+  setValueIfExists("billingNote", record.note || "");
+}
+
+async function persistPaymentClient(client, successText) {
+  if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
+    saveClientsLocalOnly();
+    const synced = await pushClientsToWorkspace();
+    if (!synced) {
+      showToast("Naplata je sacuvana lokalno, ali nije upisana u workspace.");
+      return false;
+    }
+  } else {
+    saveClients();
+  }
+
+  renderPaymentSummary(client);
+  renderBillingForm(client);
+  renderBillingHistory(client);
+  renderAll();
+  if (currentClientId === client.id) openClientDrawer(client.id);
+  showToast(successText);
+  return true;
+}
+
+async function handleCreateBillingRequest() {
+  const client = getClientById(currentPaymentClientId);
+  if (!client) return;
+
+  const project = getSelectedPaymentProject(client);
+  if (!project) {
+    showToast("Prvo izaberi projekat.");
+    return;
+  }
+
+  const record = createBillingRequest(client, project.id);
+  if (!record) {
+    showToast("Zahtev za naplatu nije kreiran.");
+    return;
+  }
+
+  await persistPaymentClient(client, "Zahtev za naplatu je poslat finansijama.");
+}
+
+async function handleSaveBillingRecord() {
+  const client = getClientById(currentPaymentClientId);
+  if (!client) return;
+
+  const record = getCurrentBillingRecord(client);
+  if (!record) {
+    showToast("Prvo kreiraj zahtev za naplatu.");
+    return;
+  }
+
+  updateBillingRecord(client, record.id, {
+    status: getValue("billingStatusSelect") || "requested",
+    invoiceNumber: getValue("billingInvoiceNumber"),
+    amount: getValue("billingAmount"),
+    invoiceDate: normalizeDateInputValue(getValue("billingInvoiceDate")),
+    dueDate: normalizeDateInputValue(getValue("billingDueDate")),
+    note: getValue("billingNote")
+  });
+
+  addActivity(client, "billing_updated", "Azurirana naplata", `${record.projectName} - ${billingStatusLabel(record.status)}`, {
+    billingId: record.id,
+    projectId: record.projectId,
+    projectName: record.projectName
+  });
+
+  await persistPaymentClient(client, "Naplata je sacuvana.");
+}
+
+async function handleMarkBillingPaid() {
+  const client = getClientById(currentPaymentClientId);
+  if (!client) return;
+
+  const record = getCurrentBillingRecord(client);
+  if (!record) {
+    showToast("Nema otvorene naplate za ovaj projekat.");
+    return;
+  }
+
+  markBillingRecordPaid(client, record.id);
+  addActivity(client, "billing_paid", "Naplata placena", `${record.projectName} - ${record.amount ? formatMoney(record.amount) : "bez iznosa"}`, {
+    billingId: record.id,
+    projectId: record.projectId,
+    projectName: record.projectName
+  });
+
+  await persistPaymentClient(client, "Placanje je evidentirano.");
+}
+
+function renderBillingHistory(client) {
+  const list = document.getElementById("billingHistoryList");
+  const empty = document.getElementById("billingHistoryEmpty");
+  if (!list || !empty) return;
+
+  const records = getBillingRecords(client);
+  list.innerHTML = "";
+  empty.classList.toggle("hidden", records.length > 0);
+  list.classList.toggle("hidden", records.length === 0);
+
+  records.forEach(record => {
+    const row = document.createElement("div");
+    row.className = "billing-history-item";
+    row.innerHTML = `
+      <div>
+        <strong>${escapeHtml(record.projectName || "Projekat")}</strong>
+        <p>${escapeHtml(billingStatusLabel(record.status))}${record.amount ? ` - ${escapeHtml(formatMoney(record.amount))}` : ""}</p>
+      </div>
+      <span>${escapeHtml(record.dueDate ? `Valuta ${formatDate(record.dueDate)}` : formatDate(record.requestedAt))}</span>
+    `;
+    list.appendChild(row);
+  });
 }
 
 function markInvoiceSent() {
-  const client = getClientById(currentPaymentClientId);
-  if (!client) return;
-
-  client.payment.lastInvoiceDate = nowISO();
-  client.payment.lastPaidDate = null;
-  client.payment.paymentSpeed = null;
-  client.lastActionAt = nowISO();
-  client.lastActionHuman = "Poslata faktura";
-
-  addActivity(client, "invoice_sent", "Poslata faktura", "");
-  saveClients();
-  renderPaymentSummary(client);
-  renderAll();
-  if (currentClientId === client.id) openClientDrawer(client.id);
-  showToast("Faktura je evidentirana.");
+  handleSaveBillingRecord();
 }
 
 function generatePaymentReminder() {
-  const client = getClientById(currentPaymentClientId);
-  if (!client) return;
-
-  setValueIfExists("paymentMessage",
-`Samo da proverim status fakture koju smo poslali.
-
-Ako je potrebno još nešto sa naše strane, slobodno javite.`);
-
-  client.payment.lastReminderDate = nowISO();
-  client.lastActionAt = nowISO();
-  client.lastActionHuman = "Poslat podsetnik za plaćanje";
-
-  addActivity(client, "payment_reminder", "Poslat podsetnik za plaćanje", "");
-  saveClients();
-  renderPaymentSummary(client);
-  renderAll();
-  if (currentClientId === client.id) openClientDrawer(client.id);
-  showToast("Podsetnik je evidentiran.");
+  showToast("Podsetnik ostaje kroz napomenu u naplati. Direktan template vracamo kada stabilizujemo finance flow.");
 }
 
-function markPaymentReceived(speed) {
-  const client = getClientById(currentPaymentClientId);
-  if (!client) return;
-
-  client.payment.lastPaidDate = nowISO();
-  client.payment.paymentSpeed = speed;
-  client.lastActionAt = nowISO();
-  client.lastActionHuman = speed === "on_time" ? "Faktura plaćena u roku" : "Faktura plaćena sa kašnjenjem";
-
-  addActivity(
-    client,
-    speed === "on_time" ? "paid_on_time" : "paid_late",
-    speed === "on_time" ? "Faktura plaćena u roku" : "Faktura plaćena sa kašnjenjem",
-    ""
-  );
-
-  saveClients();
-  renderPaymentSummary(client);
-  renderAll();
-  if (currentClientId === client.id) openClientDrawer(client.id);
-  showToast(speed === "on_time" ? "Plaćanje u roku je evidentirano." : "Kašnjenje u plaćanju je evidentirano.");
+function markPaymentReceived() {
+  handleMarkBillingPaid();
 }
 
 async function copyPaymentMessage() {
-  const field = document.getElementById("paymentMessage");
-  const value = field ? field.value : "";
-
-  try {
-    await navigator.clipboard.writeText(value);
-    showToast("Poruka je kopirana.");
-  } catch {
-    showToast("Copy nije uspeo.");
-  }
+  showToast("Template poruke vise nije deo osnovnog naplatnog flow-a.");
 }

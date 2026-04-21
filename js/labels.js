@@ -247,12 +247,17 @@ function actionHumanLabel(actionType) {
     case "followup_strong": return "Poslat jaci follow-up";
     case "status_check": return "Poslata provera statusa";
     case "negotiation_push": return "Poslat push ka odluci";
-    case "payment_reminder": return "Poslat podsetnik za placanje";
-    case "phone_call": return "Evidentiran poziv";
-    case "meeting_scheduled": return "Zakazan sastanak";
-    case "reminder": return "Napravljen podsetnik";
-    case "inactive_checkin": return "Pokrenuta reaktivacija klijenta";
-    case "internal_note": return "Dodana interna beleska";
+      case "payment_reminder": return "Poslat podsetnik za placanje";
+      case "phone_call": return "Evidentiran poziv";
+      case "email": return "Poslat email";
+      case "meeting_held": return "Odrzan sastanak";
+      case "offer_sent": return "Poslata ponuda";
+      case "message": return "Poslata poruka";
+      case "production": return "Pokrenuta izrada";
+      case "meeting_scheduled": return "Zakazan sastanak";
+      case "reminder": return "Napravljen podsetnik";
+      case "inactive_checkin": return "Pokrenuta reaktivacija klijenta";
+      case "internal_note": return "Dodana interna beleska";
     default: return "Poslata akcija";
   }
 }

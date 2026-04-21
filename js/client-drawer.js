@@ -19,6 +19,7 @@ function openClientDrawer(id) {
 function closeClientDrawer() {
   const drawer = document.getElementById("clientDrawer");
   if (drawer) {
+    if (drawer.contains(document.activeElement)) document.activeElement.blur();
     drawer.classList.add("hidden");
     drawer.setAttribute("aria-hidden", "true");
   }
@@ -30,7 +31,7 @@ function renderCleanDrawer(client) {
   const cityText = client.clientCity || client.city || "-";
   const days = daysSince(client.lastActionAt);
   const pulse = computePulseScore(client);
-  const recommendation = getDrawerActionRecommendation(client);
+  const activeTask = getClientActiveTask(client);
 
   setTextIfExists("drawerClientName", client.name || "Klijent");
   setTextIfExists("drawerClientSubtitle", `${cityText} • ${statusText} • pre ${days} dana`);
@@ -48,20 +49,66 @@ function renderCleanDrawer(client) {
   setTextIfExists("assessmentComplexity", computeBuyingReadiness(client));
   setTextIfExists("assessmentPotential", computeMomentum(client));
 
-  setTextIfExists("drawerActionRecommendationTitle", recommendation.title);
-  setTextIfExists("drawerActionRecommendationText", recommendation.text);
-
   setTextIfExists("detailClientName", client.name || "-");
   setTextIfExists("detailCity", cityText);
   setTextIfExists("detailContactPerson", client.contactPerson || "-");
+  setTextIfExists("detailContactRole", client.contactRole || "-");
   setTextIfExists("detailPhone", client.contactPhone || "-");
   setTextIfExists("detailEmail", client.contactEmail || "-");
+  setTextIfExists("detailAddress", client.clientAddress || "-");
+  setTextIfExists("detailStage", statusText);
   setTextIfExists("detailLastActionNote", client.lastActionNote || "-");
-  setTextIfExists("detailNextStep", client.nextStepText || "-");
-  setTextIfExists("detailNextStepDate", client.nextStepDate ? formatDate(client.nextStepDate) : "-");
+  setTextIfExists("detailNextStep", activeTask?.title || getClientNextStepText(client, "-"));
+  setTextIfExists("detailNextStepDate", activeTask?.dueDate ? formatDate(activeTask.dueDate) : (hasConcreteNextStep(client) ? formatDate(client.nextStepDate) : "-"));
   setTextIfExists("detailDealValue", isProUnlocked() ? (client.dealValue ? formatMoney(client.dealValue) : "-") : "Pro");
   setTextIfExists("detailDealProbability", isProUnlocked() ? dealProbabilityLabel(client.dealProbability) : "Pro");
   setTextIfExists("detailExpectedDecisionDate", isProUnlocked() ? (client.expectedDecisionDate ? formatDate(client.expectedDecisionDate) : "-") : "Pro");
+
+  if (typeof renderPaymentSummaryInline === "function") {
+    renderPaymentSummaryInline(client);
+  }
+}
+
+function renderActiveTaskPreview(client, statusText) {
+  const card = document.getElementById("activeTaskCard");
+  const empty = document.getElementById("activeTaskEmpty");
+  const task = getClientActiveTask(client);
+  const hasTask = Boolean(task);
+
+  if (card) {
+    card.classList.toggle("hidden", !hasTask);
+  }
+
+  if (empty) {
+    empty.classList.toggle("hidden", hasTask);
+  }
+
+  if (!hasTask) {
+    setTextIfExists("activeTaskStatus", "Otvoren");
+    setClassIfExists("activeTaskStatus", "badge neutral");
+    setTextIfExists("activeTaskTitle", "Nema aktivnog taska");
+    setTextIfExists("activeTaskDue", "Bez roka");
+    setTextIfExists("activeTaskOwner", "Nema vlasnika");
+    setTextIfExists("activeTaskDelegatedBy", "-");
+    setTextIfExists("activeTaskNote", "Nova aktivnost moze da ostane samo zapis ili da odmah kreira sledecu akciju sa vlasnikom i rokom.");
+    setTextIfExists("openActionFromDrawerBtn", "Nova aktivnost");
+    return;
+  }
+
+  const derivedStatus = taskStatusLabel(task?.status || "open");
+  const statusClass =
+    derivedStatus === "Na cekanju" ? "warning" :
+    derivedStatus === "U toku" ? "success" :
+    "neutral";
+
+  setTextIfExists("activeTaskStatus", derivedStatus);
+  setClassIfExists("activeTaskStatus", `badge ${statusClass}`);
+  setTextIfExists("activeTaskTitle", task?.title || "Aktivni task");
+  setTextIfExists("activeTaskDue", task?.dueDate ? `Rok: ${formatDate(task.dueDate)}` : "Bez roka");
+  setTextIfExists("activeTaskOwner", task?.ownerName || "Moj nalog");
+  setTextIfExists("activeTaskDelegatedBy", task?.delegatedByName || "Tim");
+  setTextIfExists("activeTaskNote", task?.note || client.lastActionNote || `${statusText} - prati sledeci korak.`);
+  setTextIfExists("openActionFromDrawerBtn", "Nova aktivnost");
 }
 
 function renderPulseBand(score) {
@@ -122,10 +169,12 @@ function renderTimeline(client) {
   items.forEach(item => {
     const row = document.createElement("div");
     row.className = "timeline-item";
+    const actorLabel = item.actorName ? `<div class="timeline-date">${escapeHtml(item.actorName)}</div>` : "";
     row.innerHTML = `
       <div class="timeline-date">${escapeHtml(formatDateTime(item.at))}</div>
       <div class="timeline-content">
         <strong>${escapeHtml(item.label || "Aktivnost")}</strong>
+        ${actorLabel}
         <p>${escapeHtml(item.note || "-")}</p>
       </div>
     `;

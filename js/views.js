@@ -1,6 +1,3 @@
-/* ------------------------- STAGE ACTIONS ------------------------- */
-let currentHomeMode = "all";
-
 function handleStageAction(actionKey) {
   const client = getClientById(currentClientId);
   if (!client) return;
@@ -60,6 +57,7 @@ function handleStageAction(actionKey) {
       client.nextStepText = "";
       client.nextStepType = "";
       client.nextStepDate = "";
+      if (client.payment?.workflow) client.payment.workflow.activeTask = null;
       activityLabel = "Deal dobijen";
       break;
     case "lost":
@@ -69,6 +67,7 @@ function handleStageAction(actionKey) {
       client.nextStepText = "";
       client.nextStepType = "";
       client.nextStepDate = "";
+      if (client.payment?.workflow) client.payment.workflow.activeTask = null;
       activityLabel = "Deal izgubljen";
       break;
     default:
@@ -84,9 +83,9 @@ function handleStageAction(actionKey) {
 
 /* ------------------------- RENDER ------------------------- */
 function renderAll() {
-  saveClients();
   renderDashboard();
   renderClientsList();
+  renderTeamView();
 }
 
 function switchToClientsMode(mode = "all") {
@@ -102,64 +101,62 @@ function clearClientsMode() {
 
 function getDashboardSuggestions() {
   return clients
-    .filter(client => client.nextStepDate && isDueToday(client.nextStepDate))
-    .map(client => ({ client, suggestion: getTodaySuggestion(client) }))
+    .map(client => ({ client, task: getClientDashboardTask(client) }))
+    .filter(item => item.task && item.task.status !== "waiting" && item.task.dueDate && isDueToday(item.task.dueDate))
+    .map(item => ({ client: item.client, suggestion: getTodaySuggestion(item.client), task: item.task }))
     .sort((a, b) => PRIORITY_ORDER[a.suggestion.priority] - PRIORITY_ORDER[b.suggestion.priority]);
-}
-
-function getHomeHighPrioritySuggestions() {
-  return clients.filter(client => {
-    if (client.nextStepDate && isOverdueDate(client.nextStepDate)) return true;
-    return computePriorityBase(client) === "high";
-  });
 }
 
 function getWaitingClients() {
   return clients
-    .filter(client => client.stage === "waiting")
+    .map(client => ({ client, task: getClientDashboardTask(client) }))
+    .filter(item => item.task && item.task.status === "waiting")
+    .map(item => item.client)
     .sort((a, b) => new Date(b.lastActionAt || 0) - new Date(a.lastActionAt || 0));
 }
 
 function getOverdueClients() {
   return clients
-    .filter(client => client.nextStepDate && isOverdueDate(client.nextStepDate))
-    .sort((a, b) => daysUntil(a.nextStepDate) - daysUntil(b.nextStepDate));
+    .map(client => ({ client, task: getClientDashboardTask(client) }))
+    .filter(item => item.task && item.task.status !== "waiting" && item.task.dueDate && isOverdueDate(item.task.dueDate))
+    .sort((a, b) => daysUntil(a.task.dueDate) - daysUntil(b.task.dueDate))
+    .map(item => item.client);
 }
 
 function getWeekClients() {
   return clients
-    .filter(client => client.nextStepDate && isThisWeekDate(client.nextStepDate) && !isDueToday(client.nextStepDate))
-    .sort((a, b) => daysUntil(a.nextStepDate) - daysUntil(b.nextStepDate));
+    .map(client => ({ client, task: getClientDashboardTask(client) }))
+    .filter(item => item.task && item.task.status !== "waiting" && item.task.dueDate && isThisWeekDate(item.task.dueDate) && !isDueToday(item.task.dueDate))
+    .sort((a, b) => daysUntil(a.task.dueDate) - daysUntil(b.task.dueDate))
+    .map(item => item.client);
 }
 
-function toggleHomeHighPriorityFilter() {
-  currentHomeMode = currentHomeMode === "high_priority" ? "all" : "high_priority";
-  renderDashboard();
+function getClientTaskSummary(client) {
+  const task = getClientActiveTask(client);
+  return {
+    title: task?.title || getClientNextStepText(client, "-"),
+    dueDate: task?.dueDate || client.nextStepDate || "",
+    statusLabel: task ? taskStatusLabel(task.status) : "",
+    ownerName: task?.ownerName || ""
+  };
 }
 
 function renderDashboard() {
-  const todayItems = currentHomeMode === "high_priority"
-    ? getDashboardSuggestions().filter(item => item.suggestion.priority === "high")
-    : getDashboardSuggestions();
+  const todayItems = getDashboardSuggestions();
   const overdueClients = getOverdueClients();
   const waitingClients = getWaitingClients();
   const weekClients = getWeekClients();
 
-  renderCardCollection("todayList", "todayEmpty", todayItems, item => createTodayCard(item.client, item.suggestion));
+  renderCardCollection("todayList", "todayEmpty", todayItems, item => createTodayCard(item.client, item.suggestion, item.task));
   renderCardCollection("overdueList", "overdueEmpty", overdueClients, client => createTaskCard(client, "overdue"));
   renderCardCollection("waitingList", "waitingEmpty", waitingClients, client => createWaitingCard(client));
   renderCardCollection("weekList", "weekEmpty", weekClients, client => createTaskCard(client, "week"));
 
   setTextIfExists("homeTodayDate", formatTodayHeaderDate());
-  setTextIfExists("homeStatTodayActionsValue", todayItems.length + overdueClients.length);
-  setTextIfExists("homeStatHighPriorityValue", getHomeHighPrioritySuggestions().length);
-  setTextIfExists("homeStatTotalClientsValue", clients.length);
-  setTextIfExists("homeStatWeeklyActionsValue", weekClients.length);
-
-  const highPriorityCard = document.getElementById("homeCardHighPriority");
-  if (highPriorityCard) {
-    highPriorityCard.classList.toggle("is-active", currentHomeMode === "high_priority");
-  }
+  setTextIfExists("homeStatTodayCount", todayItems.length);
+  setTextIfExists("homeStatOverdueCount", overdueClients.length);
+  setTextIfExists("homeStatWaitingCount", waitingClients.length);
+  setTextIfExists("homeStatWeekCount", weekClients.length);
 }
 
 function renderCardCollection(listId, emptyId, items, renderItem) {
@@ -175,11 +172,20 @@ function renderCardCollection(listId, emptyId, items, renderItem) {
 function getClientsFilteredByMode(list) {
   switch (currentClientsMode) {
     case "today_actions":
-      return list.filter(client => client.nextStepDate && isDueToday(client.nextStepDate));
+      return list.filter(client => {
+        const task = getClientActiveTask(client);
+        return Boolean(task?.dueDate && isDueToday(task.dueDate));
+      });
     case "high_priority":
-      return list.filter(client => (client.nextStepDate && isOverdueDate(client.nextStepDate)) || computePriorityBase(client) === "high");
+      return list.filter(client => {
+        const task = getClientActiveTask(client);
+        return Boolean((task?.dueDate && isOverdueDate(task.dueDate)) || computePriorityBase(client) === "high");
+      });
     case "weekly_actions":
-      return list.filter(client => client.nextStepDate && isThisWeekDate(client.nextStepDate));
+      return list.filter(client => {
+        const task = getClientActiveTask(client);
+        return Boolean(task?.dueDate && isThisWeekDate(task.dueDate));
+      });
     default:
       return list;
   }
@@ -234,9 +240,9 @@ function renderClientsList() {
 
   filtered.forEach(client => {
     const statusText = STAGES[client.stage] || "Novi";
-    const statusDate = formatDate(client.lastActionAt);
-    const inactivityDays = daysSince(client.lastActionAt);
-    const dueText = client.nextStepDate ? formatDate(client.nextStepDate) : "-";
+    const projectsCount = getClientOpenProjects(client).length;
+    const pulseScore = computePulseScore(client);
+    const potential = computeCommercialPotential(client);
     const priority = computePriorityBase(client);
     const card = document.createElement("article");
     card.className = `client-card priority-${priority}`;
@@ -245,32 +251,126 @@ function renderClientsList() {
       <div class="card-head card-head-simple">
         <div class="card-title-wrap">
           <h4>${escapeHtml(client.name)}</h4>
-          <p class="card-subtitle">${escapeHtml(client.clientCity || "-")}</p>
+          <p class="card-subtitle">${escapeHtml([client.clientCity, industryLabel(client.businessType)].filter(Boolean).join(" · ") || "-")}</p>
         </div>
-        <span class="badge ${commercialPotentialBadgeClass(client)}">Potencijal: ${escapeHtml(computeCommercialPotential(client))}</span>
+        <span class="badge ${commercialPotentialBadgeClass(client)}">Potencijal: ${escapeHtml(potential)}</span>
       </div>
 
       <div class="card-body card-body-simple">
-        <p class="card-status-line"><strong>Trenutni status:</strong> ${escapeHtml(statusText)} (${escapeHtml(statusDate)})</p>
-        <p class="card-due-line"><strong>Sledeci korak:</strong> ${escapeHtml(client.nextStepText || "-")} (${escapeHtml(dueText)})</p>
-        <p class="card-subtitle">pre ${inactivityDays} ${inactivityDays === 1 ? "dan" : "dana"}</p>
+        <div class="client-card-metrics">
+          <span><small>Score</small><strong>${escapeHtml(pulseScore)}%</strong></span>
+          <span><small>Projekti</small><strong>${escapeHtml(projectsCount)}</strong></span>
+          <span><small>Status</small><strong>${escapeHtml(statusText)}</strong></span>
+        </div>
 
         <div class="card-actions card-actions-simple">
-          <button class="btn btn-secondary btn-sm" data-client-detail="${client.id}">Detalji klijenta</button>
+          <button class="btn btn-primary btn-sm" data-card-activity="${client.id}">Aktivnosti</button>
+          <button class="btn btn-secondary btn-sm" data-client-detail="${client.id}">Kartica klijenta</button>
+          <button class="btn btn-secondary btn-sm" data-card-payment="${client.id}" data-pro-feature="payments">Naplata</button>
         </div>
       </div>
     `;
 
+    const activityBtn = card.querySelector("[data-card-activity]");
     const detailBtn = card.querySelector("[data-client-detail]");
+    const paymentBtn = card.querySelector("[data-card-payment]");
+    if (activityBtn) activityBtn.addEventListener("click", () => openActivityModal(client.id));
     if (detailBtn) detailBtn.addEventListener("click", () => openClientDrawer(client.id));
+    if (paymentBtn) paymentBtn.addEventListener("click", () => openPaymentModal(client.id));
 
     list.appendChild(card);
   });
 }
 
-function createTodayCard(client, suggestion) {
+function getTeamActivityFeed() {
+  return clients
+    .flatMap(client => {
+      const log = Array.isArray(client.activityLog) ? client.activityLog : [];
+      return log.map(item => {
+        const fallbackOwnerId = item.actorId || client.ownerUserId || client.createdByUserId || "";
+        const resolvedActorName =
+          item.actorName ||
+          getTeamMemberNameById(fallbackOwnerId, "");
+
+        return {
+          id: item.id || `${client.id}_${item.at || nowISO()}`,
+          clientId: client.id,
+          clientName: client.name || "Klijent",
+          label: item.label || client.lastActionHuman || "Aktivnost",
+          note: item.note || "",
+          at: item.at || client.lastActionAt || client.updatedAt || client.createdAt || nowISO(),
+          ownerName: resolvedActorName
+        };
+      });
+    })
+    .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
+}
+
+function getTeamRecentWeekCount(feed) {
+  const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+  return feed.filter(item => new Date(item.at).getTime() >= weekAgo).length;
+}
+
+function createTeamActivityCard(item) {
+  const article = document.createElement("article");
+  article.className = "simple-card team-activity-card";
+
+  const actorLabel = item.ownerName ? escapeHtml(item.ownerName) : "Tim workspace-a";
+  const noteHtml = item.note ? `<p class="team-activity-note">${escapeHtml(item.note)}</p>` : "";
+
+  article.innerHTML = `
+    <div class="team-activity-topline">
+      <span class="badge neutral">${escapeHtml(item.clientName)}</span>
+      <span class="team-activity-time">${escapeHtml(formatDateTime(item.at))}</span>
+    </div>
+    <div class="card-head card-head-simple">
+      <div class="card-title-wrap">
+        <h4>${escapeHtml(item.label)}</h4>
+        <p class="card-subtitle">${actorLabel}</p>
+      </div>
+    </div>
+    ${noteHtml}
+  `;
+
+  article.addEventListener("click", () => openClientDrawer(item.clientId));
+  return article;
+}
+
+function renderTeamView() {
+  const feed = getTeamActivityFeed();
+  const feedList = document.getElementById("teamActivityList");
+  const empty = document.getElementById("teamActivityEmpty");
+  const invitesCount = Array.isArray(currentWorkspaceInvites) ? currentWorkspaceInvites.length : 0;
+  const membersCount = Array.isArray(currentWorkspaceMembers) ? currentWorkspaceMembers.length : 0;
+
+  setTextIfExists("teamStatMembers", membersCount);
+  setTextIfExists("teamStatClients", clients.length);
+  setTextIfExists("teamStatWeekActivities", getTeamRecentWeekCount(feed));
+  setTextIfExists("teamStatInvites", invitesCount);
+  setTextIfExists(
+    "teamFeedHint",
+    currentWorkspace
+      ? `Poslednje promene unutar workspace-a ${currentWorkspace.name}.`
+      : "Kad se povezes na workspace i pocnes da radis sa klijentima, ovde ce se pojaviti timski tragovi."
+  );
+
+  if (!feedList || !empty) return;
+
+  feedList.innerHTML = "";
+  const recentItems = feed.slice(0, 8);
+  recentItems.forEach(item => feedList.appendChild(createTeamActivityCard(item)));
+  feedList.classList.toggle("hidden", recentItems.length === 0);
+  empty.classList.toggle("hidden", recentItems.length > 0);
+}
+
+function createTodayCard(client, suggestion, task) {
   const card = document.createElement("article");
   const priorityClass = suggestion.priority === "high" ? "danger" : suggestion.priority === "medium" ? "warning" : "neutral";
+  const taskTitle = task?.title || getClientNextStepText(client, suggestion.actionLabel || "Nema");
+  const dueDate = task?.dueDate || client.nextStepDate || "";
+  const taskOwner = task?.ownerName ? `<p class="card-subtitle">Vlasnik: ${escapeHtml(task.ownerName)}</p>` : "";
+  const isBillingTask = task?.type === "billing";
+  const primaryActionLabel = isBillingTask ? "Otvori naplatu" : "Otvori aktivnost";
 
   card.className = `today-card priority-${suggestion.priority}`;
   card.innerHTML = `
@@ -286,11 +386,12 @@ function createTodayCard(client, suggestion) {
 
     <div class="card-body today-card-body">
       <p class="card-status-line"><strong>Trenutni status:</strong> ${escapeHtml(STAGES[client.stage] || "-")} (${escapeHtml(formatDate(client.lastActionAt))})</p>
-      <p class="today-suggestion-line"><strong>Sledeci korak:</strong> ${escapeHtml(client.nextStepText || suggestion.actionLabel || "Nema")}</p>
-      <p class="card-due-line"><strong>Rok:</strong> ${escapeHtml(client.nextStepDate ? formatDate(client.nextStepDate) : "-")} (danas)</p>
+      <p class="today-suggestion-line"><strong>Sledeca akcija:</strong> ${escapeHtml(taskTitle)}</p>
+      <p class="card-due-line"><strong>Rok:</strong> ${escapeHtml(dueDate ? formatDate(dueDate) : "-")} (danas)</p>
+      ${taskOwner}
 
       <div class="card-actions today-actions">
-        <button class="btn btn-primary btn-sm btn-danger-soft" data-today-action="${client.id}">Otvori aktivnost</button>
+        <button class="btn btn-primary btn-sm btn-danger-soft" data-today-action="${client.id}">${escapeHtml(primaryActionLabel)}</button>
         <button class="btn btn-secondary btn-sm btn-info-soft" data-today-detail="${client.id}">Detalji klijenta</button>
       </div>
     </div>
@@ -301,7 +402,17 @@ function createTodayCard(client, suggestion) {
 
   if (actionBtn) {
     actionBtn.addEventListener("click", () => {
-      openActionModal(client.id, suggestion.actionType, suggestion.priority);
+      if (isBillingTask) {
+        openPaymentModal(client.id, { projectId: task?.projectId || "" });
+        return;
+      }
+
+      openActivityModal(client.id, {
+        projectId: task?.projectId || "",
+        taskId: task?.id || "",
+        lockProject: Boolean(task?.projectId),
+        source: "dashboard"
+      });
     });
   }
 
@@ -315,6 +426,7 @@ function createTodayCard(client, suggestion) {
 function createWaitingCard(client) {
   const card = document.createElement("article");
   const waitingDays = daysSince(client.lastActionAt);
+  const task = getClientActiveTask(client);
   const lastAction = client.lastActionHuman || "Poslata poruka";
 
   card.className = "client-card waiting-card";
@@ -329,7 +441,8 @@ function createWaitingCard(client) {
 
     <div class="card-body card-body-simple">
       <p class="card-status-line"><strong>Poslednja akcija:</strong> ${escapeHtml(lastAction)}</p>
-      <p class="card-due-line"><strong>Sledeci check:</strong> ${escapeHtml(client.nextStepDate ? formatDate(client.nextStepDate) : "-")}</p>
+      <p class="card-due-line"><strong>Akcija na cekanju:</strong> ${escapeHtml(task?.title || getClientNextStepText(client, "-"))}</p>
+      <p class="card-subtitle">${escapeHtml(task?.dueDate ? `Rok: ${formatDate(task.dueDate)}` : "Bez roka")}</p>
       <p class="card-subtitle">pre ${waitingDays} ${waitingDays === 1 ? "dan" : "dana"}</p>
 
       <div class="card-actions card-actions-simple">
@@ -348,7 +461,9 @@ function createWaitingCard(client) {
 
 function createTaskCard(client, kind) {
   const card = document.createElement("article");
-  const dueDays = daysUntil(client.nextStepDate);
+  const task = getClientActiveTask(client);
+  const dueDate = task?.dueDate || client.nextStepDate || "";
+  const dueDays = daysUntil(dueDate);
   const badgeClass = kind === "overdue" ? "danger" : "neutral";
   const badgeText =
     kind === "overdue"
@@ -368,8 +483,8 @@ function createTaskCard(client, kind) {
     </div>
 
     <div class="card-body card-body-simple">
-      <p class="card-status-line"><strong>Sledeci korak:</strong> ${escapeHtml(client.nextStepText || "-")}</p>
-      <p class="card-due-line"><strong>Rok:</strong> ${escapeHtml(client.nextStepDate ? formatDate(client.nextStepDate) : "-")}</p>
+      <p class="card-status-line"><strong>Sledeca akcija:</strong> ${escapeHtml(task?.title || getClientNextStepText(client, "Nije definisano"))}</p>
+      <p class="card-due-line"><strong>Rok:</strong> ${escapeHtml(dueDate ? formatDate(dueDate) : "-")}</p>
 
       <div class="card-actions card-actions-simple">
         <button class="btn btn-secondary btn-sm" data-task-detail="${client.id}">Detalji klijenta</button>
