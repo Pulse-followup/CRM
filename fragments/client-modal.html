@@ -5,7 +5,7 @@
     <div class="modal-head">
       <div>
         <h3 id="clientModalTitle">Novi klijent</h3>
-        <p id="clientModalSubtitle">Brz unos osnovnih podataka i komercijalne procene.</p>
+        <p id="clientModalSubtitle">Azuriraj osnovne podatke i komercijalni pregled.</p>
       </div>
 
       <button id="closeClientModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
@@ -15,66 +15,107 @@
       <input type="hidden" id="clientId" />
 
       <section class="form-section form-section-general">
-        <h4>Osnovno</h4>
+        <h4>Osnovni podaci</h4>
+        <p class="form-section-hint">Podaci koji timu najcesce trebaju za brz kontakt i rad iz drawer-a.</p>
 
-        <div class="field">
-          <label for="clientName">Naziv klijenta</label>
-          <input
-            id="clientName"
-            class="input"
-            type="text"
-            placeholder="npr. Apotekarski lanac"
-            required
-          />
+        <div class="form-two-col">
+          <div class="field">
+            <label for="clientName">Naziv klijenta</label>
+            <input
+              id="clientName"
+              class="input"
+              type="text"
+              placeholder="npr. Apotekarski lanac"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <label for="clientCity">Grad</label>
+            <input
+              id="clientCity"
+              class="input"
+              type="text"
+              placeholder="npr. Beograd"
+            />
+          </div>
         </div>
 
         <div class="field">
-          <label for="clientCity">Grad</label>
+          <label for="clientAddress">Adresa</label>
           <input
-            id="clientCity"
+            id="clientAddress"
             class="input"
             type="text"
-            placeholder="npr. Beograd"
+            placeholder="npr. Bulevar kralja Aleksandra 10"
           />
+        </div>
+
+        <div class="form-subgroup">
+          <strong class="form-subgroup-title">Kontakt</strong>
+          <div class="form-two-col">
+            <div class="field">
+              <label for="contactPerson">Kontakt osoba</label>
+              <input
+                id="contactPerson"
+                class="input"
+                type="text"
+                placeholder="npr. Marko Markovic"
+              />
+            </div>
+
+            <div class="field">
+              <label for="contactRole">Funkcija</label>
+              <input
+                id="contactRole"
+                class="input"
+                type="text"
+                placeholder="npr. Vlasnik / Menadzer / Nabavka"
+              />
+            </div>
+          </div>
+
+          <div class="form-two-col">
+            <div class="field">
+              <label for="contactPhone">Telefon</label>
+              <input
+                id="contactPhone"
+                class="input"
+                type="text"
+                placeholder="npr. 06x..."
+              />
+            </div>
+
+            <div class="field">
+              <label for="contactEmail">Email</label>
+              <input
+                id="contactEmail"
+                class="input"
+                type="email"
+                placeholder="npr. ime@firma.rs"
+              />
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="form-section form-section-contact">
-        <h4>Kontakt</h4>
+      <section class="form-section form-section-status">
+        <h4>Interna beleska</h4>
+        <p class="form-section-hint">Za slobodnu napomenu o klijentu. Aktivnosti, status i akcije vode se kroz drawer i tab Zadaci.</p>
 
         <div class="field">
-          <label for="contactPerson">Kontakt osoba</label>
-          <input
-            id="contactPerson"
-            class="input"
-            type="text"
-            placeholder="npr. Marko Markovic"
-          />
-        </div>
-
-        <div class="field">
-          <label for="contactPhone">Telefon</label>
-          <input
-            id="contactPhone"
-            class="input"
-            type="text"
-            placeholder="npr. 06x..."
-          />
-        </div>
-
-        <div class="field">
-          <label for="contactEmail">Email</label>
-          <input
-            id="contactEmail"
-            class="input"
-            type="email"
-            placeholder="npr. ime@firma.rs"
-          />
+          <label for="lastActionNote">Kratka beleska</label>
+          <textarea
+            id="lastActionNote"
+            class="input textarea"
+            placeholder="npr. Dogovoren pilot na lokaciji Galerija, cekamo termin."
+          ></textarea>
         </div>
       </section>
 
       <section class="form-section form-section-commercial">
-        <h4>Komercijalni fit</h4>
+        <h4>Komercijalni pregled</h4>
+        <p class="form-section-hint">Dodatni prodajni kontekst koji ne mora svako iz tima da koristi svaki put.</p>
 
         <div class="field">
           <label for="companySize">Velicina klijenta</label>
@@ -162,48 +203,7 @@
         </div>
       </section>
 
-      <section class="form-section form-section-status">
-        <h4>Beleska</h4>
-
-        <div class="field">
-          <label for="lastActionNote">Kratka beleska</label>
-          <textarea
-            id="lastActionNote"
-            class="input textarea"
-            placeholder="npr. Dogovoren pilot na lokaciji Galerija, cekamo termin."
-          ></textarea>
-        </div>
-
-        <div class="field">
-          <label for="nextStepText">Sledeci korak</label>
-          <input
-            id="nextStepText"
-            class="input"
-            type="text"
-            placeholder="npr. Pozvati nakon slanja ponude"
-          />
-        </div>
-
-        <div class="field">
-          <label for="nextStepType">Tip sledeceg koraka</label>
-          <select id="nextStepType" class="input">
-            <option value="">Izaberi</option>
-            <option value="followup">Follow-up</option>
-            <option value="call">Poziv</option>
-            <option value="meeting">Sastanak</option>
-            <option value="offer">Ponuda</option>
-            <option value="decision">Odluka</option>
-            <option value="task">Interni task</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="nextStepDate">Datum sledeceg koraka</label>
-          <input id="nextStepDate" class="input" type="date" />
-        </div>
-      </section>
-
-      <section id="dealInfoSection" class="form-section form-section-status" data-pro-feature="deal_info">
+      <section id="dealInfoSection" class="form-section form-section-commercial" data-pro-feature="deal_info">
         <h4>Deal info</h4>
 
         <p id="dealInfoLockedNote" class="inline-upsell-note hidden">

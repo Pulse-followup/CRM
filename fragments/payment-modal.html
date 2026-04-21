@@ -5,10 +5,10 @@
     <div class="modal-head">
       <div>
         <h3 id="paymentModalTitle">Naplata</h3>
-        <p id="paymentModalSubtitle">Praćenje fakture i discipline plaćanja.</p>
+        <p id="paymentModalSubtitle">Zahtev za fakturu, rok placanja i istorija naplate po projektu.</p>
       </div>
 
-      <button id="closePaymentModalBtn" class="icon-btn" aria-label="Zatvori">✕</button>
+      <button id="closePaymentModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
     </div>
 
     <div class="modal-body">
@@ -19,27 +19,72 @@
         <p class="muted" id="paymentSummaryText">Nema podataka o naplati.</p>
       </div>
 
-      <div class="payment-actions-grid">
-        <button id="markInvoiceSentBtn" class="btn btn-secondary">Evidentiraj poslatu fakturu</button>
+      <div class="modal-subsection">
+        <div class="field">
+          <label for="paymentProjectSelect">Projekat</label>
+          <select id="paymentProjectSelect" class="input">
+            <option value="">Izaberi projekat</option>
+          </select>
+        </div>
 
-        <button id="generatePaymentReminderBtn" class="btn btn-secondary">Pošalji podsetnik</button>
-
-        <button id="markPaidOnTimeBtn" class="btn btn-primary">Plaćeno u roku</button>
-
-        <button id="markPaidLateBtn" class="btn btn-secondary">Plaćeno sa kašnjenjem</button>
+        <div class="payment-actions-grid">
+          <button id="createBillingRequestBtn" class="btn btn-primary" type="button">Kreiraj zahtev za naplatu</button>
+          <button id="markBillingPaidBtn" class="btn btn-secondary" type="button">Oznaci kao placeno</button>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="paymentMessage">Predlog poruke za mail / Viber</label>
-        <textarea id="paymentMessage" class="input textarea">
-Samo da proverim status fakture koju smo poslali.
+      <div id="billingFormWrap" class="modal-subsection hidden">
+        <div class="field">
+          <label for="billingStatusSelect">Status naplate</label>
+          <select id="billingStatusSelect" class="input">
+            <option value="requested">Zahtev za naplatu</option>
+            <option value="invoice_sent">Faktura poslata</option>
+            <option value="waiting_payment">Ceka uplatu</option>
+            <option value="late">Kasni</option>
+            <option value="paid">Placeno</option>
+          </select>
+        </div>
 
-Ako je potrebno još nešto sa naše strane, slobodno javite.
-        </textarea>
+        <div class="project-form-grid">
+          <div class="field">
+            <label for="billingInvoiceNumber">Broj fakture / opis</label>
+            <input id="billingInvoiceNumber" class="input" type="text" placeholder="npr. RMC-2026-014" />
+          </div>
+
+          <div class="field">
+            <label for="billingAmount">Iznos</label>
+            <input id="billingAmount" class="input" type="number" min="0" step="1" placeholder="npr. 5000" />
+          </div>
+
+          <div class="field">
+            <label for="billingInvoiceDate">Datum fakture</label>
+            <input id="billingInvoiceDate" class="input" type="date" />
+          </div>
+
+          <div class="field">
+            <label for="billingDueDate">Datum valute</label>
+            <input id="billingDueDate" class="input" type="date" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="billingNote">Napomena za finansije</label>
+          <textarea id="billingNote" class="input textarea" placeholder="Sta treba proveriti pre fakturisanja?"></textarea>
+        </div>
+
+        <div class="action-modal-actions">
+          <button id="saveBillingRecordBtn" class="btn btn-primary" type="button">Sacuvaj naplatu</button>
+        </div>
       </div>
 
-      <div class="action-modal-actions">
-        <button id="copyPaymentMessageBtn" class="btn btn-secondary">Copy poruke</button>
+      <div class="modal-subsection">
+        <div class="section-head section-head-row">
+          <h4>Istorija naplate</h4>
+        </div>
+        <div id="billingHistoryList" class="billing-history-list"></div>
+        <div id="billingHistoryEmpty" class="empty-state compact hidden">
+          <p>Nema evidentirane naplate za ovog klijenta.</p>
+        </div>
       </div>
     </div>
   </div>

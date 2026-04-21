@@ -41,9 +41,61 @@
             <strong id="settingsWorkspaceRole">-</strong>
           </div>
         </div>
+        <div id="workspaceNameEditGroup" class="field hidden">
+          <label for="settingsWorkspaceNameInput">Naziv workspace-a</label>
+          <input id="settingsWorkspaceNameInput" class="input" type="text" placeholder="Unesi novi naziv workspace-a" />
+        </div>
         <div class="welcome-actions">
           <button id="openOnboardingFromSettingsBtn" class="btn btn-secondary" type="button">Workspace setup</button>
+          <button id="saveWorkspaceNameBtn" class="btn btn-primary hidden" type="button">Sacuvaj naziv</button>
         </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Tim</h3>
+          <p id="settingsTeamHint">Ovde vidis clanove workspace-a i saljes nove pozivnice.</p>
+        </div>
+
+        <div id="workspaceInviteComposer" class="hidden">
+          <div class="field">
+            <label for="workspaceInviteEmailInput">Email novog clana</label>
+            <input id="workspaceInviteEmailInput" class="input" type="email" placeholder="ime@firma.rs" />
+          </div>
+          <div class="field">
+            <label for="workspaceInviteRoleSelect">Funkcija u timu</label>
+            <select id="workspaceInviteRoleSelect" class="input">
+              <option value="member">Clan tima</option>
+              <option value="finance">Finansije</option>
+            </select>
+          </div>
+          <p id="workspaceInviteLinkHint" class="form-section-hint">
+            Pulse ce kreirati jedinstven link. Posalji ga mailom, porukom ili Viberom; korisnik ulazi tek kada se prijavi istim emailom.
+          </p>
+          <div class="welcome-actions">
+            <button id="sendWorkspaceInviteBtn" class="btn btn-primary" type="button">Kreiraj i kopiraj link</button>
+          </div>
+        </div>
+
+        <div class="panel-head">
+          <h3>Clanovi</h3>
+          <p>Aktivni korisnici u ovom workspace-u.</p>
+        </div>
+        <div id="workspaceMembersEmpty" class="empty-state">
+          <strong>Jos nema clanova</strong>
+          <p>Kad dodas jos jednog korisnika, ovde ce se pojaviti lista tima.</p>
+        </div>
+        <div id="workspaceMembersList" class="key-value-list hidden"></div>
+
+        <div class="panel-head">
+          <h3>Pozivnice</h3>
+          <p>Pending linkovi za pristup workspace-u.</p>
+        </div>
+        <div id="workspaceInvitesEmpty" class="empty-state">
+          <strong>Nema pozivnica na cekanju</strong>
+          <p>Kad kreiras link, ovde ces videti email, funkciju i opciju za ponovno kopiranje.</p>
+        </div>
+        <div id="workspaceInvitesList" class="key-value-list hidden"></div>
       </section>
 
       <section class="panel">

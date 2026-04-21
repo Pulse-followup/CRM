@@ -1,5 +1,36 @@
 <section id="dashboardView" class="view active">
   <section class="dashboard-stack home-dashboard-stack">
+    <div class="workspace-view-title">
+      <h2>Moji zadaci</h2>
+      <p id="dashboardWorkspaceTitle" class="workspace-view-subtitle">Bez workspace-a</p>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h3>Pregled zadataka</h3>
+        <p>Brzi pregled onoga sto trazI reakciju danas i u narednim danima.</p>
+      </div>
+
+      <div class="summary-grid">
+        <div class="summary-card">
+          <span class="summary-label">Za danas</span>
+          <strong id="homeStatTodayCount">0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Kasni</span>
+          <strong id="homeStatOverdueCount">0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Na cekanju</span>
+          <strong id="homeStatWaitingCount">0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Uskoro</span>
+          <strong id="homeStatWeekCount">0</strong>
+        </div>
+      </div>
+    </section>
+
     <section class="panel panel-today dashboard-area-today">
       <div class="panel-head home-panel-head">
         <div>
@@ -51,7 +82,7 @@
     <section class="panel panel-week dashboard-area-week">
       <div class="panel-head home-panel-head">
         <div>
-          <h3>Ove nedelje</h3>
+          <h3>Uskoro</h3>
           <p class="panel-subtext">Sledeci koraci koji dolaze u narednih 7 dana.</p>
         </div>
       </div>
@@ -62,28 +93,6 @@
         <h4>Nema zakazanih koraka</h4>
         <p>Kada upises sledeci korak i datum, pojavljivace se ovde.</p>
       </div>
-    </section>
-
-    <section class="home-shortcuts-grid" aria-label="Home precice">
-      <div id="homeCardTodayActions" class="home-shortcut-card home-shortcut-card-static" aria-hidden="true">
-        <span class="home-shortcut-label">Danas akcija</span>
-        <strong id="homeStatTodayActionsValue" class="home-shortcut-value">0</strong>
-      </div>
-
-      <button id="homeCardHighPriority" class="home-shortcut-card" type="button">
-        <span class="home-shortcut-label">Prioritet VISOK</span>
-        <strong id="homeStatHighPriorityValue" class="home-shortcut-value danger">0</strong>
-      </button>
-
-      <button id="homeCardTotalClients" class="home-shortcut-card" type="button">
-        <span class="home-shortcut-label">Ukupno klijenata</span>
-        <strong id="homeStatTotalClientsValue" class="home-shortcut-value">0</strong>
-      </button>
-
-      <button id="homeCardWeeklyActions" class="home-shortcut-card" type="button" data-pro-feature="weekly_actions">
-        <span class="home-shortcut-label">Akcija ove nedelje</span>
-        <strong id="homeStatWeeklyActionsValue" class="home-shortcut-value">0</strong>
-      </button>
     </section>
   </section>
 </section>

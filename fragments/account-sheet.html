@@ -1,0 +1,45 @@
+<div id="accountSheetModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="accountSheetBackdrop"></div>
+  <div class="modal-panel account-sheet-panel">
+    <div class="modal-head account-sheet-head">
+      <div>
+        <h3>Moj nalog</h3>
+        <p>Brzi pregled naloga, workspace-a i plana.</p>
+      </div>
+      <button id="closeAccountSheetBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+    <div class="modal-body account-sheet-body">
+      <section class="panel account-sheet-summary">
+        <strong id="accountSheetUserName">Moj nalog</strong>
+        <p id="accountSheetUserEmail">Nisi prijavljen</p>
+      </section>
+
+      <section class="panel">
+        <div class="key-value-list">
+          <div class="key-value-row">
+            <span>Workspace</span>
+            <strong id="accountSheetWorkspaceName">Bez workspace-a</strong>
+          </div>
+          <div class="key-value-row">
+            <span>Uloga</span>
+            <strong id="accountSheetWorkspaceRole">-</strong>
+          </div>
+          <div class="key-value-row">
+            <span>Plan</span>
+            <strong id="accountSheetPlanName">FREE</strong>
+          </div>
+          <div class="key-value-row">
+            <span>Cloud</span>
+            <strong id="accountSheetCloudState">Offline</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel account-sheet-actions">
+        <button id="openWorkspaceFromAccountBtn" class="btn btn-secondary" type="button">Workspace</button>
+        <button id="openPlanFromAccountBtn" class="btn btn-secondary" type="button">Plan i trial</button>
+        <button id="accountSheetLogoutBtn" class="btn btn-secondary" type="button">Odjavi se</button>
+      </section>
+    </div>
+  </div>
+</div>

@@ -1,25 +1,24 @@
 <div class="sidebar">
-  <div class="brand">
-    <img class="brand-logo-image" src="./assets/logo-za-app.png" alt="Pulse CRM logo" />
+  <div class="sidebar-header">
+    <div class="sidebar-header-top">
+      <div class="sidebar-status-row">
+        <span id="licensePlanBadge" class="badge neutral">FREE</span>
+      </div>
+
+      <div class="brand brand-button">
+        <img class="brand-logo-image" src="./assets/logo-za-app.png" alt="Pulse CRM logo" />
+      </div>
+    </div>
+
+    <div class="sidebar-control-row">
+      <button id="headerAuthBtn" class="header-account-btn" type="button">LOGIN</button>
+      <button id="headerSyncBtn" class="header-sync-btn" type="button">SYNC</button>
+    </div>
   </div>
 
   <nav class="nav">
-    <button class="nav-btn active" data-view="dashboardView">Home</button>
+    <button class="nav-btn active" data-view="dashboardView">Zadaci</button>
     <button class="nav-btn" data-view="clientsView">Klijenti</button>
+    <button class="nav-btn" data-view="actionsView">Tim</button>
   </nav>
-
-  <button id="openSettingsBtn" class="btn btn-secondary btn-sm btn-block" type="button">Settings</button>
-
-  <div class="license-card">
-    <span id="licensePlanBadge" class="badge neutral">FREE</span>
-    <p id="licensePlanText">Do 5 klijenata u Free verziji.</p>
-    <button id="unlockPlanBtn" class="btn btn-secondary btn-sm" type="button">Otkljucaj Pro</button>
-  </div>
-
-  <div class="license-card">
-    <span id="cloudStatusBadge" class="badge neutral">Offline</span>
-    <p id="cloudStatusText">App radi lokalno dok ne uneses Supabase podatke.</p>
-    <button id="cloudConnectBtn" class="btn btn-secondary btn-sm" type="button">Povezi cloud</button>
-    <button id="cloudLogoutBtn" class="btn btn-secondary btn-sm hidden" type="button">Odjava</button>
-  </div>
 </div>

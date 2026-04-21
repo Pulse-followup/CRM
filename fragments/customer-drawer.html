@@ -12,70 +12,9 @@
     </div>
 
     <div class="drawer-body">
-      <section class="drawer-section section-accent-primary">
-        <div class="section-head">
-          <h4>Pulse Score</h4>
-        </div>
-
-        <div class="customer-score-wrap">
-          <strong id="detailPulseScore" class="pulse-score-value">0%</strong>
-          <span id="detailPulseBand" class="pulse-score-band">Aktivno</span>
-          <p id="detailPulseExplanation" class="pulse-score-explanation">Score se formira iz potencijala, spremnosti i momentuma.</p>
-        </div>
-
-        <div class="signal-grid" data-pro-feature="pulse_score">
-          <div class="signal-box signal-box-positive">
-            <h5>Pozitivni signali</h5>
-            <ul id="positiveSignalsList" class="signal-list"></ul>
-          </div>
-
-          <div class="signal-box signal-box-risk">
-            <h5>Rizici / red flags</h5>
-            <ul id="riskSignalsList" class="signal-list"></ul>
-          </div>
-        </div>
-
-        <div class="detail-groups">
-          <div class="detail-group">
-            <h5>Procena se zasniva na</h5>
-            <dl class="detail-list">
-              <div>
-                <dt>Komercijalni potencijal</dt>
-                <dd id="assessmentScale">-</dd>
-              </div>
-              <div>
-                <dt>Spremnost za kupovinu</dt>
-                <dd id="assessmentComplexity">-</dd>
-              </div>
-              <div>
-                <dt>Momentum naloga</dt>
-                <dd id="assessmentPotential">-</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </section>
-
       <section class="drawer-section section-accent-neutral">
-        <div class="section-head">
-          <h4>Akcije</h4>
-        </div>
-
-        <div class="action-recommendation-box">
-          <strong id="drawerActionRecommendationTitle">Preporuka</strong>
-          <p id="drawerActionRecommendationText">Pulse ovde prikazuje naredni najbolji korak za klijenta.</p>
-        </div>
-
-        <div class="quick-actions-scroll">
-          <button id="openActionFromDrawerBtn" class="btn btn-primary">Follow-up</button>
-          <button id="openNewActivityFromDrawerBtn" class="btn btn-secondary">Nova aktivnost</button>
-          <button id="openPaymentModalBtn" class="btn btn-secondary" data-pro-feature="payments">Naplata</button>
-        </div>
-      </section>
-
-      <section class="drawer-section section-accent-neutral">
-        <div class="section-head">
-          <h4>Aktivnosti</h4>
+        <div class="section-head section-head-row">
+          <h4>Istorija aktivnosti</h4>
         </div>
 
         <div id="timelineList" class="timeline-list"></div>
@@ -87,31 +26,25 @@
 
       <section class="drawer-section section-accent-neutral">
         <div class="section-head section-head-row">
-          <h4>Podaci o klijentu</h4>
+          <h4>Osnovni podaci</h4>
           <button id="editClientBtnDrawer" class="btn btn-secondary btn-sm">Izmeni podatke</button>
         </div>
 
         <div class="detail-groups">
           <div class="detail-group">
-            <h5>Osnovno</h5>
+            <h5>Kontakt i firma</h5>
             <dl class="detail-list">
               <div>
                 <dt>Naziv klijenta</dt>
                 <dd id="detailClientName">-</dd>
               </div>
               <div>
-                <dt>Grad</dt>
-                <dd id="detailCity">-</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div class="detail-group">
-            <h5>Kontakt</h5>
-            <dl class="detail-list">
-              <div>
                 <dt>Kontakt osoba</dt>
                 <dd id="detailContactPerson">-</dd>
+              </div>
+              <div>
+                <dt>Funkcija</dt>
+                <dd id="detailContactRole">-</dd>
               </div>
               <div>
                 <dt>Telefon</dt>
@@ -125,42 +58,132 @@
           </div>
 
           <div class="detail-group">
-            <h5>Beleska</h5>
+            <h5>Lokacija</h5>
             <dl class="detail-list">
               <div>
-                <dt>Napomena</dt>
-                <dd id="detailLastActionNote">-</dd>
+                <dt>Grad</dt>
+                <dd id="detailCity">-</dd>
               </div>
               <div>
-                <dt>Sledeci korak</dt>
-                <dd id="detailNextStep">-</dd>
-              </div>
-              <div>
-                <dt>Rok</dt>
-                <dd id="detailNextStepDate">-</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div class="detail-group" data-pro-feature="deal_info">
-            <h5>Deal info</h5>
-            <dl class="detail-list">
-              <div>
-                <dt>Vrednost prilike</dt>
-                <dd id="detailDealValue">-</dd>
-              </div>
-              <div>
-                <dt>Verovatnoca</dt>
-                <dd id="detailDealProbability">-</dd>
-              </div>
-              <div>
-                <dt>Ocekivana odluka</dt>
-                <dd id="detailExpectedDecisionDate">-</dd>
+                <dt>Adresa</dt>
+                <dd id="detailAddress">-</dd>
               </div>
             </dl>
           </div>
         </div>
       </section>
+
+      <details class="drawer-fold">
+        <summary class="drawer-fold-summary">Sledeci korak i status</summary>
+        <section class="drawer-section section-accent-neutral">
+          <div class="detail-groups">
+            <div class="detail-group">
+              <dl class="detail-list">
+                <div>
+                  <dt>Trenutni status</dt>
+                  <dd id="detailStage">-</dd>
+                </div>
+                <div>
+                  <dt>Sledeci korak</dt>
+                  <dd id="detailNextStep">-</dd>
+                </div>
+                <div>
+                  <dt>Rok</dt>
+                  <dd id="detailNextStepDate">-</dd>
+                </div>
+                <div>
+                  <dt>Poslednja beleska</dt>
+                  <dd id="detailLastActionNote">-</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </section>
+      </details>
+
+      <details class="drawer-fold">
+        <summary class="drawer-fold-summary">Komercijalni pregled</summary>
+        <section class="drawer-section section-accent-neutral">
+          <div class="detail-groups">
+            <div class="detail-group">
+              <h5>Deal info</h5>
+              <dl class="detail-list">
+                <div>
+                  <dt>Vrednost prilike</dt>
+                  <dd id="detailDealValue">-</dd>
+                </div>
+                <div>
+                  <dt>Verovatnoca</dt>
+                  <dd id="detailDealProbability">-</dd>
+                </div>
+                <div>
+                  <dt>Ocekivana odluka</dt>
+                  <dd id="detailExpectedDecisionDate">-</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="detail-group">
+              <h5>Komercijalni signal</h5>
+              <dl class="detail-list">
+                <div>
+                  <dt>Komercijalni potencijal</dt>
+                  <dd id="assessmentScale">-</dd>
+                </div>
+                <div>
+                  <dt>Spremnost za kupovinu</dt>
+                  <dd id="assessmentComplexity">-</dd>
+                </div>
+                <div>
+                  <dt>Momentum naloga</dt>
+                  <dd id="assessmentPotential">-</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </section>
+      </details>
+
+      <details class="drawer-fold">
+        <summary class="drawer-fold-summary">Naplata</summary>
+        <section class="drawer-section section-accent-neutral">
+          <div class="payment-inline-box">
+            <span id="paymentSummaryBadgeInline" class="badge neutral">Naplata: bez podataka</span>
+            <p id="paymentSummaryTextInline">Nema podataka o naplati.</p>
+          </div>
+
+          <div class="quick-actions-scroll">
+            <button id="openPaymentModalBtnSecondary" class="btn btn-secondary" data-pro-feature="payments">Otvori naplatu</button>
+          </div>
+        </section>
+      </details>
+
+      <details class="drawer-fold">
+        <summary class="drawer-fold-summary">Analiza</summary>
+        <section class="drawer-section section-accent-primary">
+          <div class="section-head">
+            <h4>Pulse Score</h4>
+          </div>
+
+          <div class="customer-score-wrap">
+            <strong id="detailPulseScore" class="pulse-score-value">0%</strong>
+            <span id="detailPulseBand" class="pulse-score-band">Aktivno</span>
+            <p id="detailPulseExplanation" class="pulse-score-explanation">Score se formira iz potencijala, spremnosti i momentuma.</p>
+          </div>
+
+          <div class="signal-grid" data-pro-feature="pulse_score">
+            <div class="signal-box signal-box-positive">
+              <h5>Pozitivni signali</h5>
+              <ul id="positiveSignalsList" class="signal-list"></ul>
+            </div>
+
+            <div class="signal-box signal-box-risk">
+              <h5>Rizici / red flags</h5>
+              <ul id="riskSignalsList" class="signal-list"></ul>
+            </div>
+          </div>
+        </section>
+      </details>
     </div>
   </div>
 </aside>

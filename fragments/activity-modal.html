@@ -16,29 +16,75 @@
         <span id="activityClientBadge" class="badge">Klijent</span>
       </div>
 
+      <div id="activityLockedProjectWrap" class="locked-project-context hidden">
+        <span>Projekat</span>
+        <strong id="activityLockedProjectName">Projekat</strong>
+        <small>Ova aktivnost ostaje u istom projektu.</small>
+      </div>
+
+      <div class="modal-subsection">
+        <div id="activityProjectModeWrap" class="field">
+          <label for="activityProjectMode">Projekat</label>
+          <select id="activityProjectMode" class="input">
+            <option value="new">Novi projekat</option>
+            <option value="existing">Postojeci projekat</option>
+          </select>
+        </div>
+
+        <div id="activityExistingProjectWrap" class="field hidden">
+          <label for="activityProjectSelect">Izaberi projekat</label>
+          <select id="activityProjectSelect" class="input">
+            <option value="">Izaberi projekat</option>
+          </select>
+        </div>
+
+        <div id="activityNewProjectFields" class="project-form-grid">
+          <div class="field">
+            <label for="activityProjectName">Naziv projekta</label>
+            <input id="activityProjectName" class="input" type="text" placeholder="npr. Pilot postavka ekrana" />
+          </div>
+
+          <div class="field">
+            <label for="activityProjectUrgency">Urgentnost posla</label>
+            <select id="activityProjectUrgency" class="input">
+              <option value="high">Visoka</option>
+              <option value="medium" selected>Srednja</option>
+              <option value="low">Niska</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="activityProjectBudget">Budzet</label>
+            <select id="activityProjectBudget" class="input">
+              <option value="unknown">Nepoznato</option>
+              <option value="planned">Planiran budzet</option>
+              <option value="approved">Odobren budzet</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="activityProjectValue">Procenjena vrednost</label>
+            <input id="activityProjectValue" class="input" type="number" min="0" step="1" placeholder="npr. 5000" />
+          </div>
+
+          <div class="field">
+            <label for="activityProjectEndDate">Ocekivani kraj</label>
+            <input id="activityProjectEndDate" class="input" type="date" />
+          </div>
+        </div>
+      </div>
+
       <div class="field">
         <label for="activityType">Tip aktivnosti</label>
         <select id="activityType" class="input" required>
           <option value="">Izaberi aktivnost</option>
           <option value="phone_call">Poziv</option>
-          <option value="meeting_scheduled">Zakazan sastanak</option>
-          <option value="reminder">Podsetnik</option>
-          <option value="inactive_checkin">Reaktivacija neaktivnog klijenta</option>
+          <option value="email">Mail</option>
+          <option value="message">Poruka</option>
+          <option value="meeting_held">Sastanak</option>
+          <option value="offer_sent">Ponuda</option>
+          <option value="production">Izrada</option>
           <option value="internal_note">Interna beleska</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="activityStage">Status nakon aktivnosti</label>
-        <select id="activityStage" class="input">
-          <option value="">Bez promene statusa</option>
-          <option value="new">Novi</option>
-          <option value="meeting_done">Odrzan sastanak</option>
-          <option value="offer_sent">Poslata ponuda</option>
-          <option value="waiting">Ceka odgovor</option>
-          <option value="negotiation">Pregovori</option>
-          <option value="won">Dobijen</option>
-          <option value="lost">Izgubljen</option>
         </select>
       </div>
 
@@ -51,32 +97,43 @@
         ></textarea>
       </div>
 
-      <div class="field">
-        <label for="activityNextStepText">Sledeci korak</label>
-        <input
-          id="activityNextStepText"
-          class="input"
-          type="text"
-          placeholder="npr. Poslati finalnu ponudu"
-        />
-      </div>
+      <label id="activityCompleteTaskWrap" class="task-builder-toggle hidden" for="activityCompleteCurrentTask">
+        <span>
+          <strong>Ova aktivnost zavrsava moj zadatak</strong>
+          <small>Koristi kada si uradio delegirani zadatak i zelis da zatvoris obavezu.</small>
+        </span>
+        <input id="activityCompleteCurrentTask" type="checkbox" />
+      </label>
 
-      <div class="field">
-        <label for="activityNextStepType">Tip sledeceg koraka</label>
-        <select id="activityNextStepType" class="input">
-          <option value="">Izaberi</option>
-          <option value="followup">Follow-up</option>
-          <option value="call">Poziv</option>
-          <option value="meeting">Sastanak</option>
-          <option value="offer">Ponuda</option>
-          <option value="decision">Odluka</option>
-          <option value="task">Interni task</option>
-        </select>
-      </div>
+      <label class="task-builder-toggle" for="activityCreateTask">
+        <span>
+          <strong>Delegiraj zadatak</strong>
+          <small>Ako iz ove aktivnosti nastaje obaveza, izaberi vlasnika i rok.</small>
+        </span>
+        <input id="activityCreateTask" type="checkbox" />
+      </label>
 
-      <div class="field">
-        <label for="activityNextStepDate">Datum sledeceg koraka</label>
-        <input id="activityNextStepDate" class="input" type="date" />
+      <div id="activityTaskFields" class="modal-subsection hidden">
+        <div class="field">
+          <label for="activityTaskDueDate">Rok zadatka</label>
+          <input id="activityTaskDueDate" class="input" type="date" />
+        </div>
+
+        <div class="field">
+          <label for="activityTaskOwner">Vlasnik zadatka</label>
+          <select id="activityTaskOwner" class="input">
+            <option value="">Izaberi clana tima</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="activityTaskStatus">Status</label>
+          <select id="activityTaskStatus" class="input">
+            <option value="open">Otvoren</option>
+            <option value="in_progress">U toku</option>
+            <option value="waiting">Na cekanju</option>
+          </select>
+        </div>
       </div>
 
       <div class="action-modal-actions">

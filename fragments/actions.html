@@ -1,0 +1,45 @@
+<section id="actionsView" class="view">
+  <div class="workspace-view-title workspace-view-title-compact">
+    <h2 id="actionsViewTitle">Tim - Bez workspace-a</h2>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Puls tima</h3>
+      <p>Brz pregled clanova, klijenata i poslednjih pomeranja u workspace-u.</p>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span class="summary-label">Aktivni clanovi</span>
+        <strong id="teamStatMembers">0</strong>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Klijenti u timu</span>
+        <strong id="teamStatClients">0</strong>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Aktivnosti 7 dana</span>
+        <strong id="teamStatWeekActivities">0</strong>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Pozivnice</span>
+        <strong id="teamStatInvites">0</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Skorasnje aktivnosti</h3>
+      <p id="teamFeedHint">Ovde ces videti sta je tim poslednje radio nad klijentima i workspace-om.</p>
+    </div>
+
+    <div id="teamActivityEmpty" class="empty-state">
+      <h4>Jos nema timskih aktivnosti</h4>
+      <p>Cim evidentiras novu aktivnost ili status nad klijentom, ovde ce se pojaviti trag za ceo workspace.</p>
+    </div>
+
+    <div id="teamActivityList" class="cards-list hidden"></div>
+  </section>
+</section>
