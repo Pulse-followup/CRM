@@ -256,6 +256,18 @@
   cursor: pointer;
 }
 
+.task-filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.team-client-filter {
+  max-width: 360px;
+  margin-bottom: 14px;
+}
+
 .team-activity-topline {
   display: flex;
   align-items: center;
@@ -273,4 +285,31 @@
   margin: 0;
   color: var(--text-soft);
   line-height: 1.5;
+}
+
+.task-card-line,
+.team-project-line,
+.team-task-line,
+.team-delegation-line {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.task-card-line strong,
+.team-project-line strong {
+  color: var(--text);
+}
+
+.team-task-line {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.task-badge-stack {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
 }
