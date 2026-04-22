@@ -5,34 +5,15 @@
 
   <section class="panel">
     <div class="panel-head">
-      <h3>Puls tima</h3>
-      <p>Brz pregled clanova, klijenata i poslednjih pomeranja u workspace-u.</p>
-    </div>
-
-    <div class="summary-grid">
-      <div class="summary-card">
-        <span class="summary-label">Aktivni clanovi</span>
-        <strong id="teamStatMembers">0</strong>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">Klijenti u timu</span>
-        <strong id="teamStatClients">0</strong>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">Aktivnosti 7 dana</span>
-        <strong id="teamStatWeekActivities">0</strong>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">Pozivnice</span>
-        <strong id="teamStatInvites">0</strong>
-      </div>
-    </div>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head">
       <h3>Skorasnje aktivnosti</h3>
       <p id="teamFeedHint">Ovde ces videti sta je tim poslednje radio nad klijentima i workspace-om.</p>
+    </div>
+
+    <div class="field team-client-filter">
+      <label for="teamClientFilter">Klijent</label>
+      <select id="teamClientFilter" class="input">
+        <option value="all">Svi klijenti</option>
+      </select>
     </div>
 
     <div id="teamActivityEmpty" class="empty-state">
