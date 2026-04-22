@@ -87,6 +87,13 @@ function computeMomentum(client) {
 }
 
 function computePaymentDiscipline(client) {
+  if (typeof getClientBillingPaymentProfile === "function") {
+    const profile = getClientBillingPaymentProfile(client);
+    if (profile.category === "regular") return "Dobra";
+    if (profile.category === "late_7") return "Promenljiva";
+    if (profile.category === "late_over_7") return "Rizicna";
+  }
+
   const speed = client.payment?.paymentSpeed || null;
   if (speed === "on_time") return "Dobra";
   if (speed === "late") return "Promenljiva";
@@ -132,6 +139,7 @@ function computePriorityBase(client) {
 
   if (payment === "Dobra") score += 1;
   if (payment === "Promenljiva") score -= 1;
+  if (payment === "Rizicna") score -= 2;
 
   if (dealValueBand === "Velika") score += 2;
   else if (dealValueBand === "Srednja") score += 1;

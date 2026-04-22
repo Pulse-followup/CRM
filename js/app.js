@@ -112,6 +112,12 @@ function bindStaticEvents() {
   bindImportInput("importClientsInputTop");
   bindImportInput("importClientsInputMobilePanel");
 
+  document.querySelectorAll("[data-task-due-filter]").forEach(button => {
+    button.addEventListener("click", () => setTaskDueFilter(button.dataset.taskDueFilter || "all"));
+  });
+
+  bindChangeIfExists("teamClientFilter", handleTeamClientFilterChange);
+
   const clientSearch = document.getElementById("clientSearch");
   if (clientSearch) {
     clientSearch.addEventListener("input", renderClientsList);

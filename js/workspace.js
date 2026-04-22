@@ -14,7 +14,9 @@ const WORKSPACE_INVITE_CODE_KEY = "pulse_workspace_invite_code_v1";
 const WORKSPACE_INVITE_QUERY_PARAM = "invite";
 
 function normalizeWorkspaceRole(role) {
-  return ["admin", "finance", "member"].includes(role) ? role : "member";
+  const normalized = String(role || "").trim().toLowerCase();
+  if (["finance", "finansije"].includes(normalized)) return "finance";
+  return ["admin", "member"].includes(normalized) ? normalized : "member";
 }
 
 function workspaceRoleLabel(role) {
@@ -789,8 +791,8 @@ async function acceptPendingInvite() {
   });
 
   if (error) {
-    const setupHint = isMissingRpcError(error)
-      ? " Pokreni supabase-invite-accept-policy.sql u Supabase SQL editoru."
+    const setupHint = (isMissingRpcError(error) || /row-level security|policy/i.test(error.message || ""))
+      ? " Pokreni najnoviji supabase-invite-accept-policy.sql u Supabase SQL editoru."
       : "";
     showWorkspaceError(`Poziv nije prihvacen: ${error.message || "nepoznata greska"}.${setupHint}`, error);
     return false;

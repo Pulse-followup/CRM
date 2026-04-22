@@ -450,6 +450,206 @@ function toggleActivityTaskFields() {
   taskFields.classList.toggle("hidden", !checkbox.checked);
 }
 
+async function persistTaskFlowChange(client, successText) {
+  if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
+    saveClientsLocalOnly();
+    const synced = await pushClientsToWorkspace();
+    if (!synced) {
+      showToast("Promena zadatka nije upisana u workspace.");
+      return false;
+    }
+  } else {
+    const saved = saveClients();
+    if (!saved) return false;
+  }
+
+  renderAll();
+  if (currentClientId === client.id) openClientDrawer(client.id);
+  if (successText) showToast(successText);
+  return true;
+}
+
+async function handleTaskStatusAction(clientId, projectId, taskId, nextStatus) {
+  const client = getClientById(Number(clientId));
+  if (!client) return;
+
+  const current = getClientTasks(client, { includeClosed: true })
+    .find(task => task.id === taskId && (!projectId || task.projectId === projectId));
+  if (!current) {
+    showToast("Zadatak nije pronadjen.");
+    return;
+  }
+
+  const actorName = getCurrentUserDisplayName();
+  const normalizedStatus = normalizeTaskStatus(nextStatus);
+  const updatedTask = updateClientTaskStatus(client, current.projectId, current.id, normalizedStatus);
+  if (!updatedTask) {
+    showToast("Zadatak nije azuriran.");
+    return;
+  }
+
+  const activityMap = {
+    assigned: ["task_assigned", "Aktiviran zadatak", "aktivirao zadatak"],
+    waiting: ["task_waiting", "Zadatak na cekanju", "stavio zadatak na cekanje"],
+    done: ["task_done", "Zavrsen zadatak", "zavrsio zadatak"],
+    returned: ["task_returned", "Vracen zadatak", "vratio zadatak"]
+  };
+  const [type, label, actionText] = activityMap[normalizedStatus] || activityMap.assigned;
+
+  addActivity(client, type, label, `${updatedTask.projectName} - ${updatedTask.title}`, {
+    actorId: supabaseUser?.id || "",
+    actorName,
+    actorEmail: supabaseUser?.email || "",
+    projectId: updatedTask.projectId || "",
+    projectName: updatedTask.projectName || "",
+    taskTitle: updatedTask.title,
+    taskStatus: normalizedStatus,
+    taskActionText: actionText,
+    ownerId: updatedTask.ownerId || "",
+    ownerName: updatedTask.ownerName || "",
+    ownerEmail: updatedTask.ownerEmail || "",
+    relatedTaskId: updatedTask.id
+  });
+
+  await persistTaskFlowChange(client, "Zadatak je azuriran.");
+}
+
+function canCurrentUserSendTaskToBilling(client, task) {
+  if (!client || !task) return false;
+  if (isCurrentUserAdminRole()) return true;
+  const currentUserId = supabaseUser?.id || "";
+  return Boolean(currentUserId && (
+    task.ownerId === currentUserId ||
+    task.delegatedById === currentUserId ||
+    client.ownerUserId === currentUserId ||
+    client.createdByUserId === currentUserId
+  ));
+}
+
+async function handleSendTaskToBilling(clientId, projectId, taskId) {
+  const client = getClientById(Number(clientId));
+  if (!client) return;
+
+  const current = getClientTasks(client, { includeClosed: true })
+    .find(task => task.id === taskId && (!projectId || task.projectId === projectId));
+  if (!current) {
+    showToast("Zadatak nije pronadjen.");
+    return;
+  }
+
+  if (!canCurrentUserSendTaskToBilling(client, current)) {
+    showToast("Samo admin ili vlasnik zadatka moze da posalje zadatak na naplatu.");
+    return;
+  }
+
+  if (normalizeTaskStatus(current.status) !== "done") {
+    showToast("Na naplatu se salje tek zavrsen zadatak.");
+    return;
+  }
+
+  const billingRecord = createBillingRequest(client, current.projectId, {
+    sourceTaskId: current.id,
+    title: current.title,
+    dueDate: current.dueDate || "",
+    note: current.note || "",
+    skipActivity: true
+  });
+  if (!billingRecord) {
+    showToast("Nalog za naplatu nije kreiran.");
+    return;
+  }
+
+  const updatedTask = updateClientTaskStatus(client, current.projectId, current.id, "sent_to_billing", {
+    billingId: billingRecord.id
+  });
+  if (!updatedTask) {
+    showToast("Zadatak nije poslat na naplatu.");
+    return;
+  }
+
+  addActivity(client, "task_sent_to_billing", "Poslat na naplatu", `${updatedTask.projectName} - ${updatedTask.title}`, {
+    actorId: supabaseUser?.id || "",
+    actorName: getCurrentUserDisplayName(),
+    actorEmail: supabaseUser?.email || "",
+    projectId: updatedTask.projectId || "",
+    projectName: updatedTask.projectName || "",
+    taskTitle: updatedTask.title,
+    taskStatus: "sent_to_billing",
+    taskActionText: "poslao na naplatu",
+    ownerId: updatedTask.ownerId || "",
+    ownerName: updatedTask.ownerName || "",
+    ownerEmail: updatedTask.ownerEmail || "",
+    relatedTaskId: updatedTask.id,
+    billingId: billingRecord.id
+  });
+
+  await persistTaskFlowChange(client, "Zadatak je poslat na naplatu.");
+}
+
+async function handleBillingItemAction(clientId, billingId, action) {
+  const client = getClientById(Number(clientId));
+  if (!client) return;
+
+  const record = getBillingRecords(client).find(item => item.id === billingId);
+  if (!record) {
+    showToast("Nalog za naplatu nije pronadjen.");
+    return;
+  }
+
+  if (!isCurrentUserFinanceRole() && !isCurrentUserAdminRole()) {
+    showToast("Samo finansije ili admin mogu da azuriraju naplatu.");
+    return;
+  }
+
+  if (action === "invoice") {
+    const invoiceNumber = window.prompt("Broj fakture", record.invoiceNumber || record.invoice_number || "") || "";
+    markBillingRecordInvoiced(client, record.id, invoiceNumber.trim());
+    addActivity(client, "billing_invoiced", "Fakturisano", `${record.projectName} - ${record.title || "naplata"}`, {
+      actorId: supabaseUser?.id || "",
+      actorName: getCurrentUserDisplayName(),
+      actorEmail: supabaseUser?.email || "",
+      billingId: record.id,
+      projectId: record.projectId || record.project_id || "",
+      projectName: record.projectName || "",
+      taskTitle: record.title || `Naplata: ${record.projectName || "projekat"}`,
+      taskStatus: "sent_to_billing",
+      taskActionText: "oznacio kao fakturisano",
+      relatedTaskId: record.sourceTaskId || record.source_task_id || ""
+    });
+    await persistTaskFlowChange(client, "Naplata je oznacena kao fakturisana.");
+    return;
+  }
+
+  if (action === "paid") {
+    markBillingRecordPaid(client, record.id);
+    addActivity(client, "billing_paid", "Placeno", `${record.projectName} - ${record.title || "naplata"}`, {
+      actorId: supabaseUser?.id || "",
+      actorName: getCurrentUserDisplayName(),
+      actorEmail: supabaseUser?.email || "",
+      billingId: record.id,
+      projectId: record.projectId || record.project_id || "",
+      projectName: record.projectName || "",
+      taskTitle: record.title || `Naplata: ${record.projectName || "projekat"}`,
+      taskStatus: "sent_to_billing",
+      taskActionText: "oznacio kao naplaceno",
+      relatedTaskId: record.sourceTaskId || record.source_task_id || ""
+    });
+    await persistTaskFlowChange(client, "Placanje je evidentirano.");
+  }
+}
+
+function handleTaskReturnAction(clientId, projectId, taskId) {
+  const client = getClientById(Number(clientId));
+  if (!client) return;
+
+  openActivityModal(client.id, {
+    projectId,
+    taskId,
+    lockProject: Boolean(projectId),
+    source: "return_followup"
+  });
+}
+
 function getAutoStageFromActivity(client, activityType) {
   switch (activityType) {
     case "meeting_held":
@@ -468,7 +668,7 @@ function openActivityModal(clientId, options = {}) {
   currentActivityClientId = clientId;
   currentActivityContext = options || {};
   const activeTask = options.taskId
-    ? getClientOpenTasks(client).find(task => task.id === options.taskId)
+    ? getClientTasks(client, { includeClosed: true }).find(task => task.id === options.taskId)
     : getClientDashboardTask(client) || getClientActiveTask(client);
   const lockedProject = options.projectId ? getClientProjectById(client, options.projectId) : null;
   const defaultOwnerId = activeTask?.ownerId || supabaseUser?.id || "";
@@ -492,7 +692,7 @@ function openActivityModal(clientId, options = {}) {
   setValueIfExists("activityType", "");
   setValueIfExists("activityNote", "");
   setValueIfExists("activityTaskDueDate", activeTask?.dueDate || dateOnlyValue(client.nextStepDate || ""));
-  setValueIfExists("activityTaskStatus", activeTask?.status || "open");
+  setValueIfExists("activityTaskStatus", options.source === "return_followup" ? "returned" : (activeTask?.status || "assigned"));
   renderActivityProjectOptions(client);
   if (lockedProject?.id) {
     setValueIfExists("activityProjectSelect", lockedProject.id);
@@ -504,16 +704,17 @@ function openActivityModal(clientId, options = {}) {
 
   const completeTaskWrap = document.getElementById("activityCompleteTaskWrap");
   const completeTaskCheckbox = document.getElementById("activityCompleteCurrentTask");
+  const canCompleteActiveTask = Boolean(activeTask?.id && lockedProject?.id && !isTaskClosedStatus(activeTask.status));
   if (completeTaskWrap) {
-    completeTaskWrap.classList.toggle("hidden", !(activeTask?.id && lockedProject?.id));
+    completeTaskWrap.classList.toggle("hidden", !canCompleteActiveTask);
   }
   if (completeTaskCheckbox) {
-    completeTaskCheckbox.checked = Boolean(activeTask?.id && lockedProject?.id);
+    completeTaskCheckbox.checked = canCompleteActiveTask;
   }
 
   const createTaskCheckbox = document.getElementById("activityCreateTask");
   if (createTaskCheckbox) {
-    createTaskCheckbox.checked = false;
+    createTaskCheckbox.checked = options.source === "return_followup";
   }
   toggleActivityTaskFields();
 
@@ -623,25 +824,13 @@ async function handleActivitySubmit(e) {
           actorEmail: supabaseUser?.email || "",
           projectId: project.id,
           projectName: projectDisplayName(project),
+          taskTitle: completedTask.title,
+          taskStatus: "done",
+          taskActionText: "zavrsio zadatak",
           relatedTaskId: completedTask.id
         });
 
-        if (completedTask.type === "project_review") {
-          project.status = "billing";
-          const billingRecord = createBillingRequest(client, project.id, {
-            note: "Admin je potvrdio da na projektu nema otvorenih zadataka. Pripremiti naplatu."
-          });
-          if (billingRecord) {
-            addActivity(client, "project_billing_ready", "Projekat prebacen na naplatu", projectDisplayName(project), {
-              actorId: supabaseUser?.id || "",
-              actorName,
-              actorEmail: supabaseUser?.email || "",
-              projectId: project.id,
-              projectName: projectDisplayName(project),
-              billingId: billingRecord.id
-            });
-          }
-        } else if (completedTask.type !== "billing") {
+        if (completedTask.type !== "project_review" && completedTask.type !== "billing") {
           ensureProjectReviewTask(client, project);
         }
       }
@@ -650,6 +839,9 @@ async function handleActivitySubmit(e) {
     if (createTask) {
       const ownerName = selectedOwner.name;
       const taskId = createLocalEntityId("task");
+      const parentTaskId = currentActivityContext?.source === "return_followup"
+        ? currentActivityContext.taskId || ""
+        : "";
 
       ensureClientWorkflow(client);
 
@@ -666,6 +858,7 @@ async function handleActivitySubmit(e) {
         projectId: project?.id || "",
         projectName: projectDisplayName(project),
         status: taskStatus,
+        parentTaskId,
         note,
         createdAt: nowISO()
       };
@@ -676,15 +869,17 @@ async function handleActivitySubmit(e) {
       client.nextStepType = "task";
       client.nextStepDate = taskDueDate;
 
-      const taskLabel = taskOwnerId && supabaseUser?.id && taskOwnerId !== supabaseUser.id
-        ? "Delegiran zadatak"
-        : "Kreiran zadatak";
+      const taskLabel = parentTaskId
+        ? "Vracen / delegiran follow-up"
+        : taskOwnerId && supabaseUser?.id && taskOwnerId !== supabaseUser.id
+          ? "Delegiran zadatak"
+          : "Kreiran zadatak";
       const ownerLabel = ownerName && ownerName !== "Clan tima"
         ? ownerName
         : (taskOwnerEmail || ownerName);
-      const taskNote = `${projectDisplayName(project)} - ${taskTitle} - Vlasnik: ${ownerLabel} - Rok: ${formatDate(taskDueDate)}`;
+      const taskNote = `${projectDisplayName(project)} - ${taskTitle} - Vlasnik: ${ownerLabel} - Rok: ${formatDate(taskDueDate)}${parentTaskId ? " - follow-up prethodnog zadatka" : ""}`;
 
-      addActivity(client, "task_created", taskLabel, taskNote, {
+      addActivity(client, parentTaskId ? "task_returned" : "task_created", taskLabel, taskNote, {
         actorId: supabaseUser?.id || "",
         actorName,
         actorEmail: supabaseUser?.email || "",
@@ -693,6 +888,10 @@ async function handleActivitySubmit(e) {
         ownerEmail: taskOwnerEmail,
         projectId: project?.id || "",
         projectName: projectDisplayName(project),
+        taskTitle,
+        taskStatus,
+        parentTaskId,
+        taskActionText: parentTaskId ? "vratio / delegirao follow-up" : "dodelio zadatak",
         relatedTaskId: taskId
       });
     }

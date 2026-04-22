@@ -83,24 +83,68 @@ function getClientNextStepText(client, fallback = "-") {
 
 function normalizeTaskStatus(status) {
   switch (status) {
+    case "assigned":
+    case "open":
     case "in_progress":
-    case "waiting":
+      return "assigned";
+    case "pending":
+      return "waiting";
     case "done":
+    case "completed":
+      return "done";
+    case "returned":
+      return "returned";
+    case "billing_ready":
+    case "sent_to_billing":
+      return "sent_to_billing";
+    case "paid":
+      return "sent_to_billing";
     case "canceled":
       return status;
+    case "waiting":
+      return "waiting";
     default:
-      return "open";
+      return "assigned";
   }
 }
 
 function taskStatusLabel(status) {
   switch (normalizeTaskStatus(status)) {
-    case "in_progress": return "U toku";
+    case "assigned": return "Dodeljen";
     case "waiting": return "Na cekanju";
     case "done": return "Zavrsen";
+    case "returned": return "Vracen";
+    case "sent_to_billing": return "Poslat na naplatu";
     case "canceled": return "Otkazan";
-    default: return "Otvoren";
+    default: return "Dodeljen";
   }
+}
+
+function taskStatusBadgeClass(status) {
+  switch (normalizeTaskStatus(status)) {
+    case "done": return "success";
+    case "waiting": return "warning";
+    case "returned": return "warning";
+    case "sent_to_billing": return "neutral";
+    case "canceled": return "neutral";
+    default: return "neutral";
+  }
+}
+
+function isTaskClosedStatus(status) {
+  return ["done", "canceled"].includes(normalizeTaskStatus(status));
+}
+
+function isTaskOverdue(task) {
+  return Boolean(task?.dueDate && isOverdueDate(task.dueDate) && !["done", "sent_to_billing"].includes(normalizeTaskStatus(task.status)));
+}
+
+function isCurrentUserFinanceRole() {
+  return normalizeWorkspaceRole(currentMembership?.role || "") === "finance";
+}
+
+function isCurrentUserAdminRole() {
+  return normalizeWorkspaceRole(currentMembership?.role || "") === "admin";
 }
 
 function getCurrentUserDisplayName() {
@@ -269,12 +313,13 @@ function addTaskToProject(client, project, task) {
   return task;
 }
 
-function normalizeClientTask(task, project = null) {
+function normalizeClientTask(task, project = null, options = {}) {
   if (!task || typeof task !== "object") return null;
 
   const title = String(task.title || "").trim();
   const status = normalizeTaskStatus(task.status);
-  if (!title || status === "done" || status === "canceled") return null;
+  if (!title) return null;
+  if (!options.includeClosed && isTaskClosedStatus(status)) return null;
 
   const resolvedOwnerName = getTeamMemberNameById(task.ownerId, task.ownerName || "Clan tima");
   const resolvedDelegatedByName = getTeamMemberNameById(task.delegatedById, task.delegatedByName || "Tim");
@@ -294,19 +339,23 @@ function normalizeClientTask(task, project = null) {
     projectId: task.projectId || project?.id || "",
     projectName: task.projectName || projectDisplayName(project),
     billingId: task.billingId || "",
+    parentTaskId: task.parentTaskId || "",
     note: task.note || "",
     status,
+    completedAt: task.completedAt || "",
+    completedById: task.completedById || "",
+    completedByName: task.completedByName || "",
     createdAt: task.createdAt || nowISO()
   };
 }
 
-function getClientOpenTasks(client) {
+function getClientTasks(client, options = {}) {
   const tasks = [];
   const seen = new Set();
 
   getClientProjects(client).forEach(project => {
     (Array.isArray(project.tasks) ? project.tasks : []).forEach(task => {
-      const normalized = normalizeClientTask(task, project);
+      const normalized = normalizeClientTask(task, project, { includeClosed: Boolean(options.includeClosed) });
       if (!normalized) return;
 
       const key = normalized.id || `${normalized.projectId}:${normalized.title}:${normalized.dueDate}`;
@@ -316,7 +365,7 @@ function getClientOpenTasks(client) {
     });
   });
 
-  const legacyTask = normalizeClientTask(client?.payment?.workflow?.activeTask || null, null);
+  const legacyTask = normalizeClientTask(client?.payment?.workflow?.activeTask || null, null, { includeClosed: Boolean(options.includeClosed) });
   if (legacyTask && !seen.has(legacyTask.id)) {
     tasks.push(legacyTask);
   }
@@ -327,6 +376,10 @@ function getClientOpenTasks(client) {
     if (aDue !== bDue) return aDue.localeCompare(bDue);
     return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
   });
+}
+
+function getClientOpenTasks(client) {
+  return getClientTasks(client).filter(task => !isTaskClosedStatus(task.status));
 }
 
 function refreshClientActiveTask(client) {
@@ -342,7 +395,7 @@ function getClientStoredActiveTask(client) {
 
   const title = String(task.title || "").trim();
   const status = normalizeTaskStatus(task.status);
-  if (!title || status === "done" || status === "canceled") return null;
+  if (!title || isTaskClosedStatus(status)) return null;
 
   return normalizeClientTask(task, null);
 }
@@ -364,7 +417,7 @@ function getClientDerivedTask(client) {
     delegatedById: "",
     delegatedByName: "",
     note: client.lastActionNote || "",
-    status: derivedStatus,
+    status: normalizeTaskStatus(derivedStatus),
     createdAt: client.lastActionAt || client.createdAt || nowISO()
   };
 }
@@ -410,27 +463,55 @@ function getClientDashboardTask(client) {
   return task;
 }
 
-function completeClientTask(client, projectId, taskId) {
-  if (!client || !projectId || !taskId) return null;
+function findClientProjectTask(client, projectId, taskId) {
+  if (!client || !taskId) return { project: null, task: null };
   const project = getClientProjectById(client, projectId);
-  if (!project || !Array.isArray(project.tasks)) return null;
+  if (project?.tasks) {
+    const task = project.tasks.find(item => item.id === taskId) || null;
+    return { project, task };
+  }
 
-  const task = project.tasks.find(item => item.id === taskId);
+  for (const candidateProject of getClientProjects(client)) {
+    const task = Array.isArray(candidateProject.tasks)
+      ? candidateProject.tasks.find(item => item.id === taskId)
+      : null;
+    if (task) return { project: candidateProject, task };
+  }
+
+  return { project: null, task: null };
+}
+
+function updateClientTaskStatus(client, projectId, taskId, status, fields = {}) {
+  const { project, task } = findClientProjectTask(client, projectId, taskId);
   if (!task) return null;
 
-  task.status = "done";
-  task.completedAt = nowISO();
-  task.completedById = supabaseUser?.id || "";
-  task.completedByName = getCurrentUserDisplayName();
+  const nextStatus = normalizeTaskStatus(status);
+  task.status = nextStatus;
+  task.updatedAt = nowISO();
+  task.updatedById = supabaseUser?.id || "";
+  task.updatedByName = getCurrentUserDisplayName();
+
+  if (nextStatus === "done") {
+    task.completedAt = task.completedAt || nowISO();
+    task.completedById = supabaseUser?.id || "";
+    task.completedByName = getCurrentUserDisplayName();
+  }
+
+  Object.assign(task, fields);
   refreshClientActiveTask(client);
-  return task;
+  return normalizeClientTask(task, project, { includeClosed: true });
+}
+
+function completeClientTask(client, projectId, taskId) {
+  if (!client || !projectId || !taskId) return null;
+  return updateClientTaskStatus(client, projectId, taskId, "done");
 }
 
 function projectHasOpenTasks(project) {
   if (!project || !Array.isArray(project.tasks)) return false;
   return project.tasks.some(task => {
     const status = normalizeTaskStatus(task.status);
-    return status !== "done" && status !== "canceled";
+    return !isTaskClosedStatus(status);
   });
 }
 
@@ -438,7 +519,7 @@ function ensureProjectReviewTask(client, project) {
   if (!client || !project || projectHasOpenTasks(project)) return null;
   if (project.status === "done" || project.status === "canceled") return null;
 
-  const existing = (project.tasks || []).find(task => task.type === "project_review" && normalizeTaskStatus(task.status) !== "done" && normalizeTaskStatus(task.status) !== "canceled");
+  const existing = (project.tasks || []).find(task => task.type === "project_review" && !isTaskClosedStatus(task.status));
   if (existing) return existing;
 
   const task = {
@@ -455,7 +536,7 @@ function ensureProjectReviewTask(client, project) {
     delegatedByEmail: "",
     projectId: project.id,
     projectName: projectDisplayName(project),
-    status: "open",
+    status: "assigned",
     note: "Na projektu nema otvorenih zadataka. Ako je zavrsen, otvori naplatu.",
     createdAt: nowISO()
   };
@@ -478,21 +559,58 @@ function ensureBillingRecords(client) {
 }
 
 function getBillingRecords(client) {
-  return ensureBillingRecords(client);
+  return ensureBillingRecords(client).map(refreshBillingRecordStatus);
 }
 
 function getProjectBillingRecord(client, projectId) {
-  return getBillingRecords(client).find(record => record.projectId === projectId && record.status !== "paid" && record.status !== "canceled") || null;
+  return getBillingRecords(client).find(record => record.projectId === projectId && !["paid", "canceled"].includes(normalizeBillingStatus(record.status))) || null;
+}
+
+function getBillingRecordBySourceTask(client, taskId) {
+  if (!taskId) return null;
+  return getBillingRecords(client).find(record => (record.sourceTaskId || record.source_task_id || "") === taskId && normalizeBillingStatus(record.status) !== "canceled") || null;
+}
+
+function normalizeBillingStatus(status) {
+  switch (status) {
+    case "to_invoice":
+    case "requested":
+    case "request":
+      return "to_invoice";
+    case "invoiced":
+    case "invoice_sent":
+    case "waiting_payment":
+      return "invoiced";
+    case "paid":
+      return "paid";
+    case "late":
+    case "overdue":
+      return "late";
+    case "canceled":
+      return "canceled";
+    default:
+      return "to_invoice";
+  }
+}
+
+function refreshBillingRecordStatus(record) {
+  if (!record || normalizeBillingStatus(record.status) === "paid" || normalizeBillingStatus(record.status) === "canceled") return record;
+  if ((record.dueDate || record.due_date) && isOverdueDate(record.dueDate || record.due_date)) {
+    record.status = "late";
+  } else {
+    record.status = normalizeBillingStatus(record.status);
+  }
+  return record;
 }
 
 function billingStatusLabel(status) {
-  switch (status) {
-    case "invoice_sent": return "Faktura poslata";
-    case "waiting_payment": return "Ceka uplatu";
+  switch (normalizeBillingStatus(status)) {
+    case "to_invoice": return "Za fakturisanje";
+    case "invoiced": return "Fakturisano";
     case "paid": return "Placeno";
     case "late": return "Kasni";
     case "canceled": return "Otkazano";
-    default: return "Zahtev za naplatu";
+    default: return "Za fakturisanje";
   }
 }
 
@@ -500,23 +618,46 @@ function createBillingRequest(client, projectId, fields = {}) {
   const project = getClientProjectById(client, projectId);
   if (!client || !project) return null;
 
-  const existing = getProjectBillingRecord(client, projectId);
+  const existing = fields.sourceTaskId
+    ? getBillingRecordBySourceTask(client, fields.sourceTaskId)
+    : getProjectBillingRecord(client, projectId);
   if (existing) return existing;
 
   const owner = fields.owner || getDefaultBillingOwner();
   const requestedByName = getCurrentUserDisplayName();
+  const dueDate = fields.dueDate || fields.due_date || "";
+  const createdAt = nowISO();
   const record = {
     id: createLocalEntityId("billing"),
+    workspace_id: currentWorkspace?.id || "",
+    workspaceId: currentWorkspace?.id || "",
+    client_id: client.id || "",
+    clientId: client.id || "",
+    project_id: project.id,
     projectId: project.id,
     projectName: projectDisplayName(project),
-    status: "requested",
+    source_task_id: fields.sourceTaskId || fields.source_task_id || "",
+    sourceTaskId: fields.sourceTaskId || fields.source_task_id || "",
+    title: fields.title || `Naplata: ${projectDisplayName(project)}`,
+    status: "to_invoice",
     amount: fields.amount || project.estimatedValue || "",
+    currency: fields.currency || "RSD",
+    due_date: dueDate,
+    dueDate,
+    created_by: supabaseUser?.id || "",
+    createdById: supabaseUser?.id || "",
+    created_at: createdAt,
+    createdAt,
+    invoice_number: fields.invoiceNumber || fields.invoice_number || "",
     invoiceNumber: fields.invoiceNumber || "",
+    invoiced_at: fields.invoicedAt || fields.invoiced_at || "",
+    invoicedAt: fields.invoicedAt || fields.invoiced_at || "",
     invoiceDate: fields.invoiceDate || "",
-    dueDate: fields.dueDate || "",
+    paid_at: "",
+    paidAt: "",
     paidDate: "",
     note: fields.note || "",
-    requestedAt: nowISO(),
+    requestedAt: createdAt,
     requestedById: supabaseUser?.id || "",
     requestedByName,
     requestedByEmail: supabaseUser?.email || "",
@@ -527,36 +668,19 @@ function createBillingRequest(client, projectId, fields = {}) {
   };
 
   ensureBillingRecords(client).unshift(record);
-
-  const task = {
-    id: createLocalEntityId("task"),
-    type: "billing",
-    title: `Naplata: ${projectDisplayName(project)}`,
-    dueDate: fields.taskDueDate || todayISODate(),
-    ownerId: record.ownerId,
-    ownerName: record.ownerName,
-    ownerEmail: record.ownerEmail,
-    ownerRole: record.ownerRole,
-    delegatedById: supabaseUser?.id || "",
-    delegatedByName: requestedByName,
-    delegatedByEmail: supabaseUser?.email || "",
-    projectId: project.id,
-    projectName: projectDisplayName(project),
-    billingId: record.id,
-    status: "open",
-    note: `Pripremiti fakturu / naplatu za projekat ${projectDisplayName(project)}.`,
-    createdAt: nowISO()
-  };
-
-  addTaskToProject(client, project, task);
-  addActivity(client, "billing_requested", "Zahtev za naplatu", `${projectDisplayName(project)} - vlasnik: ${record.ownerName}`, {
-    projectId: project.id,
-    projectName: projectDisplayName(project),
-    billingId: record.id,
-    ownerId: record.ownerId,
-    ownerName: record.ownerName,
-    relatedTaskId: task.id
-  });
+  if (!fields.skipActivity) {
+    addActivity(client, "billing_requested", "Zahtev za naplatu", `${projectDisplayName(project)} - vlasnik: ${record.ownerName}`, {
+      projectId: project.id,
+      projectName: projectDisplayName(project),
+      billingId: record.id,
+      ownerId: record.ownerId,
+      ownerName: record.ownerName,
+      taskTitle: record.title,
+      taskStatus: "sent_to_billing",
+      taskActionText: "poslao na naplatu",
+      relatedTaskId: record.sourceTaskId || ""
+    });
+  }
 
   return record;
 }
@@ -570,45 +694,107 @@ function updateBillingRecord(client, billingId, fields = {}) {
   if (!record) return null;
 
   Object.assign(record, {
-    invoiceNumber: fields.invoiceNumber ?? record.invoiceNumber,
+    invoice_number: fields.invoiceNumber ?? fields.invoice_number ?? record.invoice_number ?? record.invoiceNumber,
+    invoiceNumber: fields.invoiceNumber ?? fields.invoice_number ?? record.invoiceNumber,
     amount: fields.amount ?? record.amount,
+    currency: fields.currency ?? record.currency ?? "RSD",
     invoiceDate: fields.invoiceDate ?? record.invoiceDate,
-    dueDate: fields.dueDate ?? record.dueDate,
-    status: fields.status || record.status,
+    invoiced_at: fields.invoicedAt ?? fields.invoiced_at ?? record.invoiced_at ?? record.invoicedAt,
+    invoicedAt: fields.invoicedAt ?? fields.invoiced_at ?? record.invoicedAt,
+    due_date: fields.dueDate ?? fields.due_date ?? record.due_date ?? record.dueDate,
+    dueDate: fields.dueDate ?? fields.due_date ?? record.dueDate,
+    paid_at: fields.paidAt ?? fields.paid_at ?? record.paid_at ?? record.paidAt,
+    paidAt: fields.paidAt ?? fields.paid_at ?? record.paidAt,
+    paidDate: fields.paidDate ?? record.paidDate,
+    status: normalizeBillingStatus(fields.status || record.status),
     note: fields.note ?? record.note,
     updatedAt: nowISO(),
     updatedById: supabaseUser?.id || "",
     updatedByName: getCurrentUserDisplayName()
   });
 
-  client.payment.lastInvoiceDate = record.invoiceDate || client.payment.lastInvoiceDate;
+  refreshBillingRecordStatus(record);
+  client.payment.lastInvoiceDate = record.invoicedAt || record.invoiceDate || client.payment.lastInvoiceDate;
+  return record;
+}
+
+function markBillingRecordInvoiced(client, billingId, invoiceNumber = "") {
+  const record = updateBillingRecord(client, billingId, {
+    status: "invoiced",
+    invoiceNumber: invoiceNumber || undefined,
+    invoicedAt: nowISO(),
+    invoiceDate: todayISODate()
+  });
+  if (!record) return null;
+
+  record.invoice_number = record.invoiceNumber || record.invoice_number || "";
+  record.invoiced_at = record.invoicedAt || nowISO();
+  record.invoicedAt = record.invoiced_at;
   return record;
 }
 
 function markBillingRecordPaid(client, billingId) {
   const record = updateBillingRecord(client, billingId, {
     status: "paid",
+    paidAt: nowISO(),
     paidDate: todayISODate()
   });
   if (!record) return null;
 
   record.paidDate = todayISODate();
+  record.paid_at = record.paidAt || nowISO();
+  record.paidAt = record.paid_at;
   client.payment.lastPaidDate = nowISO();
   client.payment.paymentSpeed = record.dueDate && isOverdueDate(record.dueDate) ? "late" : "on_time";
-
-  const project = getClientProjectById(client, record.projectId);
-  if (project?.tasks) {
-    project.tasks.forEach(task => {
-      if (task.billingId === record.id && normalizeTaskStatus(task.status) !== "done") {
-        task.status = "done";
-        task.completedAt = nowISO();
-        task.completedById = supabaseUser?.id || "";
-        task.completedByName = getCurrentUserDisplayName();
-      }
-    });
-  }
   refreshClientActiveTask(client);
   return record;
+}
+
+function parseBillingDateToLocalDay(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const dateOnly = dateOnlyValue(raw);
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function getClientBillingPaymentProfile(client) {
+  const paidRecords = getBillingRecords(client).filter(record => normalizeBillingStatus(record.status) === "paid");
+  if (!paidRecords.length) {
+    return {
+      category: "unknown",
+      label: "Nema dovoljno podataka",
+      lateDaysMax: 0,
+      paidCount: 0,
+      lateCount: 0
+    };
+  }
+
+  const lateDays = paidRecords.map(record => {
+    const due = parseBillingDateToLocalDay(record.dueDate || record.due_date || "");
+    const paid = parseBillingDateToLocalDay(record.paidAt || record.paid_at || record.paidDate || "");
+    if (!due || !paid) return 0;
+    return Math.max(0, Math.round((paid.getTime() - due.getTime()) / (24 * 60 * 60 * 1000)));
+  });
+  const lateDaysMax = Math.max(...lateDays, 0);
+  const lateCount = lateDays.filter(days => days > 0).length;
+
+  if (lateDaysMax > 7) {
+    return { category: "late_over_7", label: "Kasni preko 7 dana", lateDaysMax, paidCount: paidRecords.length, lateCount };
+  }
+  if (lateDaysMax > 0) {
+    return { category: "late_7", label: "Kasni do 7 dana", lateDaysMax, paidCount: paidRecords.length, lateCount };
+  }
+  return { category: "regular", label: "Redovan", lateDaysMax, paidCount: paidRecords.length, lateCount };
 }
 
 function formatDate(dateString) {

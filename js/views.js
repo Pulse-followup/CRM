@@ -1,3 +1,7 @@
+let currentTaskDueFilter = "all";
+let currentTeamClientFilter = "all";
+let currentBillingClientFilter = "all";
+
 function handleStageAction(actionKey) {
   const client = getClientById(currentClientId);
   if (!client) return;
@@ -102,36 +106,98 @@ function clearClientsMode() {
   renderClientsList();
 }
 
-function getDashboardSuggestions() {
-  return clients
-    .map(client => ({ client, task: getClientDashboardTask(client) }))
-    .filter(item => item.task && item.task.status !== "waiting" && item.task.dueDate && isDueToday(item.task.dueDate))
-    .map(item => ({ client: item.client, suggestion: getTodaySuggestion(item.client), task: item.task }))
-    .sort((a, b) => PRIORITY_ORDER[a.suggestion.priority] - PRIORITY_ORDER[b.suggestion.priority]);
+function getTaskEntries(options = {}) {
+  const { statuses = [], overdueOnly = false, ownedOnly = true, includeClosed = true } = options;
+  const wantedStatuses = new Set(statuses.map(normalizeTaskStatus));
+  const entries = [];
+
+  clients.forEach(client => {
+    getClientTasks(client, { includeClosed }).forEach(task => {
+      const status = normalizeTaskStatus(task.status);
+      if (wantedStatuses.size && !wantedStatuses.has(status)) return;
+      if (overdueOnly && !isTaskOverdue(task)) return;
+      if (ownedOnly && !isTaskOwnedByCurrentUser(task)) return;
+
+      entries.push({
+        client,
+        task,
+        status,
+        overdue: isTaskOverdue(task)
+      });
+    });
+  });
+
+  return entries.sort((a, b) => {
+    const aDue = a.task.dueDate || "9999-12-31";
+    const bDue = b.task.dueDate || "9999-12-31";
+    if (aDue !== bDue) return aDue.localeCompare(bDue);
+    return String(b.task.createdAt || "").localeCompare(String(a.task.createdAt || ""));
+  });
 }
 
-function getWaitingClients() {
-  return clients
-    .map(client => ({ client, task: getClientDashboardTask(client) }))
-    .filter(item => item.task && item.task.status === "waiting")
-    .map(item => item.client)
-    .sort((a, b) => new Date(b.lastActionAt || 0) - new Date(a.lastActionAt || 0));
+function setTaskDueFilter(filter = "all") {
+  currentTaskDueFilter = ["today", "tomorrow", "week", "none", "all"].includes(filter) ? filter : "all";
+  renderDashboard();
 }
 
-function getOverdueClients() {
-  return clients
-    .map(client => ({ client, task: getClientDashboardTask(client) }))
-    .filter(item => item.task && item.task.status !== "waiting" && item.task.dueDate && isOverdueDate(item.task.dueDate))
-    .sort((a, b) => daysUntil(a.task.dueDate) - daysUntil(b.task.dueDate))
-    .map(item => item.client);
+function handleTeamClientFilterChange() {
+  currentTeamClientFilter = getValue("teamClientFilter") || "all";
+  renderTeamView();
 }
 
-function getWeekClients() {
-  return clients
-    .map(client => ({ client, task: getClientDashboardTask(client) }))
-    .filter(item => item.task && item.task.status !== "waiting" && item.task.dueDate && isThisWeekDate(item.task.dueDate) && !isDueToday(item.task.dueDate))
-    .sort((a, b) => daysUntil(a.task.dueDate) - daysUntil(b.task.dueDate))
-    .map(item => item.client);
+function getLocalDayStart(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function parseDateOnlyToLocalDay(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const dateOnly = dateOnlyValue(raw);
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return getLocalDayStart(parsed);
+}
+
+function getTaskDueDayOffset(task) {
+  const dueDay = parseDateOnlyToLocalDay(task?.dueDate || "");
+  if (!dueDay) return null;
+
+  const today = getLocalDayStart();
+  return Math.round((dueDay.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function taskMatchesDueFilter(task, filter = currentTaskDueFilter) {
+  const dueOffset = getTaskDueDayOffset(task);
+  if (filter === "all") return true;
+  if (filter === "none") return dueOffset === null;
+  if (dueOffset === null) return false;
+  if (filter === "today") return dueOffset <= 0;
+  if (filter === "tomorrow") return dueOffset === 1;
+  if (filter === "week") return dueOffset >= 0 && dueOffset <= 6;
+  return true;
+}
+
+function getVisibleTaskEntries() {
+  const activeStatuses = new Set(["assigned", "waiting", "returned", "sent_to_billing"]);
+  return getTaskEntries({ includeClosed: true }).filter(entry => {
+    const status = normalizeTaskStatus(entry.status);
+    const canReviewForBilling =
+      status === "done" &&
+      typeof canCurrentUserSendTaskToBilling === "function" &&
+      canCurrentUserSendTaskToBilling(entry.client, entry.task) &&
+      !entry.task.billingId &&
+      !getBillingRecordBySourceTask(entry.client, entry.task.id);
+
+    return (activeStatuses.has(status) || canReviewForBilling) && taskMatchesDueFilter(entry.task);
+  });
 }
 
 function getClientTaskSummary(client) {
@@ -145,21 +211,89 @@ function getClientTaskSummary(client) {
 }
 
 function renderDashboard() {
-  const todayItems = getDashboardSuggestions();
-  const overdueClients = getOverdueClients();
-  const waitingClients = getWaitingClients();
-  const weekClients = getWeekClients();
+  document.querySelectorAll("[data-task-due-filter]").forEach(button => {
+    button.classList.toggle("is-active", button.dataset.taskDueFilter === currentTaskDueFilter);
+  });
 
-  renderCardCollection("todayList", "todayEmpty", todayItems, item => createTodayCard(item.client, item.suggestion, item.task));
-  renderCardCollection("overdueList", "overdueEmpty", overdueClients, client => createTaskCard(client, "overdue"));
-  renderCardCollection("waitingList", "waitingEmpty", waitingClients, client => createWaitingCard(client));
-  renderCardCollection("weekList", "weekEmpty", weekClients, client => createTaskCard(client, "week"));
+  const billingClientFilterWrap = document.getElementById("billingClientFilterWrap");
+  if (billingClientFilterWrap) billingClientFilterWrap.classList.toggle("hidden", !isCurrentUserFinanceRole());
+
+  if (isCurrentUserFinanceRole()) {
+    renderBillingClientFilter();
+    const billingItems = getVisibleBillingItemEntries();
+    renderCardCollection("taskList", "taskListEmpty", billingItems, item => createBillingItemCard(item));
+    setTextIfExists("homeTodayDate", formatTodayHeaderDate());
+    setTextIfExists("homeStatTodayCount", billingItems.length);
+    setTextIfExists("homeStatOverdueCount", billingItems.filter(item => normalizeBillingStatus(item.record.status) === "late").length);
+    setTextIfExists("homeStatWaitingCount", billingItems.filter(item => normalizeBillingStatus(item.record.status) === "to_invoice").length);
+    setTextIfExists("homeStatWeekCount", billingItems.filter(item => normalizeBillingStatus(item.record.status) === "invoiced").length);
+    return;
+  }
+
+  const allTasks = getTaskEntries({ includeClosed: true }).filter(entry => ["assigned", "waiting", "returned", "sent_to_billing"].includes(normalizeTaskStatus(entry.status)));
+  const visibleTasks = getVisibleTaskEntries();
+  const overdueTasks = allTasks.filter(entry => entry.overdue);
+  const waitingTasks = allTasks.filter(entry => entry.status === "waiting");
+  const sentToBillingTasks = allTasks.filter(entry => entry.status === "sent_to_billing");
+
+  renderCardCollection("taskList", "taskListEmpty", visibleTasks, item => createWorkflowTaskCard(item));
 
   setTextIfExists("homeTodayDate", formatTodayHeaderDate());
-  setTextIfExists("homeStatTodayCount", todayItems.length);
-  setTextIfExists("homeStatOverdueCount", overdueClients.length);
-  setTextIfExists("homeStatWaitingCount", waitingClients.length);
-  setTextIfExists("homeStatWeekCount", weekClients.length);
+  setTextIfExists("homeStatTodayCount", allTasks.length);
+  setTextIfExists("homeStatOverdueCount", overdueTasks.length);
+  setTextIfExists("homeStatWaitingCount", waitingTasks.length);
+  setTextIfExists("homeStatWeekCount", sentToBillingTasks.length);
+}
+
+function handleBillingClientFilterChange() {
+  currentBillingClientFilter = getValue("billingClientFilter") || "all";
+  renderDashboard();
+}
+
+function renderBillingClientFilter() {
+  const select = document.getElementById("billingClientFilter");
+  if (!select) return;
+
+  const previousValue = currentBillingClientFilter || "all";
+  const sortedClients = [...clients].sort((a, b) => (a.name || "").localeCompare(b.name || "", "sr"));
+  select.innerHTML = [
+    `<option value="all">Svi klijenti</option>`,
+    ...sortedClients.map(client => `<option value="${escapeHtml(getClientFilterKey(client))}">${escapeHtml(client.name || "Klijent")}</option>`)
+  ].join("");
+
+  const hasPrevious = previousValue === "all" || sortedClients.some(client => getClientFilterKey(client) === previousValue);
+  currentBillingClientFilter = hasPrevious ? previousValue : "all";
+  select.value = currentBillingClientFilter;
+  select.onchange = handleBillingClientFilterChange;
+}
+
+function getBillingItemEntries() {
+  return clients.flatMap(client => {
+    const clientKey = getClientFilterKey(client);
+    return getBillingRecords(client).map(record => {
+      refreshBillingRecordStatus(record);
+      const project = getClientProjectById(client, record.projectId || record.project_id);
+      return {
+        client,
+        clientKey,
+        record,
+        project,
+        status: normalizeBillingStatus(record.status)
+      };
+    });
+  }).sort((a, b) => {
+    const aDue = a.record.dueDate || a.record.due_date || "9999-12-31";
+    const bDue = b.record.dueDate || b.record.due_date || "9999-12-31";
+    if (aDue !== bDue) return aDue.localeCompare(bDue);
+    return String(b.record.createdAt || b.record.created_at || "").localeCompare(String(a.record.createdAt || a.record.created_at || ""));
+  });
+}
+
+function getVisibleBillingItemEntries() {
+  const entries = getBillingItemEntries();
+  return currentBillingClientFilter === "all"
+    ? entries
+    : entries.filter(item => item.clientKey === currentBillingClientFilter);
 }
 
 function renderCardCollection(listId, emptyId, items, renderItem) {
@@ -170,6 +304,193 @@ function renderCardCollection(listId, emptyId, items, renderItem) {
   list.innerHTML = "";
   items.forEach(item => list.appendChild(renderItem(item)));
   empty.classList.toggle("hidden", items.length > 0);
+}
+
+function createWorkflowTaskActions(entry) {
+  const status = normalizeTaskStatus(entry.task.status);
+  const overdueAttr = entry.overdue ? " data-overdue-task=\"true\"" : "";
+
+  if (status === "waiting") {
+    return `
+      <button class="btn btn-primary btn-sm" data-task-status="${entry.client.id}" data-project-id="${escapeHtml(entry.task.projectId)}" data-task-id="${escapeHtml(entry.task.id)}" data-next-status="assigned"${overdueAttr}>Aktiviraj</button>
+      <button class="btn btn-secondary btn-sm" data-task-status="${entry.client.id}" data-project-id="${escapeHtml(entry.task.projectId)}" data-task-id="${escapeHtml(entry.task.id)}" data-next-status="done"${overdueAttr}>Zavrsi</button>
+      <button class="btn btn-secondary btn-sm" data-task-return="${entry.client.id}" data-project-id="${escapeHtml(entry.task.projectId)}" data-task-id="${escapeHtml(entry.task.id)}">Vrati / Delegiraj</button>
+    `;
+  }
+
+  if (status === "done") {
+    const billingAction = typeof canCurrentUserSendTaskToBilling === "function" && canCurrentUserSendTaskToBilling(entry.client, entry.task)
+      ? `<button class="btn btn-primary btn-sm" data-task-billing="${entry.client.id}" data-project-id="${escapeHtml(entry.task.projectId)}" data-task-id="${escapeHtml(entry.task.id)}">Posalji na naplatu</button>`
+      : "";
+    return `
+      ${billingAction}
+      <button class="btn btn-secondary btn-sm" data-task-return="${entry.client.id}" data-project-id="${escapeHtml(entry.task.projectId)}" data-task-id="${escapeHtml(entry.task.id)}">Vrati / Delegiraj</button>
+      <button class="btn btn-secondary btn-sm" data-task-detail="${entry.client.id}">Detalji</button>
+    `;
+  }
+
+  if (status === "sent_to_billing") {
+    return `
+      <button class="btn btn-secondary btn-sm" data-task-detail="${entry.client.id}">Detalji</button>
+    `;
+  }
+
+  return `
+    <button class="btn btn-primary btn-sm" data-task-status="${entry.client.id}" data-project-id="${escapeHtml(entry.task.projectId)}" data-task-id="${escapeHtml(entry.task.id)}" data-next-status="done"${overdueAttr}>Zavrsi</button>
+    <button class="btn btn-secondary btn-sm" data-task-status="${entry.client.id}" data-project-id="${escapeHtml(entry.task.projectId)}" data-task-id="${escapeHtml(entry.task.id)}" data-next-status="waiting"${overdueAttr}>Stavi na cekanje</button>
+    <button class="btn btn-secondary btn-sm" data-task-return="${entry.client.id}" data-project-id="${escapeHtml(entry.task.projectId)}" data-task-id="${escapeHtml(entry.task.id)}">Vrati / Delegiraj</button>
+  `;
+}
+
+function bindWorkflowTaskCardActions(card) {
+  card.querySelectorAll("[data-task-status]").forEach(button => {
+    button.addEventListener("click", () => {
+      handleTaskStatusAction(
+        button.dataset.taskStatus,
+        button.dataset.projectId || "",
+        button.dataset.taskId || "",
+        button.dataset.nextStatus || "assigned"
+      );
+    });
+  });
+
+  card.querySelectorAll("[data-task-return]").forEach(button => {
+    button.addEventListener("click", () => {
+      handleTaskReturnAction(
+        button.dataset.taskReturn,
+        button.dataset.projectId || "",
+        button.dataset.taskId || ""
+      );
+    });
+  });
+
+  card.querySelectorAll("[data-task-billing]").forEach(button => {
+    button.addEventListener("click", () => {
+      handleSendTaskToBilling(
+        button.dataset.taskBilling,
+        button.dataset.projectId || "",
+        button.dataset.taskId || ""
+      );
+    });
+  });
+
+  card.querySelectorAll("[data-task-detail]").forEach(button => {
+    button.addEventListener("click", () => openClientDrawer(Number(button.dataset.taskDetail)));
+  });
+}
+
+function createWorkflowTaskCard(entry, options = {}) {
+  const { client, task } = entry;
+  const status = normalizeTaskStatus(task.status);
+  const overdue = entry.overdue || isTaskOverdue(task);
+  const dueLabel = task.dueDate ? formatDate(task.dueDate) : "Bez roka";
+  const delegatedBy = task.delegatedByName || "Tim";
+  const delegatedTo = task.ownerName || "Moj nalog";
+  const normalizedNote = String(task.note || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const normalizedTitle = String(task.title || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const noteHtml = task.note && normalizedNote !== normalizedTitle
+    ? `<p class="task-card-line"><strong>NAPOMENA:</strong> ${escapeHtml(task.note)}</p>`
+    : "";
+  const card = document.createElement("article");
+  card.className = `client-card ${overdue ? "overdue-card" : "week-card"}`;
+
+  card.innerHTML = `
+    <div class="card-head card-head-simple">
+      <div class="card-title-wrap">
+        <h4>${escapeHtml(task.title)}</h4>
+      </div>
+      <div class="task-badge-stack">
+        <span class="badge ${taskStatusBadgeClass(status)}">${escapeHtml(taskStatusLabel(status))}</span>
+        ${overdue ? `<span class="badge danger">Kasni</span>` : ""}
+      </div>
+    </div>
+
+    <div class="card-body card-body-simple">
+      <p class="task-card-line"><strong>KLIJENT:</strong> ${escapeHtml(client.name)}</p>
+      <p class="task-card-line"><strong>PROJEKAT:</strong> ${escapeHtml(task.projectName || "Bez projekta")}</p>
+      <p class="task-card-line"><strong>DELEGACIJA:</strong> ${escapeHtml(delegatedBy)} &rarr; ${escapeHtml(delegatedTo)}</p>
+      <p class="task-card-line"><strong>ROK:</strong> ${escapeHtml(dueLabel)}</p>
+      ${noteHtml}
+
+      <div class="card-actions card-actions-simple">
+        ${createWorkflowTaskActions({ ...entry, overdue })}
+      </div>
+    </div>
+  `;
+
+  bindWorkflowTaskCardActions(card);
+  return card;
+}
+
+function createBillingItemActions(entry) {
+  const status = normalizeBillingStatus(entry.record.status);
+  if (status === "paid") {
+    return `<button class="btn btn-secondary btn-sm" data-billing-detail="${entry.client.id}">Detalji</button>`;
+  }
+
+  const invoiceAction = status === "to_invoice" || status === "late"
+    ? `<button class="btn btn-primary btn-sm" data-billing-action="invoice" data-client-id="${entry.client.id}" data-billing-id="${escapeHtml(entry.record.id)}">Oznaci kao fakturisano</button>`
+    : "";
+
+  return `
+    ${invoiceAction}
+    <button class="btn btn-secondary btn-sm" data-billing-action="paid" data-client-id="${entry.client.id}" data-billing-id="${escapeHtml(entry.record.id)}">Oznaci kao placeno</button>
+    <button class="btn btn-secondary btn-sm" data-billing-detail="${entry.client.id}">Detalji</button>
+  `;
+}
+
+function bindBillingItemCardActions(card) {
+  card.querySelectorAll("[data-billing-action]").forEach(button => {
+    button.addEventListener("click", () => {
+      handleBillingItemAction(
+        Number(button.dataset.clientId),
+        button.dataset.billingId || "",
+        button.dataset.billingAction || ""
+      );
+    });
+  });
+
+  card.querySelectorAll("[data-billing-detail]").forEach(button => {
+    button.addEventListener("click", () => openPaymentModal(Number(button.dataset.billingDetail)));
+  });
+}
+
+function createBillingItemCard(entry) {
+  const { client, record, project } = entry;
+  const status = normalizeBillingStatus(record.status);
+  const dueLabel = record.dueDate || record.due_date ? formatDate(record.dueDate || record.due_date) : "Bez roka";
+  const amountLabel = record.amount ? `${formatMoney(record.amount)} ${record.currency || "RSD"}` : "";
+  const noteHtml = record.note
+    ? `<p class="task-card-line"><strong>NAPOMENA:</strong> ${escapeHtml(record.note)}</p>`
+    : "";
+  const article = document.createElement("article");
+  article.className = `client-card ${status === "late" ? "overdue-card" : "week-card"}`;
+
+  article.innerHTML = `
+    <div class="card-head card-head-simple">
+      <div class="card-title-wrap">
+        <h4>${escapeHtml(record.title || `Naplata: ${projectDisplayName(project)}`)}</h4>
+      </div>
+      <div class="task-badge-stack">
+        <span class="badge ${status === "paid" ? "success" : status === "late" ? "danger" : "neutral"}">${escapeHtml(billingStatusLabel(status))}</span>
+      </div>
+    </div>
+
+    <div class="card-body card-body-simple">
+      <p class="task-card-line"><strong>KLIJENT:</strong> ${escapeHtml(client.name)}</p>
+      <p class="task-card-line"><strong>PROJEKAT:</strong> ${escapeHtml(record.projectName || projectDisplayName(project))}</p>
+      <p class="task-card-line"><strong>ROK:</strong> ${escapeHtml(dueLabel)}${amountLabel ? ` - ${escapeHtml(amountLabel)}` : ""}</p>
+      ${record.invoiceNumber || record.invoice_number ? `<p class="task-card-line"><strong>FAKTURA:</strong> ${escapeHtml(record.invoiceNumber || record.invoice_number)}</p>` : ""}
+      ${noteHtml}
+
+      <div class="card-actions card-actions-simple">
+        ${createBillingItemActions(entry)}
+      </div>
+    </div>
+  `;
+
+  bindBillingItemCardActions(article);
+  return article;
 }
 
 function getClientsFilteredByMode(list) {
@@ -286,23 +607,55 @@ function renderClientsList() {
 }
 
 function getTeamActivityFeed() {
+  const importantTypes = new Set([
+    "task_created",
+    "task_done",
+    "task_returned",
+    "task_billing_ready",
+    "task_sent_to_billing",
+    "task_paid",
+    "billing_requested",
+    "billing_invoiced",
+    "billing_paid",
+    "project_billing_ready"
+  ]);
+
   return clients
     .flatMap(client => {
+      const clientKey = getClientFilterKey(client);
       const log = Array.isArray(client.activityLog) ? client.activityLog : [];
-      return log.map(item => {
+      return log.filter(item => importantTypes.has(item.type)).map(item => {
         const fallbackOwnerId = item.actorId || client.ownerUserId || client.createdByUserId || "";
         const resolvedActorName =
           item.actorName ||
           getTeamMemberNameById(fallbackOwnerId, "");
+        const relatedTask = item.relatedTaskId
+          ? getClientTasks(client, { includeClosed: true }).find(task => task.id === item.relatedTaskId) || null
+          : null;
+        const actionText =
+          item.taskActionText ||
+          (item.type === "task_created" ? "dodelio zadatak" :
+            item.type === "task_done" ? "zavrsio zadatak" :
+            item.type === "task_returned" ? "vratio / delegirao follow-up" :
+            item.type === "task_billing_ready" || item.type === "task_sent_to_billing" || item.type === "project_billing_ready" || item.type === "billing_requested" ? "poslao na naplatu" :
+            item.type === "billing_invoiced" ? "oznacio kao fakturisano" :
+            item.type === "task_paid" || item.type === "billing_paid" ? "oznacio kao naplaceno" :
+            item.label || "azurirao zadatak");
 
         return {
           id: item.id || `${client.id}_${item.at || nowISO()}`,
           clientId: client.id,
+          clientKey,
           clientName: client.name || "Klijent",
           label: item.label || client.lastActionHuman || "Aktivnost",
           note: item.note || "",
           at: item.at || client.lastActionAt || client.updatedAt || client.createdAt || nowISO(),
-          ownerName: resolvedActorName
+          ownerName: resolvedActorName,
+          assigneeName: item.ownerName || relatedTask?.ownerName || getTeamMemberNameById(item.ownerId, ""),
+          projectName: item.projectName || relatedTask?.projectName || "Bez projekta",
+          taskTitle: item.taskTitle || relatedTask?.title || item.note || item.label || "Zadatak",
+          dueDate: item.dueDate || relatedTask?.dueDate || "",
+          actionText
         };
       });
     })
@@ -314,25 +667,50 @@ function getTeamRecentWeekCount(feed) {
   return feed.filter(item => new Date(item.at).getTime() >= weekAgo).length;
 }
 
+function renderTeamClientFilter() {
+  const select = document.getElementById("teamClientFilter");
+  if (!select) return;
+
+  const previousValue = currentTeamClientFilter || "all";
+  const sortedClients = [...clients].sort((a, b) => (a.name || "").localeCompare(b.name || "", "sr"));
+  select.innerHTML = [
+    `<option value="all">Svi klijenti</option>`,
+    ...sortedClients.map(client => `<option value="${escapeHtml(getClientFilterKey(client))}">${escapeHtml(client.name || "Klijent")}</option>`)
+  ].join("");
+
+  const hasPrevious = previousValue === "all" || sortedClients.some(client => getClientFilterKey(client) === previousValue);
+  currentTeamClientFilter = hasPrevious ? previousValue : "all";
+  select.value = currentTeamClientFilter;
+}
+
+function getClientFilterKey(client) {
+  return String(client?.id ?? client?.clientId ?? client?.name ?? "").trim();
+}
+
 function createTeamActivityCard(item) {
   const article = document.createElement("article");
   article.className = "simple-card team-activity-card";
 
   const actorLabel = item.ownerName ? escapeHtml(item.ownerName) : "Tim workspace-a";
-  const noteHtml = item.note ? `<p class="team-activity-note">${escapeHtml(item.note)}</p>` : "";
+  const assigneeLabel = item.assigneeName ? escapeHtml(item.assigneeName) : "Tim";
+  const actionLabel =
+    item.actionText === "dodelio zadatak" ? "Dodeljen zadatak" :
+    item.actionText === "zavrsio zadatak" ? "Zavrsen zadatak" :
+    item.actionText === "vratio / delegirao follow-up" ? "Vracen / delegiran follow-up" :
+    item.actionText === "poslao na naplatu" || item.actionText === "oznacio kao spremno za naplatu" ? "Poslat na naplatu" :
+    item.actionText === "oznacio kao fakturisano" ? "Fakturisano" :
+    item.actionText === "oznacio kao naplaceno" ? "Naplaceno" :
+    item.label || "Aktivnost";
+  const dueLabel = item.dueDate ? formatDate(item.dueDate) : "Bez roka";
 
   article.innerHTML = `
     <div class="team-activity-topline">
+      <p class="team-project-line"><strong>PROJEKAT:</strong> ${escapeHtml(item.projectName)}</p>
       <span class="badge neutral">${escapeHtml(item.clientName)}</span>
-      <span class="team-activity-time">${escapeHtml(formatDateTime(item.at))}</span>
     </div>
-    <div class="card-head card-head-simple">
-      <div class="card-title-wrap">
-        <h4>${escapeHtml(item.label)}</h4>
-        <p class="card-subtitle">${actorLabel}</p>
-      </div>
-    </div>
-    ${noteHtml}
+    <p class="team-task-line">${escapeHtml(actionLabel)}: ${escapeHtml(item.taskTitle)}</p>
+    <p class="team-delegation-line">${actorLabel} &rarr; ${assigneeLabel}</p>
+    <p class="team-activity-time"><strong>ROK:</strong> ${escapeHtml(dueLabel)} &bull; ${escapeHtml(formatDateTime(item.at))}</p>
   `;
 
   article.addEventListener("click", () => openClientDrawer(item.clientId));
@@ -341,6 +719,10 @@ function createTeamActivityCard(item) {
 
 function renderTeamView() {
   const feed = getTeamActivityFeed();
+  renderTeamClientFilter();
+  const filteredFeed = currentTeamClientFilter === "all"
+    ? feed
+    : feed.filter(item => item.clientKey === currentTeamClientFilter);
   const feedList = document.getElementById("teamActivityList");
   const empty = document.getElementById("teamActivityEmpty");
   const invitesCount = Array.isArray(currentWorkspaceInvites) ? currentWorkspaceInvites.length : 0;
@@ -360,7 +742,7 @@ function renderTeamView() {
   if (!feedList || !empty) return;
 
   feedList.innerHTML = "";
-  const recentItems = feed.slice(0, 8);
+  const recentItems = filteredFeed.slice(0, 8);
   recentItems.forEach(item => feedList.appendChild(createTeamActivityCard(item)));
   feedList.classList.toggle("hidden", recentItems.length === 0);
   empty.classList.toggle("hidden", recentItems.length > 0);
@@ -470,7 +852,7 @@ function createTaskCard(client, kind) {
   const badgeClass = kind === "overdue" ? "danger" : "neutral";
   const badgeText =
     kind === "overdue"
-      ? `Kasni ${Math.abs(dueDays)} dana`
+      ? "Kasni"
       : dueDays === 0
         ? "Danas"
         : `Za ${dueDays} dana`;
