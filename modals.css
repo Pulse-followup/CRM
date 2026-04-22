@@ -1,0 +1,426 @@
+/* ------------------------- MODALS (FINAL) ------------------------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 10, 18, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.modal-panel {
+  position: relative;
+  width: min(760px, calc(100% - 28px));
+  max-height: calc(100vh - 40px - var(--safe-top) - var(--safe-bottom));
+  max-height: calc(100dvh - 40px - var(--safe-top) - var(--safe-bottom));
+  margin: calc(20px + var(--safe-top)) auto calc(20px + var(--safe-bottom));
+  background: linear-gradient(
+    180deg,
+    rgba(18, 26, 46, 0.97),
+    rgba(10, 16, 30, 0.99)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-lg {
+  width: min(1040px, calc(100% - 28px));
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+}
+
+.modal-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.modal-body {
+  padding: 18px 20px calc(22px + var(--safe-bottom));
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+}
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.action-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.task-builder-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.task-builder-toggle span {
+  display: grid;
+  gap: 4px;
+}
+
+.task-builder-toggle strong,
+.task-builder-toggle small {
+  margin: 0;
+}
+
+.task-builder-toggle small {
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.task-builder-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: #4da3ff;
+  flex-shrink: 0;
+}
+
+.modal-subsection {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.project-form-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.action-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.followup-tier-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.followup-tier-picker .btn.is-active {
+  border-color: rgba(77, 163, 255, 0.7);
+  background: rgba(77, 163, 255, 0.18);
+  color: #ffffff;
+}
+
+.payment-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.payment-summary-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.locked-project-context {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(77, 163, 255, 0.10);
+  border: 1px solid rgba(77, 163, 255, 0.20);
+}
+
+.locked-project-context span,
+.locked-project-context small {
+  color: var(--text-soft);
+}
+
+.locked-project-context strong {
+  color: var(--text);
+}
+
+.billing-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.billing-history-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.billing-history-item strong,
+.billing-history-item p {
+  margin: 0;
+}
+
+.billing-history-item p,
+.billing-history-item span {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.modal-inline-error {
+  margin: 0;
+  color: #ffd6d6;
+  background: rgba(255, 114, 114, 0.1);
+  border: 1px solid rgba(255, 114, 114, 0.14);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+.welcome-modal-panel {
+  width: min(820px, calc(100% - 28px));
+}
+
+.welcome-modal-head {
+  background:
+    radial-gradient(circle at top left, rgba(77, 163, 255, 0.16), transparent 30%),
+    radial-gradient(circle at top right, rgba(255, 190, 85, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
+}
+
+.welcome-modal-body {
+  gap: 20px;
+}
+
+.welcome-hero {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+
+.welcome-logo {
+  width: 100%;
+  max-width: 160px;
+  display: block;
+  justify-self: center;
+  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.24));
+}
+
+.welcome-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.welcome-copy h4,
+.welcome-copy p {
+  margin: 0;
+}
+
+.welcome-copy h4 {
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.welcome-copy p {
+  color: var(--text-soft);
+  line-height: 1.55;
+  max-width: 52ch;
+}
+
+.welcome-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.welcome-plan-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.welcome-plan-card-accent {
+  background: linear-gradient(180deg, rgba(255, 190, 85, 0.1), rgba(255, 255, 255, 0.025));
+}
+
+.welcome-plan-card strong,
+.welcome-plan-card p {
+  margin: 0;
+}
+
+.welcome-plan-card p {
+  color: var(--text-soft);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.account-sheet-panel {
+  width: min(460px, calc(100% - 20px));
+  max-height: calc(100vh - 20px - var(--safe-top) - var(--safe-bottom));
+  max-height: calc(100dvh - 20px - var(--safe-top) - var(--safe-bottom));
+  margin: auto auto calc(10px + var(--safe-bottom));
+  border-radius: 24px;
+}
+
+.account-sheet-head {
+  padding-bottom: 12px;
+}
+
+.account-sheet-body {
+  gap: 14px;
+}
+
+.account-sheet-summary {
+  gap: 6px;
+}
+
+.account-sheet-summary strong,
+.account-sheet-summary p {
+  margin: 0;
+}
+
+.account-sheet-summary strong {
+  font-size: 1.08rem;
+}
+
+.account-sheet-summary p {
+  color: var(--text-soft);
+  word-break: break-word;
+}
+
+.account-sheet-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.account-sheet-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .modal-panel,
+  .modal-lg {
+    width: calc(100% - 16px);
+    max-height: calc(100vh - 16px - var(--safe-top) - var(--safe-bottom));
+    max-height: calc(100dvh - 16px - var(--safe-top) - var(--safe-bottom));
+    margin: calc(8px + var(--safe-top)) auto calc(8px + var(--safe-bottom));
+    border-radius: 18px;
+  }
+
+  .modal-head,
+  .modal-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .action-modal-actions {
+    flex-direction: column;
+  }
+
+  .followup-tier-picker {
+    flex-direction: column;
+  }
+
+  .action-modal-actions .btn {
+    width: 100%;
+  }
+
+  .followup-tier-picker .btn {
+    width: 100%;
+  }
+
+  .payment-actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-hero {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .welcome-copy p {
+    max-width: none;
+  }
+
+  .welcome-plan-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-actions {
+    flex-direction: column;
+  }
+
+  .welcome-actions .btn {
+    width: 100%;
+  }
+
+  .account-sheet-panel {
+    width: calc(100% - 12px);
+    margin-bottom: calc(6px + var(--safe-bottom));
+    border-radius: 22px 22px 18px 18px;
+  }
+}

@@ -1,0 +1,216 @@
+/* ------------------------- FORM ELEMENTS ------------------------- */
+
+.input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(8, 13, 24, 0.62);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 12px 14px;
+  outline: none;
+  transition: var(--transition);
+}
+
+.input::placeholder {
+  color: #8191b3;
+}
+
+.input:focus {
+  border-color: rgba(77, 163, 255, 0.45);
+  box-shadow: 0 0 0 4px rgba(77, 163, 255, 0.10);
+}
+
+.textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.textarea-lg {
+  min-height: 180px;
+}
+
+.search-input {
+  min-width: 240px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.form-section {
+  border-radius: 18px;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.form-section-general {
+  background: linear-gradient(180deg, rgba(77, 163, 255, 0.09), rgba(77, 163, 255, 0.03));
+}
+
+.form-section-contact {
+  background: linear-gradient(180deg, rgba(138, 152, 255, 0.08), rgba(138, 152, 255, 0.03));
+}
+
+.form-section-commercial {
+  background: linear-gradient(180deg, rgba(255, 190, 85, 0.08), rgba(255, 190, 85, 0.03));
+}
+
+.form-section-retail {
+  background: linear-gradient(180deg, rgba(47, 209, 123, 0.08), rgba(47, 209, 123, 0.03));
+}
+
+.form-section-status {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+}
+
+.form-section h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.form-section-hint {
+  margin: -6px 0 4px;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.form-subgroup {
+  display: grid;
+  gap: 12px;
+}
+
+.form-subgroup-title {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.form-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.check-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--card-border);
+  color: var(--text-soft);
+}
+
+.check-pill input {
+  accent-color: var(--primary);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.form-actions-right {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .form-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ------------------------- TOOLBAR FIX (IMPORT/EXPORT) ------------------------- */
+
+.panel-tools .btn,
+.panel-tools .import-label {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+
+.panel-tools {
+  flex-wrap: wrap;
+}
+
+
+
+/* ------------------------- CLIENTS LIST ------------------------- */
+
+.clients-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.clients-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.card-body-simple {
+  gap: 6px;
+}
+
+.client-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.client-card-metrics span {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.client-card-metrics small {
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+.client-card-metrics strong {
+  color: var(--text-main);
+}
+
+.card-actions-simple {
+  margin-top: 10px;
+}
