@@ -86,6 +86,9 @@ function renderAll() {
   renderDashboard();
   renderClientsList();
   renderTeamView();
+  if (typeof syncClientCreateAvailability === "function") {
+    syncClientCreateAvailability();
+  }
 }
 
 function switchToClientsMode(mode = "all") {
@@ -641,59 +644,6 @@ function importClients(e) {
     }
   };
   reader.readAsText(file);
-}
-
-/* ------------------------- DEMO / SEED ------------------------- */
-if (!localStorage.getItem(STORAGE_KEY)) {
-  clients = [
-    {
-      id: 101,
-      name: "Apotekarski lanac",
-      businessType: "pharmacy",
-      clientAddress: "",
-      clientCity: "Beograd",
-      contactPerson: "",
-      contactRole: "",
-      contactPhone: "",
-      contactEmail: "",
-      companySize: "5+",
-      clientType: "physical",
-      decisionModel: "central",
-      internationalFlag: "no",
-      revenueDriverPrimary: "consultative",
-      revenueFocusTags: ["repeat_customers", "staff_recommendation"],
-      revenueDetail: "OTC i dermo",
-      pharmacyFocus: "otc",
-      pharmacyLocations: "5+",
-      pharmacyCentralization: "central",
-      pharmacyTraffic: "high",
-      pharmacySuppliers: "wide",
-      stage: "offer_sent",
-      lastActionNote: "Poslata inicijalna ponuda za pilot.",
-      lastActionAt: new Date(Date.now() - 4 * 86400000).toISOString(),
-      lastActionHuman: "Poslata ponuda",
-      nextStepText: "Uraditi follow-up",
-      nextStepType: "followup",
-      nextStepDate: shiftDateISO(1),
-      createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-      payment: { lastInvoiceDate: null, lastReminderDate: null, lastPaidDate: null, paymentSpeed: null },
-      activityLog: [
-        {
-          at: new Date(Date.now() - 10 * 86400000).toISOString(),
-          type: "created",
-          label: "Kreiran klijent",
-          note: ""
-        },
-        {
-          at: new Date(Date.now() - 4 * 86400000).toISOString(),
-          type: "offer_sent",
-          label: "Poslata ponuda",
-          note: "Poslata inicijalna ponuda za pilot."
-        }
-      ]
-    }
-  ];
-  saveClients();
 }
 
 /* ------------------------- UTIL LABELS ------------------------- */

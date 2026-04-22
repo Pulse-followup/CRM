@@ -1,9 +1,6 @@
-const SUPABASE_STATE_TABLE = "app_state";
-
 let supabaseClient = null;
 let supabaseSession = null;
 let supabaseUser = null;
-let cloudSyncTimer = null;
 let cloudSyncState = "idle";
 
 function isSupabaseConfigured() {
@@ -37,13 +34,8 @@ async function initSupabase() {
   supabaseClient.auth.onAuthStateChange((_event, session) => {
     supabaseSession = session || null;
     supabaseUser = supabaseSession?.user || null;
-    initWorkspaceContext();
     syncCloudStatusUI();
   });
-
-  if (supabaseUser) {
-    await hydrateClientsFromCloud();
-  }
 
   cloudSyncState = "idle";
   syncCloudStatusUI();
@@ -103,9 +95,7 @@ async function handleCloudSignIn(e) {
   supabaseSession = data.session || null;
   supabaseUser = data.user || null;
   await initWorkspaceContext();
-  if (!(typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore())) {
-    await hydrateClientsFromCloud();
-  }
+  await resolveClientSource();
   migrateClients();
   renderLicenseUI();
   renderSettingsUI();
@@ -153,6 +143,12 @@ async function handleCloudLogout() {
   supabaseUser = null;
   cloudSyncState = "idle";
   resetWorkspaceContext();
+  if (typeof resetClientSourceResolution === "function") {
+    resetClientSourceResolution();
+    await resolveClientSource({ silent: true });
+    migrateClients();
+  }
+  renderAll();
   renderSettingsUI();
   syncCloudStatusUI();
   showToast("Cloud nalog je odjavljen.");
@@ -189,73 +185,12 @@ async function handleManualCloudSync() {
     return;
   }
 
-  await pushClientsToCloud();
-  showToast("Cloud sync je zavrsen.");
-}
-
-async function hydrateClientsFromCloud() {
-  if (!isCloudEnabled()) return;
-
-  const { data, error } = await supabaseClient
-    .from(SUPABASE_STATE_TABLE)
-    .select("clients_json")
-    .eq("user_id", supabaseUser.id)
-    .maybeSingle();
-
-  if (error) {
-    showToast("Cloud citanje nije uspelo.");
-    return;
-  }
-
-  const remoteClients = Array.isArray(data?.clients_json) ? data.clients_json : null;
-
-  if (remoteClients && remoteClients.length) {
-    clients = remoteClients;
-    saveClientsLocalOnly();
-    return;
-  }
-
-  if (clients.length) {
-    await pushClientsToCloud();
-  }
-}
-
-function queueCloudSync() {
-  if (!isCloudEnabled()) return;
-
-  cloudSyncState = "idle";
-  syncCloudStatusUI();
-  clearTimeout(cloudSyncTimer);
-  cloudSyncTimer = setTimeout(() => {
-    if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
-      pushClientsToWorkspace();
-      return;
-    }
-
-    pushClientsToCloud();
-  }, 500);
-}
-
-async function pushClientsToCloud() {
-  if (!isCloudEnabled()) return;
-
-  const payload = {
-    user_id: supabaseUser.id,
-    clients_json: clients,
-    updated_at: nowISO()
-  };
-
-  const { error } = await supabaseClient
-    .from(SUPABASE_STATE_TABLE)
-    .upsert(payload, { onConflict: "user_id" });
-
-  if (error) {
-    showToast("Cloud sync nije uspeo.");
-    return;
-  }
-
+  await resolveClientSource();
+  migrateClients();
+  renderAll();
   cloudSyncState = "synced";
-  syncCloudStatusUI("Sinhronizovano");
+  syncCloudStatusUI("Lokalni fallback osvezen");
+  showToast("Klijenti su osvezeni iz aktivnog izvora.");
 }
 
 function syncCloudStatusUI(overrideText = "") {

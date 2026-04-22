@@ -268,6 +268,10 @@ function isMissingRelationError(error) {
   return Boolean(error?.message && /relation .* does not exist/i.test(error.message));
 }
 
+function isMissingRpcError(error) {
+  return Boolean(error?.message && /Could not find the function|function .* does not exist/i.test(error.message));
+}
+
 async function detectTeamSchema() {
   if (!supabaseClient || !supabaseUser) {
     teamSchemaReady = false;
@@ -606,9 +610,6 @@ async function initWorkspaceContext() {
   await loadWorkspaceInvites();
   await detectWorkspaceClientsStore();
   await detectWorkspaceActivitiesStore();
-  if (workspaceClientsReady && typeof hydrateClientsFromWorkspace === "function") {
-    await hydrateClientsFromWorkspace();
-  }
   renderSessionUI();
 }
 
@@ -705,6 +706,12 @@ async function createWorkspace(workspaceName) {
   await loadWorkspaceInvites();
   await detectWorkspaceClientsStore();
   await detectWorkspaceActivitiesStore();
+  if (typeof resetClientSourceResolution === "function") {
+    resetClientSourceResolution();
+    await resolveClientSource();
+    migrateClients();
+    renderAll();
+  }
   renderSessionUI();
   return true;
 }
@@ -777,28 +784,16 @@ async function acceptPendingInvite() {
   if (!canUseTeamFeatures() || !currentPendingInvite) return false;
   clearWorkspaceError();
 
-  const { error: insertError } = await supabaseClient
-    .from("workspace_members")
-    .upsert({
-      workspace_id: currentPendingInvite.workspace_id,
-      user_id: supabaseUser.id,
-      role: normalizeWorkspaceRole(currentPendingInvite.role || "member"),
-      status: "active",
-      joined_at: nowISO()
-    }, { onConflict: "workspace_id,user_id" });
+  const { error } = await supabaseClient.rpc("accept_workspace_invite", {
+    invite_id: currentPendingInvite.id
+  });
 
-  if (insertError) {
-    showWorkspaceError(`Poziv nije prihvacen: ${insertError.message || "nepoznata greska"}`, insertError);
+  if (error) {
+    const setupHint = isMissingRpcError(error)
+      ? " Pokreni supabase-invite-accept-policy.sql u Supabase SQL editoru."
+      : "";
+    showWorkspaceError(`Poziv nije prihvacen: ${error.message || "nepoznata greska"}.${setupHint}`, error);
     return false;
-  }
-
-  const { error: inviteError } = await supabaseClient
-    .from("workspace_invites")
-    .update({ status: "accepted" })
-    .eq("id", currentPendingInvite.id);
-
-  if (inviteError) {
-    showWorkspaceError(`Poziv je prihvacen, ali status invite-a nije osvezen: ${inviteError.message || "nepoznata greska"}`, inviteError);
   }
 
   clearRememberedInviteCode();
@@ -810,8 +805,11 @@ async function acceptPendingInvite() {
   await loadWorkspaceInvites();
   await detectWorkspaceClientsStore();
   await detectWorkspaceActivitiesStore();
-  if (workspaceClientsReady && typeof hydrateClientsFromWorkspace === "function") {
-    await hydrateClientsFromWorkspace();
+  if (typeof resetClientSourceResolution === "function") {
+    resetClientSourceResolution();
+    await resolveClientSource();
+    migrateClients();
+    renderAll();
   }
   renderSessionUI();
   return true;

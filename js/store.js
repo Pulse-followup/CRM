@@ -1,20 +1,202 @@
 /* ------------------------- STORAGE ------------------------- */
-function loadClients() {
+let clientDataSource = "unresolved";
+let clientHydrationPromise = null;
+let workspaceClientSyncTimer = null;
+
+function getClientCacheKey() {
+  if (currentWorkspace?.id) return `${STORAGE_KEY}:workspace:${currentWorkspace.id}`;
+  if (supabaseUser?.id) return `${STORAGE_KEY}:user:${supabaseUser.id}`;
+  return `${STORAGE_KEY}:local`;
+}
+
+function readClientCache(cacheKey = getClientCacheKey()) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    clients = raw ? JSON.parse(raw) : [];
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
   } catch {
-    clients = [];
+    return null;
   }
 }
 
+function loadClients() {
+  const scopedCache = readClientCache();
+  if (scopedCache) {
+    clients = scopedCache;
+    return true;
+  }
+
+  if (!currentWorkspace?.id && !supabaseUser?.id) {
+    const legacyCache = readClientCache(STORAGE_KEY);
+    if (legacyCache) {
+      clients = legacyCache;
+      return true;
+    }
+  }
+
+  clients = [];
+  return false;
+}
+
 function saveClients() {
+  if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
+    if (clientDataSource !== "workspace") {
+      console.warn("[Pulse Clients] Workspace save blocked before workspace source is resolved.", {
+        clientDataSource,
+        workspaceId: currentWorkspace?.id || null
+      });
+      showToast("Klijenti nisu sacuvani: workspace podaci jos nisu ucitani.");
+      return false;
+    }
+    saveClientsLocalOnly();
+    queueWorkspaceClientSync();
+    return true;
+  }
+
   saveClientsLocalOnly();
-  queueCloudSync();
+  return true;
 }
 
 function saveClientsLocalOnly() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
+  try {
+    localStorage.setItem(getClientCacheKey(), JSON.stringify(clients));
+  } catch (error) {
+    console.warn("[Pulse Clients] Local cache save failed.", error);
+  }
+}
+
+function queueWorkspaceClientSync() {
+  if (!(typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore())) return;
+  cloudSyncState = "idle";
+  syncCloudStatusUI();
+  clearTimeout(workspaceClientSyncTimer);
+  workspaceClientSyncTimer = setTimeout(() => {
+    pushClientsToWorkspace();
+  }, 500);
+}
+
+function resetClientSourceResolution() {
+  clientDataSource = "unresolved";
+  clientHydrationPromise = null;
+  syncClientCreateAvailability();
+}
+
+function isClientWorkspaceSourceReady() {
+  return Boolean(
+    clientDataSource === "workspace" &&
+    typeof canUseWorkspaceClientStore === "function" &&
+    canUseWorkspaceClientStore()
+  );
+}
+
+function syncClientCreateAvailability() {
+  const isReady = isClientWorkspaceSourceReady();
+  const title = isReady
+    ? ""
+    : "Workspace klijenti se jos ucitavaju.";
+
+  ["addClientBtnTop", "addClientBtnMobilePanel"].forEach(id => {
+    const button = document.getElementById(id);
+    if (!button) return;
+    button.disabled = !isReady;
+    button.classList.toggle("is-disabled", !isReady);
+    if (title) {
+      button.setAttribute("title", title);
+    } else {
+      button.removeAttribute("title");
+    }
+  });
+}
+
+async function ensureClientSourceReady(options = {}) {
+  const { requireWorkspace = false, silent = false } = options;
+  const workspaceStoreAvailable =
+    typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore();
+
+  if (workspaceStoreAvailable && clientDataSource !== "workspace") {
+    await resolveClientSource({ silent: true });
+  } else if (clientHydrationPromise) {
+    await clientHydrationPromise;
+  }
+
+  if (workspaceStoreAvailable && clientDataSource !== "workspace") {
+    if (!silent) {
+      showToast("Klijenti nisu spremni za cuvanje. Osvezi workspace i pokusaj ponovo.");
+    }
+    console.warn("[Pulse Clients] Workspace source is not ready for persistence.", {
+      clientDataSource,
+      workspaceId: currentWorkspace?.id || null
+    });
+    syncClientCreateAvailability();
+    return false;
+  }
+
+  if (requireWorkspace && !workspaceStoreAvailable) {
+    if (!silent) {
+      showToast("Workspace baza za klijente nije dostupna.");
+    }
+    syncClientCreateAvailability();
+    return false;
+  }
+
+  syncClientCreateAvailability();
+  return true;
+}
+
+async function persistClients(options = {}) {
+  const { immediate = false, requireWorkspace = false } = options;
+  const sourceReady = await ensureClientSourceReady({ requireWorkspace });
+  if (!sourceReady) return false;
+
+  saveClientsLocalOnly();
+
+  if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
+    if (immediate) {
+      return await pushClientsToWorkspace();
+    }
+    queueWorkspaceClientSync();
+  }
+
+  return true;
+}
+
+async function resolveClientSource(options = {}) {
+  const { silent = false } = options;
+  if (clientHydrationPromise) return clientHydrationPromise;
+
+  clientHydrationPromise = (async () => {
+    if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
+      const hydrated = await hydrateClientsFromWorkspace({ pushIfEmpty: false, silent: true });
+      if (hydrated) {
+        clientDataSource = "workspace";
+        console.info("[Pulse Clients] Source resolved: workspace clients table.", {
+          workspaceId: currentWorkspace?.id || null,
+          count: clients.length
+        });
+        syncClientCreateAvailability();
+        return clientDataSource;
+      }
+
+      if (!silent) {
+        showToast("Workspace klijenti nisu ucitani, prikazujem lokalni cache.");
+      }
+    }
+
+    const loadedCache = loadClients();
+    clientDataSource = loadedCache ? "local-cache" : "empty";
+    console.info("[Pulse Clients] Source resolved:", clientDataSource, {
+      cacheKey: getClientCacheKey(),
+      count: clients.length
+    });
+    syncClientCreateAvailability();
+    return clientDataSource;
+  })().finally(() => {
+    clientHydrationPromise = null;
+    syncClientCreateAvailability();
+  });
+
+  return clientHydrationPromise;
 }
 
 function mapClientRowToLocal(row) {
@@ -24,6 +206,7 @@ function mapClientRowToLocal(row) {
 
   return {
     id: Number(row.id),
+    workspaceId: row.workspace_id || "",
     name: row.name || "",
     ownerUserId: row.owner_user_id || "",
     createdByUserId: row.created_by_user_id || "",
@@ -146,8 +329,8 @@ function ensureActivityLogIds() {
 }
 
 async function hydrateClientsFromWorkspace(options = {}) {
-  if (!canUseWorkspaceClientStore()) return;
-  const { pushIfEmpty = true, silent = false } = options;
+  if (!canUseWorkspaceClientStore()) return false;
+  const { silent = false } = options;
 
   const { data, error } = await supabaseClient
     .from("clients")
@@ -160,26 +343,29 @@ async function hydrateClientsFromWorkspace(options = {}) {
       showToast("Workspace klijenti nisu ucitani.");
     }
     console.error("[Pulse Workspace] hydrateClientsFromWorkspace failed", error);
-    return;
+    return false;
   }
 
-  if (Array.isArray(data) && data.length) {
-    clients = data.map(mapClientRowToLocal);
-    ensureActivityLogIds();
-    if (typeof rememberObservedMembersFromClients === "function") {
-      rememberObservedMembersFromClients();
-    }
-    saveClientsLocalOnly();
-    return;
+  clients = Array.isArray(data) ? data.map(mapClientRowToLocal) : [];
+  ensureActivityLogIds();
+  if (typeof rememberObservedMembersFromClients === "function") {
+    rememberObservedMembersFromClients();
   }
-
-  if (pushIfEmpty && clients.length) {
-    await pushClientsToWorkspace();
-  }
+  clientDataSource = "workspace";
+  saveClientsLocalOnly();
+  syncClientCreateAvailability();
+  return true;
 }
 
 async function pushClientsToWorkspace() {
   if (!canUseWorkspaceClientStore()) return false;
+  if (clientDataSource !== "workspace") {
+    console.warn("[Pulse Clients] Workspace push skipped because workspace source is not active.", {
+      clientDataSource,
+      workspaceId: currentWorkspace?.id || null
+    });
+    return false;
+  }
 
   const { data: existingRows, error: existingError } = await supabaseClient
     .from("clients")
@@ -228,6 +414,26 @@ async function pushClientsToWorkspace() {
   // Workspace sync is append/update-only from the browser. Deleting stale rows from
   // a local cache can erase another user's fresh work, so cleanup must be explicit.
   void existingRows;
+  cloudSyncState = "synced";
+  syncCloudStatusUI("Sinhronizovano");
+  return true;
+}
+
+async function deleteClientFromWorkspace(clientId) {
+  if (!canUseWorkspaceClientStore()) return false;
+
+  const { error } = await supabaseClient
+    .from("clients")
+    .delete()
+    .eq("id", Number(clientId))
+    .eq("workspace_id", currentWorkspace.id);
+
+  if (error) {
+    console.error("[Pulse Workspace] deleteClientFromWorkspace failed", error);
+    showToast(`Brisanje klijenta nije upisano u workspace: ${error.message || "nepoznata greska"}`);
+    return false;
+  }
+
   cloudSyncState = "synced";
   syncCloudStatusUI("Sinhronizovano");
   return true;

@@ -52,9 +52,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   await bootFragments();
   bindStaticEvents();
   loadLicenseState();
-  loadClients();
   await initSupabase();
   await initWorkspaceContext();
+  await resolveClientSource();
   migrateClients();
   renderLicenseUI();
   renderSettingsUI();
@@ -267,6 +267,10 @@ function bindStaticEvents() {
   bindClickIfExists("copyPaymentMessageBtn", copyPaymentMessage);
   bindClickIfExists("markPaidOnTimeBtn", () => markPaymentReceived("on_time"));
   bindClickIfExists("markPaidLateBtn", () => markPaymentReceived("late"));
+
+  if (typeof syncClientCreateAvailability === "function") {
+    syncClientCreateAvailability();
+  }
 }
 
 function bindClickIfExists(id, handler) {
