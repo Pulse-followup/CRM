@@ -863,7 +863,7 @@ function renderSessionUI() {
         ? "Imas pozivnicu za workspace"
         : "Bez workspace-a"
   );
-  setTextIfExists("clientsViewTitle", `Klijenti - ${workspaceName}`);
+  setTextIfExists("clientsViewTitle", "Klijenti");
   setTextIfExists("actionsViewTitle", `Tim - ${workspaceName}`);
   setTextIfExists(
     "settingsProfileHint",

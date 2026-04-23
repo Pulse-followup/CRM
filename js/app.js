@@ -1,4 +1,6 @@
 const STORAGE_KEY = "pulse_mvp_clients_v031";
+const PROJECTS_STORAGE_KEY = "pulse_mvp_projects_v001";
+const TASKS_STORAGE_KEY = "pulse_mvp_tasks_v001";
 
 const STAGES = {
   new: "Novi",
@@ -30,6 +32,11 @@ const MODAL_FRAGMENTS = [
   "./fragments/client-modal.html",
   "./fragments/action-modal.html",
   "./fragments/activity-modal.html",
+  "./fragments/project-modal.html",
+  "./fragments/task-modal.html",
+  "./fragments/project-tasks-modal.html",
+  "./fragments/task-detail-modal.html",
+  "./fragments/task-delegate-modal.html",
   "./fragments/payment-modal.html",
   "./fragments/weekly-actions-modal.html",
   "./fragments/license-modal.html",
@@ -41,10 +48,15 @@ const MODAL_FRAGMENTS = [
 ];
 
 let clients = [];
+let projects = [];
+let tasks = [];
 let currentClientId = null;
 let currentActionClientId = null;
 let currentActivityClientId = null;
 let currentPaymentClientId = null;
+let currentTaskListProjectId = null;
+let currentTaskDetailId = null;
+let reopenTaskListAfterCreate = false;
 let currentClientsMode = "all";
 
 /* ------------------------- BOOT / FRAGMENTS ------------------------- */
@@ -56,6 +68,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   await initWorkspaceContext();
   await resolveClientSource();
   migrateClients();
+  loadProjects();
+  migrateProjects();
+  loadTasks();
+  migrateTasks();
   renderLicenseUI();
   renderSettingsUI();
   renderAll();
@@ -105,15 +121,26 @@ function bindStaticEvents() {
 
   bindClickIfExists("addClientBtnTop", openAddClientModal);
   bindClickIfExists("addClientBtnMobilePanel", openAddClientModal);
+  bindClickIfExists("addClientBtnEmpty", openAddClientModal);
 
   bindClickIfExists("exportClientsBtnTop", exportClients);
   bindClickIfExists("exportClientsBtnMobilePanel", exportClients);
+  bindClickIfExists("clientsHeaderMenuToggle", toggleClientsHeaderMenu);
 
   bindImportInput("importClientsInputTop");
   bindImportInput("importClientsInputMobilePanel");
+  bindChangeIfExists("importClientsInputMobilePanel", closeClientsHeaderMenu);
+  document.querySelectorAll("[data-clients-header-menu-close]").forEach(item => {
+    item.addEventListener("click", closeClientsHeaderMenu);
+  });
+  document.addEventListener("click", handleClientsHeaderMenuDocumentClick);
 
-  document.querySelectorAll("[data-task-due-filter]").forEach(button => {
-    button.addEventListener("click", () => setTaskDueFilter(button.dataset.taskDueFilter || "all"));
+  document.querySelectorAll("[data-task-list-filter]").forEach(button => {
+    button.addEventListener("click", () => setTaskListFilter(button.dataset.taskListFilter || "all"));
+  });
+
+  document.querySelectorAll("[data-team-task-filter]").forEach(button => {
+    button.addEventListener("click", () => setTeamTaskFilter(button.dataset.teamTaskFilter || "all"));
   });
 
   bindChangeIfExists("teamClientFilter", handleTeamClientFilterChange);
@@ -234,6 +261,45 @@ function bindStaticEvents() {
     if (client) openPaymentModal(client.id);
   });
 
+  bindClickIfExists("newProjectBtnDrawer", () => {
+    const client = getClientById(currentClientId);
+    if (client) openNewProjectModal(client.id);
+  });
+
+  bindClickIfExists("closeProjectModalBtn", closeProjectModal);
+  bindClickIfExists("projectModalBackdrop", closeProjectModal);
+  bindClickIfExists("cancelProjectBtn", closeProjectModal);
+
+  const projectForm = document.getElementById("projectForm");
+  if (projectForm) {
+    projectForm.addEventListener("submit", handleProjectSubmit);
+  }
+
+  bindClickIfExists("closeTaskModalBtn", closeTaskModal);
+  bindClickIfExists("taskModalBackdrop", closeTaskModal);
+  bindClickIfExists("cancelTaskBtn", closeTaskModal);
+
+  const taskForm = document.getElementById("taskForm");
+  if (taskForm) {
+    taskForm.addEventListener("submit", handleTaskSubmit);
+  }
+  bindDatePickerIfExists("taskDueDate");
+  bindClickIfExists("closeProjectTasksModalBtn", closeProjectTasksModal);
+  bindClickIfExists("projectTasksModalBackdrop", closeProjectTasksModal);
+  bindClickIfExists("closeProjectTasksBtn", closeProjectTasksModal);
+  bindClickIfExists("newTaskFromProjectTasksBtn", openNewTaskFromProjectTasksModal);
+  bindClickIfExists("closeTaskDetailModalBtn", closeTaskDetailModal);
+  bindClickIfExists("taskDetailModalBackdrop", closeTaskDetailModal);
+  bindClickIfExists("closeTaskDetailBtn", closeTaskDetailModal);
+  bindClickIfExists("closeTaskDelegateModalBtn", closeTaskDelegateModal);
+  bindClickIfExists("taskDelegateModalBackdrop", closeTaskDelegateModal);
+  bindClickIfExists("cancelTaskDelegateBtn", closeTaskDelegateModal);
+
+  const taskDelegateForm = document.getElementById("taskDelegateForm");
+  if (taskDelegateForm) {
+    taskDelegateForm.addEventListener("submit", handleTaskDelegateSubmit);
+  }
+
   document.querySelectorAll(".stage-action-btn").forEach(btn => {
     btn.addEventListener("click", () => handleStageAction(btn.dataset.stageAction));
   });
@@ -311,4 +377,46 @@ function bindImportInput(id) {
   const input = document.getElementById(id);
   if (!input) return;
   input.addEventListener("change", importClients);
+}
+
+function getClientsHeaderMenuElements() {
+  return {
+    root: document.querySelector("[data-clients-header-menu]"),
+    toggle: document.getElementById("clientsHeaderMenuToggle"),
+    popover: document.getElementById("clientsHeaderMenu")
+  };
+}
+
+function openClientsHeaderMenu() {
+  const { toggle, popover } = getClientsHeaderMenuElements();
+  if (!toggle || !popover) return;
+  popover.classList.remove("hidden");
+  popover.setAttribute("aria-hidden", "false");
+  toggle.setAttribute("aria-expanded", "true");
+}
+
+function closeClientsHeaderMenu() {
+  const { toggle, popover } = getClientsHeaderMenuElements();
+  if (!toggle || !popover) return;
+  popover.classList.add("hidden");
+  popover.setAttribute("aria-hidden", "true");
+  toggle.setAttribute("aria-expanded", "false");
+}
+
+function toggleClientsHeaderMenu(event) {
+  if (event) event.stopPropagation();
+  const { popover } = getClientsHeaderMenuElements();
+  if (!popover) return;
+  if (popover.classList.contains("hidden")) {
+    openClientsHeaderMenu();
+    return;
+  }
+  closeClientsHeaderMenu();
+}
+
+function handleClientsHeaderMenuDocumentClick(event) {
+  const { root, popover } = getClientsHeaderMenuElements();
+  if (!root || !popover || popover.classList.contains("hidden")) return;
+  if (root.contains(event.target)) return;
+  closeClientsHeaderMenu();
 }

@@ -11,7 +11,10 @@ function snapshotClientsForRollback() {
       : client.payment,
     activityLog: Array.isArray(client.activityLog)
       ? client.activityLog.map(item => ({ ...item }))
-      : client.activityLog
+      : client.activityLog,
+    contacts: Array.isArray(client.contacts)
+      ? client.contacts.map(contact => ({ ...contact }))
+      : client.contacts
   }));
 }
 
@@ -34,7 +37,7 @@ function openAddClientModal() {
   const deleteBtn = document.getElementById("deleteClientBtn");
 
   setTextIfExists("clientModalTitle", "Novi klijent");
-  setTextIfExists("clientModalSubtitle", "Azuriraj osnovne podatke i komercijalni pregled.");
+  setTextIfExists("clientModalSubtitle", "Azuriraj osnovne podatke klijenta.");
 
   if (form) form.reset();
   setValueIfExists("clientId", "");
@@ -54,28 +57,24 @@ function openEditClientModal(id) {
   currentClientId = id;
 
   setTextIfExists("clientModalTitle", "Izmeni klijenta");
-  setTextIfExists("clientModalSubtitle", "Azuriraj osnovne podatke i komercijalni pregled.");
+  setTextIfExists("clientModalSubtitle", "Azuriraj osnovne podatke klijenta.");
 
   setValueIfExists("clientId", client.id);
   setValueIfExists("clientName", client.name || "");
-  setValueIfExists("clientCity", client.clientCity || client.city || "");
-  setValueIfExists("clientAddress", client.clientAddress || "");
-  setValueIfExists("contactPerson", client.contactPerson || "");
-  setValueIfExists("contactPhone", client.contactPhone || "");
-  setValueIfExists("contactEmail", client.contactEmail || "");
-  setValueIfExists("contactRole", client.contactRole || "");
-  setValueIfExists("companySize", client.companySize || "");
-  setValueIfExists("decisionModel", client.decisionModel || "");
-  setValueIfExists("revenueDriverPrimary", client.revenueDriverPrimary || "");
-  setValueIfExists("leadTemperature", client.leadTemperature || "");
-  setValueIfExists("budgetStatus", client.budgetStatus || "");
-  setValueIfExists("urgencyLevel", client.urgencyLevel || "");
-  setValueIfExists("pilotReadiness", client.pilotReadiness || "");
-  setValueIfExists("relationshipStrength", client.relationshipStrength || "");
-  setValueIfExists("lastActionNote", client.lastActionNote || "");
-  setValueIfExists("dealValue", client.dealValue || "");
-  setValueIfExists("dealProbability", client.dealProbability || "");
-  setValueIfExists("expectedDecisionDate", client.expectedDecisionDate || "");
+  setValueIfExists("clientCity", getClientCity(client));
+  setValueIfExists("clientAddress", getClientAddress(client));
+  const primaryContact = getPrimaryClientContact(client);
+  setValueIfExists("contactPerson", primaryContact?.name || "");
+  setValueIfExists("contactPhone", primaryContact?.phone || "");
+  setValueIfExists("contactEmail", primaryContact?.email || "");
+  setValueIfExists("contactRole", primaryContact?.role || "");
+  setValueIfExists("businessType", client.businessType || "");
+  setValueIfExists("revenueBand", client.revenueBand || "");
+  setValueIfExists("employeeCount", client.employeeCount ?? "");
+  setValueIfExists("locationCount", client.locationCount ?? "");
+  setValueIfExists("decisionLevel", client.decisionLevel || "");
+  setValueIfExists("relationshipLevel", client.relationshipLevel || "");
+  setValueIfExists("innovationReady", client.innovationReady || "");
 
   const deleteBtn = document.getElementById("deleteClientBtn");
   if (deleteBtn) {
@@ -97,64 +96,63 @@ async function handleClientSubmit(e) {
   const contactPhone = getValue("contactPhone").trim();
   const contactEmail = getValue("contactEmail").trim();
   const contactRole = getValue("contactRole").trim();
-  const companySize = getValue("companySize");
-  const decisionModel = getValue("decisionModel");
-  const revenueDriverPrimary = getValue("revenueDriverPrimary");
-  const leadTemperature = getValue("leadTemperature");
-  const budgetStatus = getValue("budgetStatus");
-  const urgencyLevel = getValue("urgencyLevel");
-  const pilotReadiness = getValue("pilotReadiness");
-  const relationshipStrength = getValue("relationshipStrength");
-  const lastActionNote = getValue("lastActionNote").trim();
-  const dealValue = Number(getValue("dealValue") || 0);
-  const dealProbability = getValue("dealProbability");
-  const expectedDecisionDate = getValue("expectedDecisionDate");
+  const businessType = getValue("businessType");
+  const revenueBand = getValue("revenueBand");
+  const employeeCountRaw = getValue("employeeCount");
+  const locationCountRaw = getValue("locationCount");
+  const employeeCount = employeeCountRaw === "" ? null : Number(employeeCountRaw);
+  const locationCount = locationCountRaw === "" ? null : Number(locationCountRaw);
+  const decisionLevel = getValue("decisionLevel");
+  const relationshipLevel = getValue("relationshipLevel");
+  const innovationReady = getValue("innovationReady");
+  const primaryContact = normalizeClientContact({
+    name: contactPerson,
+    role: contactRole,
+    email: contactEmail,
+    phone: contactPhone
+  });
+  const contacts = contactHasAnyValue(primaryContact) ? [primaryContact] : [];
 
   if (!clientName) {
     showToast("Unesi naziv klijenta.");
     return;
   }
 
-  if (
-    !companySize ||
-    !decisionModel ||
-    !revenueDriverPrimary ||
-    !leadTemperature ||
-    !budgetStatus ||
-    !urgencyLevel ||
-    !pilotReadiness ||
-    !relationshipStrength
-  ) {
-    showToast("Popuni obavezna polja za procenu klijenta.");
-    return;
-  }
-
   const sourceReady = await ensureClientSourceReady({ requireWorkspace: true });
   if (!sourceReady) return;
+  const existingClient = id ? getClientById(Number(id)) : null;
 
   const baseClient = {
     id: id ? Number(id) : Date.now(),
     name: clientName,
-    clientCity,
     city: clientCity,
+    clientCity,
+    address: clientAddress,
     clientAddress,
-    contactPerson,
-    contactPhone,
-    contactEmail,
-    contactRole,
-    companySize,
-    decisionModel,
-    revenueDriverPrimary,
-    leadTemperature,
-    budgetStatus,
-    urgencyLevel,
-    pilotReadiness,
-    relationshipStrength,
-    lastActionNote,
-    dealValue,
-    dealProbability,
-    expectedDecisionDate,
-    businessType: "other",
+    contacts,
+    contactPerson: primaryContact.name,
+    contactPhone: primaryContact.phone,
+    contactEmail: primaryContact.email,
+    contactRole: primaryContact.role,
+    businessType,
+    revenueBand,
+    employeeCount,
+    locationCount,
+    decisionLevel,
+    relationshipLevel,
+    innovationReady,
+    companySize: existingClient?.companySize || "",
+    decisionModel: existingClient?.decisionModel || "",
+    revenueDriverPrimary: existingClient?.revenueDriverPrimary || "",
+    leadTemperature: existingClient?.leadTemperature || "",
+    budgetStatus: existingClient?.budgetStatus || "",
+    urgencyLevel: existingClient?.urgencyLevel || "",
+    pilotReadiness: existingClient?.pilotReadiness || "",
+    relationshipStrength: existingClient?.relationshipStrength || "",
+    lastActionNote: existingClient?.lastActionNote || "",
+    dealValue: existingClient?.dealValue || 0,
+    dealProbability: existingClient?.dealProbability || "",
+    expectedDecisionDate: existingClient?.expectedDecisionDate || "",
     clientType: "",
     internationalFlag: "",
     revenueFocusTags: [],
@@ -205,7 +203,7 @@ async function handleClientSubmit(e) {
       clients[idx],
       "client_updated",
       "Azurirani podaci o klijentu",
-      lastActionNote || ""
+      clients[idx].lastActionNote || ""
     );
 
     const persisted = await persistClients({
@@ -259,7 +257,7 @@ async function handleClientSubmit(e) {
         at: createdAt,
         type: "created",
         label: "Kreiran klijent",
-        note: lastActionNote || ""
+        note: newClient.lastActionNote || ""
       }
     ]
   };

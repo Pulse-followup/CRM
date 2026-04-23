@@ -39,6 +39,296 @@ function loadClients() {
   return false;
 }
 
+function getProjectCacheKey() {
+  if (currentWorkspace?.id) return `${PROJECTS_STORAGE_KEY}:workspace:${currentWorkspace.id}`;
+  if (supabaseUser?.id) return `${PROJECTS_STORAGE_KEY}:user:${supabaseUser.id}`;
+  return `${PROJECTS_STORAGE_KEY}:local`;
+}
+
+function readProjectCache(cacheKey = getProjectCacheKey()) {
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadProjects() {
+  const scopedCache = readProjectCache();
+  projects = scopedCache || [];
+  return projects.length > 0;
+}
+
+function saveProjects() {
+  try {
+    localStorage.setItem(getProjectCacheKey(), JSON.stringify(projects));
+    return true;
+  } catch (error) {
+    console.warn("[Pulse Projects] Local cache save failed.", error);
+    return false;
+  }
+}
+
+function normalizeProject(project = {}) {
+  const rawEstimatedValue = project.estimatedValue ?? project.estimated_value;
+  const estimatedValue = Number(rawEstimatedValue);
+  const now = nowISO();
+  const archived = project.archived === true;
+  const createdAt = project.createdAt || project.created_at || now;
+
+  return {
+    id: String(project.id || createLocalEntityId("project")),
+    clientId: String(project.clientId ?? project.client_id ?? ""),
+    name: String(project.name || "").trim(),
+    type: String(project.type || "").trim(),
+    frequency: String(project.frequency || "").trim(),
+    estimatedValue:
+      rawEstimatedValue === null ||
+      rawEstimatedValue === undefined ||
+      rawEstimatedValue === "" ||
+      Number.isNaN(estimatedValue)
+        ? null
+        : estimatedValue,
+    status: String(project.status || "").trim(),
+    archived,
+    archivedAt: archived ? (project.archivedAt || project.archived_at || now) : null,
+    createdAt,
+    updatedAt: project.updatedAt || project.updated_at || createdAt
+  };
+}
+
+function migrateProjects() {
+  projects = (Array.isArray(projects) ? projects : [])
+    .map(normalizeProject)
+    .filter(project => project.id && project.clientId);
+
+  saveProjects();
+}
+
+function getProjectsByClientId(clientId) {
+  if (!clientId) return [];
+  return (Array.isArray(projects) ? projects : [])
+    .map(normalizeProject)
+    .filter(project => String(project.clientId) === String(clientId));
+}
+
+function getProjectById(projectId) {
+  if (!projectId) return null;
+  return (Array.isArray(projects) ? projects : [])
+    .map(normalizeProject)
+    .find(project => String(project.id) === String(projectId)) || null;
+}
+
+function getTaskCacheKey() {
+  if (currentWorkspace?.id) return `${TASKS_STORAGE_KEY}:workspace:${currentWorkspace.id}`;
+  if (supabaseUser?.id) return `${TASKS_STORAGE_KEY}:user:${supabaseUser.id}`;
+  return `${TASKS_STORAGE_KEY}:local`;
+}
+
+function readTaskCache(cacheKey = getTaskCacheKey()) {
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadTasks() {
+  const scopedCache = readTaskCache();
+  tasks = scopedCache || [];
+  return tasks.length > 0;
+}
+
+function saveTasks() {
+  try {
+    localStorage.setItem(getTaskCacheKey(), JSON.stringify(tasks));
+    return true;
+  } catch (error) {
+    console.warn("[Pulse Tasks] Local cache save failed.", error);
+    return false;
+  }
+}
+
+function normalizeTaskEntity(task = {}) {
+  const projectId = String(task.projectId ?? task.project_id ?? "").trim();
+  if (!projectId) return null;
+
+  const project = getProjectById(projectId);
+  if (!project) return null;
+
+  const clientId = String(task.clientId ?? task.client_id ?? project.clientId ?? "").trim();
+  if (!clientId || clientId !== String(project.clientId)) return null;
+
+  const now = nowISO();
+  const createdAt = task.createdAt || task.created_at || now;
+  const rawSequenceNumber = Number(task.sequenceNumber ?? task.sequence_number);
+  const assignedToRaw = String(task.assignedTo ?? task.assigned_to ?? "").trim();
+  const assignedToUserId = task.assignedToUserId ?? task.assigned_to_user_id ?? null;
+  const createdByUserId = task.createdByUserId ?? task.created_by_user_id ?? null;
+  const delegatedByUserId = task.delegatedByUserId ?? task.delegated_by_user_id ?? null;
+  const hasDelegatedByLabel =
+    Object.prototype.hasOwnProperty.call(task, "delegatedByLabel") ||
+    Object.prototype.hasOwnProperty.call(task, "delegated_by_label");
+  const delegatedByLabel = hasDelegatedByLabel
+    ? (task.delegatedByLabel ?? task.delegated_by_label)
+    : "";
+
+  return {
+    id: String(task.id || createLocalEntityId("task")),
+    projectId,
+    clientId,
+    sequenceNumber: Number.isFinite(rawSequenceNumber) && rawSequenceNumber > 0 ? rawSequenceNumber : null,
+    actionType: String(task.actionType ?? task.action_type ?? "").trim(),
+    title: String(task.title || "").trim(),
+    description: String(task.description || "").trim(),
+    assignedTo: assignedToRaw,
+    assignedToUserId: assignedToUserId ? String(assignedToUserId).trim() : null,
+    assignedToLabel: String(task.assignedToLabel ?? task.assigned_to_label ?? assignedToRaw ?? "").trim(),
+    createdByUserId: createdByUserId ? String(createdByUserId).trim() : null,
+    createdByLabel: String(task.createdByLabel ?? task.created_by_label ?? "").trim(),
+    delegatedByUserId: delegatedByUserId ? String(delegatedByUserId).trim() : null,
+    delegatedByLabel: delegatedByLabel === null ? null : String(delegatedByLabel || "").trim(),
+    dueDate: task.dueDate || task.due_date || null,
+    status: String(task.status || "dodeljen").trim() || "dodeljen",
+    createdAt,
+    updatedAt: task.updatedAt || task.updated_at || createdAt
+  };
+}
+
+function getNextTaskSequenceNumber(projectId, excludedTaskId = "") {
+  const maxSequence = (Array.isArray(tasks) ? tasks : []).reduce((max, task) => {
+    if (String(task.projectId ?? task.project_id ?? "") !== String(projectId)) return max;
+    if (excludedTaskId && String(task.id) === String(excludedTaskId)) return max;
+    const sequenceNumber = Number(task.sequenceNumber ?? task.sequence_number);
+    return Number.isFinite(sequenceNumber) && sequenceNumber > max ? sequenceNumber : max;
+  }, 0);
+
+  return maxSequence + 1;
+}
+
+function migrateTasks() {
+  const normalizedTasks = (Array.isArray(tasks) ? tasks : [])
+    .map(normalizeTaskEntity)
+    .filter(Boolean);
+
+  const maxByProject = {};
+  normalizedTasks.forEach(task => {
+    if (task.sequenceNumber) {
+      maxByProject[task.projectId] = Math.max(maxByProject[task.projectId] || 0, task.sequenceNumber);
+    }
+  });
+
+  normalizedTasks
+    .filter(task => !task.sequenceNumber)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    .forEach(task => {
+      const nextSequence = (maxByProject[task.projectId] || 0) + 1;
+      task.sequenceNumber = nextSequence;
+      maxByProject[task.projectId] = nextSequence;
+    });
+
+  tasks = normalizedTasks;
+  saveTasks();
+}
+
+function getTasksByProjectId(projectId) {
+  if (!projectId) return [];
+  return (Array.isArray(tasks) ? tasks : [])
+    .map(normalizeTaskEntity)
+    .filter(task => task && String(task.projectId) === String(projectId));
+}
+
+function getTasksByClientId(clientId) {
+  if (!clientId) return [];
+  return (Array.isArray(tasks) ? tasks : [])
+    .map(normalizeTaskEntity)
+    .filter(task => task && String(task.clientId) === String(clientId));
+}
+
+function getAllTasks() {
+  return (Array.isArray(tasks) ? tasks : [])
+    .map(normalizeTaskEntity)
+    .filter(Boolean);
+}
+
+function getTaskById(taskId) {
+  if (!taskId) return null;
+  return (Array.isArray(tasks) ? tasks : [])
+    .map(normalizeTaskEntity)
+    .find(task => task && String(task.id) === String(taskId)) || null;
+}
+
+function saveTask(task = {}) {
+  if (!Array.isArray(tasks)) tasks = [];
+
+  const existingTask = task.id
+    ? tasks.find(item => String(item.id) === String(task.id))
+    : null;
+  const timestamp = nowISO();
+  const projectId = String(task.projectId ?? task.project_id ?? "").trim();
+  const sequenceNumber = existingTask?.sequenceNumber || task.sequenceNumber || getNextTaskSequenceNumber(projectId, task.id || "");
+  const normalizedTask = normalizeTaskEntity({
+    ...(existingTask || {}),
+    ...task,
+    sequenceNumber,
+    createdAt: task.createdAt || existingTask?.createdAt || timestamp,
+    updatedAt: timestamp
+  });
+
+  if (!normalizedTask) {
+    console.warn("[Pulse Tasks] Task nije sacuvan: projectId/clientId nisu validni.", task);
+    return null;
+  }
+
+  const idx = tasks.findIndex(item => String(item.id) === String(normalizedTask.id));
+  if (idx === -1) {
+    tasks.unshift(normalizedTask);
+  } else {
+    tasks[idx] = {
+      ...tasks[idx],
+      ...normalizedTask,
+      id: tasks[idx].id,
+      projectId: tasks[idx].projectId,
+      clientId: tasks[idx].clientId,
+      createdAt: tasks[idx].createdAt || normalizedTask.createdAt
+    };
+  }
+
+  return saveTasks() ? normalizedTask : null;
+}
+
+function updateTaskStatus(taskId, newStatus) {
+  if (!taskId || !newStatus || !Array.isArray(tasks)) return null;
+
+  const idx = tasks.findIndex(task => String(task.id) === String(taskId));
+  if (idx === -1) return null;
+
+  const updatedTask = normalizeTaskEntity({
+    ...tasks[idx],
+    status: newStatus,
+    updatedAt: nowISO()
+  });
+  if (!updatedTask) return null;
+
+  tasks[idx] = {
+    ...tasks[idx],
+    ...updatedTask,
+    id: tasks[idx].id,
+    projectId: tasks[idx].projectId,
+    clientId: tasks[idx].clientId,
+    sequenceNumber: tasks[idx].sequenceNumber || updatedTask.sequenceNumber,
+    createdAt: tasks[idx].createdAt || updatedTask.createdAt
+  };
+
+  return saveTasks() ? updatedTask : null;
+}
+
 function saveClients() {
   if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
     if (clientDataSource !== "workspace") {
@@ -203,6 +493,10 @@ function mapClientRowToLocal(row) {
   const payment = row.payment && typeof row.payment === "object"
     ? row.payment
     : {};
+  const commercialInputs = getClientCommercialInputs({
+    payment,
+    businessType: row.business_type || ""
+  });
 
   return {
     id: Number(row.id),
@@ -213,6 +507,15 @@ function mapClientRowToLocal(row) {
     clientAddress: row.client_address || "",
     clientCity: row.client_city || "",
     city: row.client_city || "",
+    address: row.client_address || "",
+    contacts: getClientContacts({
+      contacts: row.contacts,
+      payment,
+      contactPerson: row.contact_person || "",
+      contactRole: row.contact_role || "",
+      contactEmail: row.contact_email || "",
+      contactPhone: row.contact_phone || ""
+    }),
     contactPerson: row.contact_person || "",
     contactRole: row.contact_role || "",
     contactPhone: row.contact_phone || "",
@@ -232,7 +535,13 @@ function mapClientRowToLocal(row) {
     dealValue: Number(row.deal_value || 0),
     dealProbability: row.deal_probability || "",
     expectedDecisionDate: row.expected_decision_date || "",
-    businessType: row.business_type || "other",
+    businessType: commercialInputs.businessType,
+    revenueBand: commercialInputs.revenueBand,
+    employeeCount: commercialInputs.employeeCount,
+    locationCount: commercialInputs.locationCount,
+    decisionLevel: commercialInputs.decisionLevel,
+    relationshipLevel: commercialInputs.relationshipLevel,
+    innovationReady: commercialInputs.innovationReady,
     clientType: row.client_type || "",
     internationalFlag: row.international_flag || "",
     revenueFocusTags: Array.isArray(row.revenue_focus_tags) ? row.revenue_focus_tags : [],
@@ -263,6 +572,11 @@ function mapClientRowToLocal(row) {
 function mapClientToWorkspaceRow(client, existingRemoteRow = null) {
   const existingCreatedByUserId = existingRemoteRow?.created_by_user_id || "";
   const existingOwnerUserId = existingRemoteRow?.owner_user_id || "";
+  const contacts = getClientContacts(client);
+  const commercialInputs = getClientCommercialInputs(client);
+  const paymentPayload = client.payment && typeof client.payment === "object"
+    ? { ...client.payment, contacts, commercialInputs }
+    : { contacts, commercialInputs };
 
   return {
     id: Number(client.id),
@@ -270,8 +584,8 @@ function mapClientToWorkspaceRow(client, existingRemoteRow = null) {
     owner_user_id: client.ownerUserId || existingOwnerUserId || supabaseUser.id,
     created_by_user_id: existingCreatedByUserId || supabaseUser.id,
     name: client.name || "",
-    client_address: client.clientAddress || "",
-    client_city: client.clientCity || client.city || "",
+    client_address: getClientAddress(client),
+    client_city: getClientCity(client),
     contact_person: client.contactPerson || "",
     contact_role: client.contactRole || "",
     contact_phone: client.contactPhone || "",
@@ -291,7 +605,7 @@ function mapClientToWorkspaceRow(client, existingRemoteRow = null) {
     deal_value: Number(client.dealValue || 0),
     deal_probability: client.dealProbability || null,
     expected_decision_date: client.expectedDecisionDate || null,
-    business_type: client.businessType || "other",
+    business_type: commercialInputs.businessType || "",
     client_type: client.clientType || "",
     international_flag: client.internationalFlag || "",
     revenue_focus_tags: Array.isArray(client.revenueFocusTags) ? client.revenueFocusTags : [],
@@ -307,7 +621,7 @@ function mapClientToWorkspaceRow(client, existingRemoteRow = null) {
     stage: client.stage || "new",
     last_action_at: client.lastActionAt || nowISO(),
     last_action_human: client.lastActionHuman || "Kreiran klijent",
-    payment: client.payment || {},
+    payment: paymentPayload,
     activity_log: Array.isArray(client.activityLog) ? client.activityLog : [],
     created_at: client.createdAt || nowISO(),
     updated_at: nowISO()
@@ -471,12 +785,32 @@ function migrateClients() {
   clients = clients.map(client => {
     const migrated = { ...client };
 
-    if (!migrated.clientAddress) migrated.clientAddress = "";
-    if (!migrated.clientCity) migrated.clientCity = "";
+    const city = getClientCity(migrated);
+    const address = getClientAddress(migrated);
+    const commercialInputs = getClientCommercialInputs(migrated);
+    migrated.city = city;
+    migrated.clientCity = city;
+    migrated.address = address;
+    migrated.clientAddress = address;
+    migrated.businessType = commercialInputs.businessType;
+    migrated.revenueBand = commercialInputs.revenueBand;
+    migrated.employeeCount = commercialInputs.employeeCount;
+    migrated.locationCount = commercialInputs.locationCount;
+    migrated.decisionLevel = commercialInputs.decisionLevel;
+    migrated.relationshipLevel = commercialInputs.relationshipLevel;
+    migrated.innovationReady = commercialInputs.innovationReady;
     if (!migrated.contactPerson) migrated.contactPerson = "";
     if (!migrated.contactRole) migrated.contactRole = "";
     if (!migrated.contactPhone) migrated.contactPhone = "";
     if (!migrated.contactEmail) migrated.contactEmail = "";
+    migrated.contacts = getClientContacts(migrated).map(normalizeClientContact);
+    const primaryContact = migrated.contacts[0] || null;
+    if (primaryContact) {
+      migrated.contactPerson = primaryContact.name;
+      migrated.contactRole = primaryContact.role;
+      migrated.contactEmail = primaryContact.email;
+      migrated.contactPhone = primaryContact.phone;
+    }
 
     if (!migrated.revenueDriverPrimary) migrated.revenueDriverPrimary = "";
     if (!migrated.nextStepText) migrated.nextStepText = "";

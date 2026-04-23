@@ -1,4 +1,6 @@
 let currentTaskDueFilter = "all";
+let currentTaskListFilter = "all";
+let currentTeamTaskFilter = "all";
 let currentTeamClientFilter = "all";
 let currentBillingClientFilter = "all";
 
@@ -140,6 +142,16 @@ function setTaskDueFilter(filter = "all") {
   renderDashboard();
 }
 
+function setTaskListFilter(filter = "all") {
+  currentTaskListFilter = ["all", "active", "mine"].includes(filter) ? filter : "all";
+  renderDashboard();
+}
+
+function setTeamTaskFilter(filter = "all") {
+  currentTeamTaskFilter = ["all", "mine"].includes(filter) ? filter : "all";
+  renderTeamView();
+}
+
 function handleTeamClientFilterChange() {
   currentTeamClientFilter = getValue("teamClientFilter") || "all";
   renderTeamView();
@@ -210,39 +222,107 @@ function getClientTaskSummary(client) {
   };
 }
 
-function renderDashboard() {
-  document.querySelectorAll("[data-task-due-filter]").forEach(button => {
-    button.classList.toggle("is-active", button.dataset.taskDueFilter === currentTaskDueFilter);
-  });
+function getTaskListDueDay(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
 
-  const billingClientFilterWrap = document.getElementById("billingClientFilterWrap");
-  if (billingClientFilterWrap) billingClientFilterWrap.classList.toggle("hidden", !isCurrentUserFinanceRole());
-
-  if (isCurrentUserFinanceRole()) {
-    renderBillingClientFilter();
-    const billingItems = getVisibleBillingItemEntries();
-    renderCardCollection("taskList", "taskListEmpty", billingItems, item => createBillingItemCard(item));
-    setTextIfExists("homeTodayDate", formatTodayHeaderDate());
-    setTextIfExists("homeStatTodayCount", billingItems.length);
-    setTextIfExists("homeStatOverdueCount", billingItems.filter(item => normalizeBillingStatus(item.record.status) === "late").length);
-    setTextIfExists("homeStatWaitingCount", billingItems.filter(item => normalizeBillingStatus(item.record.status) === "to_invoice").length);
-    setTextIfExists("homeStatWeekCount", billingItems.filter(item => normalizeBillingStatus(item.record.status) === "invoiced").length);
-    return;
+  const dateOnly = dateOnlyValue(raw);
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
-  const allTasks = getTaskEntries({ includeClosed: true }).filter(entry => ["assigned", "waiting", "returned", "sent_to_billing"].includes(normalizeTaskStatus(entry.status)));
-  const visibleTasks = getVisibleTaskEntries();
-  const overdueTasks = allTasks.filter(entry => entry.overdue);
-  const waitingTasks = allTasks.filter(entry => entry.status === "waiting");
-  const sentToBillingTasks = allTasks.filter(entry => entry.status === "sent_to_billing");
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
 
-  renderCardCollection("taskList", "taskListEmpty", visibleTasks, item => createWorkflowTaskCard(item));
+function isGlobalTaskOverdue(task) {
+  if (!task?.dueDate || task.status === "zavrsen") return false;
+  const dueDay = getTaskListDueDay(task.dueDate);
+  if (!dueDay) return false;
+  return dueDay.getTime() < getLocalDayStart().getTime();
+}
 
-  setTextIfExists("homeTodayDate", formatTodayHeaderDate());
-  setTextIfExists("homeStatTodayCount", allTasks.length);
-  setTextIfExists("homeStatOverdueCount", overdueTasks.length);
-  setTextIfExists("homeStatWaitingCount", waitingTasks.length);
-  setTextIfExists("homeStatWeekCount", sentToBillingTasks.length);
+function getGlobalTaskSortGroup(entry) {
+  if (entry.overdue) return 0;
+  switch (entry.task.status) {
+    case "u_radu": return 1;
+    case "dodeljen": return 2;
+    case "na_cekanju": return 3;
+    case "zavrsen": return 4;
+    default: return 5;
+  }
+}
+
+function getGlobalTaskDueSortValue(task) {
+  const dueDay = getTaskListDueDay(task?.dueDate);
+  return dueDay ? dueDay.getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function getGlobalTaskEntries() {
+  return getAllTasks().map(task => ({
+    task,
+    project: getProjectById(task.projectId),
+    client: clients.find(client => String(client.id) === String(task.clientId)),
+    overdue: isGlobalTaskOverdue(task)
+  }));
+}
+
+function getVisibleGlobalTaskEntries() {
+  const currentUserId = String(supabaseUser?.id || "");
+  return getGlobalTaskEntries()
+    .filter(entry => {
+      if (currentTaskListFilter === "active") return entry.task.status !== "zavrsen";
+      if (currentTaskListFilter === "mine") {
+        return currentUserId && String(entry.task.assignedToUserId || entry.task.assignedTo || "") === currentUserId;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const groupDiff = getGlobalTaskSortGroup(a) - getGlobalTaskSortGroup(b);
+      if (groupDiff !== 0) return groupDiff;
+
+      const dueDiff = getGlobalTaskDueSortValue(a.task) - getGlobalTaskDueSortValue(b.task);
+      if (dueDiff !== 0) return dueDiff;
+
+      const projectDiff = String(a.project?.name || "").localeCompare(String(b.project?.name || ""), "sr");
+      if (projectDiff !== 0) return projectDiff;
+
+      return Number(a.task.sequenceNumber || 0) - Number(b.task.sequenceNumber || 0);
+    });
+}
+
+function renderDashboard() {
+  document.querySelectorAll("[data-task-list-filter]").forEach(button => {
+    button.classList.toggle("is-active", button.dataset.taskListFilter === currentTaskListFilter);
+  });
+
+  renderCardCollection("taskList", "taskListEmpty", getVisibleGlobalTaskEntries(), entry => createGlobalTaskListRow(entry));
+}
+
+function createGlobalTaskListRow(entry) {
+  const row = document.createElement("button");
+  const projectName = entry.project?.name || "Nepoznat projekat";
+  const clientName = entry.client?.name || "Nepoznat klijent";
+  const taskText = entry.task.description || entry.task.title || "-";
+
+  row.type = "button";
+  row.className = "global-task-row";
+  row.innerHTML = `
+    <span class="global-task-main">
+      <strong>#${escapeHtml(entry.task.sequenceNumber || "-")}</strong>
+      <span class="global-task-project">${escapeHtml(projectName)}</span>
+      <span class="${taskEntityStatusBadgeClass(entry.task.status)}">${escapeHtml(taskEntityStatusLabel(entry.task.status))}</span>
+      ${entry.overdue ? '<span class="badge danger">Kasni</span>' : ""}
+    </span>
+    <span class="global-task-client">${escapeHtml(clientName)}</span>
+    <span class="global-task-title">${escapeHtml(taskText)}</span>
+  `;
+  row.addEventListener("click", () => openTaskDetailModal(entry.task.id));
+  return row;
 }
 
 function handleBillingClientFilterChange() {
@@ -540,7 +620,8 @@ function renderClientsList() {
   if (q) {
     filtered = filtered.filter(c =>
       (c.name || "").toLowerCase().includes(q) ||
-      (c.clientCity || "").toLowerCase().includes(q) ||
+      getClientCity(c).toLowerCase().includes(q) ||
+      getClientAddress(c).toLowerCase().includes(q) ||
       (c.contactPerson || "").toLowerCase().includes(q) ||
       industryLabel(c.businessType).toLowerCase().includes(q)
     );
@@ -568,6 +649,7 @@ function renderClientsList() {
     const pulseScore = computePulseScore(client);
     const potential = computeCommercialPotential(client);
     const priority = computePriorityBase(client);
+    const cityText = getClientCity(client);
     const card = document.createElement("article");
     card.className = `client-card priority-${priority}`;
 
@@ -575,7 +657,7 @@ function renderClientsList() {
       <div class="card-head card-head-simple">
         <div class="card-title-wrap">
           <h4>${escapeHtml(client.name)}</h4>
-          <p class="card-subtitle">${escapeHtml([client.clientCity, industryLabel(client.businessType)].filter(Boolean).join(" · ") || "-")}</p>
+          <p class="card-subtitle">${escapeHtml([cityText, industryLabel(client.businessType)].filter(Boolean).join(" · ") || "-")}</p>
         </div>
         <span class="badge ${commercialPotentialBadgeClass(client)}">Potencijal: ${escapeHtml(potential)}</span>
       </div>
@@ -687,65 +769,112 @@ function getClientFilterKey(client) {
   return String(client?.id ?? client?.clientId ?? client?.name ?? "").trim();
 }
 
-function createTeamActivityCard(item) {
-  const article = document.createElement("article");
-  article.className = "simple-card team-activity-card";
+function getTeamTaskEntries() {
+  return getAllTasks().map(task => ({
+    task,
+    project: getProjectById(task.projectId),
+    client: clients.find(client => String(client.id) === String(task.clientId)) || null,
+    overdue: isGlobalTaskOverdue(task)
+  }));
+}
 
-  const actorLabel = item.ownerName ? escapeHtml(item.ownerName) : "Tim workspace-a";
-  const assigneeLabel = item.assigneeName ? escapeHtml(item.assigneeName) : "Tim";
-  const actionLabel =
-    item.actionText === "dodelio zadatak" ? "Dodeljen zadatak" :
-    item.actionText === "zavrsio zadatak" ? "Zavrsen zadatak" :
-    item.actionText === "vratio / delegirao follow-up" ? "Vracen / delegiran follow-up" :
-    item.actionText === "poslao na naplatu" || item.actionText === "oznacio kao spremno za naplatu" ? "Poslat na naplatu" :
-    item.actionText === "oznacio kao fakturisano" ? "Fakturisano" :
-    item.actionText === "oznacio kao naplaceno" ? "Naplaceno" :
-    item.label || "Aktivnost";
-  const dueLabel = item.dueDate ? formatDate(item.dueDate) : "Bez roka";
+function getVisibleTeamTaskEntries() {
+  const currentUserId = String(supabaseUser?.id || "");
+  return getTeamTaskEntries()
+    .filter(entry => {
+      if (currentTeamClientFilter !== "all") {
+        const entryClientKey = getClientFilterKey(entry.client || { id: entry.task.clientId });
+        if (entryClientKey !== currentTeamClientFilter) return false;
+      }
+      if (currentTeamTaskFilter !== "mine") return true;
+      return Boolean(currentUserId && (
+        String(entry.task.assignedToUserId || entry.task.assignedTo || "") === currentUserId ||
+        String(entry.task.delegatedByUserId || "") === currentUserId
+      ));
+    })
+    .sort((a, b) => {
+      const groupDiff = getGlobalTaskSortGroup(a) - getGlobalTaskSortGroup(b);
+      if (groupDiff !== 0) return groupDiff;
 
-  article.innerHTML = `
-    <div class="team-activity-topline">
-      <p class="team-project-line"><strong>PROJEKAT:</strong> ${escapeHtml(item.projectName)}</p>
-      <span class="badge neutral">${escapeHtml(item.clientName)}</span>
-    </div>
-    <p class="team-task-line">${escapeHtml(actionLabel)}: ${escapeHtml(item.taskTitle)}</p>
-    <p class="team-delegation-line">${actorLabel} &rarr; ${assigneeLabel}</p>
-    <p class="team-activity-time"><strong>ROK:</strong> ${escapeHtml(dueLabel)} &bull; ${escapeHtml(formatDateTime(item.at))}</p>
+      const dueDiff = getGlobalTaskDueSortValue(a.task) - getGlobalTaskDueSortValue(b.task);
+      if (dueDiff !== 0) return dueDiff;
+
+      const projectDiff = String(a.project?.name || "").localeCompare(String(b.project?.name || ""), "sr");
+      if (projectDiff !== 0) return projectDiff;
+
+      return Number(a.task.sequenceNumber || 0) - Number(b.task.sequenceNumber || 0);
+    });
+}
+
+function getTeamTaskFlowLabel(task) {
+  const assignedLabel =
+    task.assignedToLabel ||
+    getTeamMemberNameById(task.assignedToUserId || task.assignedTo, task.assignedTo || "");
+  const sourceLabel = task.delegatedByLabel || task.createdByLabel || "";
+
+  if (sourceLabel && assignedLabel) return `${sourceLabel} → ${assignedLabel}`;
+  return assignedLabel || sourceLabel || "Tim";
+}
+
+function getTeamTaskDisplayStatus(task, overdue) {
+  if (overdue) {
+    return {
+      label: "Kasni",
+      className: "badge danger"
+    };
+  }
+
+  return {
+    label: taskEntityStatusLabel(task.status),
+    className: taskEntityStatusBadgeClass(task.status)
+  };
+}
+
+function createTeamActivityCard(entry) {
+  const row = document.createElement("button");
+  const taskTopic = entry.task.title || taskActionTypeLabel(entry.task.actionType) || "Task";
+  const dueLabel = taskDueDateShortLabel(entry.task.dueDate);
+  const status = getTeamTaskDisplayStatus(entry.task, entry.overdue);
+
+  row.type = "button";
+  row.className = "team-task-row";
+  row.innerHTML = `
+    <span class="team-task-line-top">
+      <span class="team-task-flow">${escapeHtml(getTeamTaskFlowLabel(entry.task))}</span>
+      <span class="badge neutral team-client-badge">${escapeHtml(entry.client?.name || "Klijent")}</span>
+    </span>
+    <span class="team-task-line-bottom">
+      <span class="team-task-meta">#${escapeHtml(entry.task.sequenceNumber || "-")} &bull; ${escapeHtml(entry.project?.name || "Bez projekta")} &bull; ${escapeHtml(taskTopic)} &bull; ${escapeHtml(dueLabel)}</span>
+      <span class="${status.className}">${escapeHtml(status.label)}</span>
+    </span>
   `;
-
-  article.addEventListener("click", () => openClientDrawer(item.clientId));
-  return article;
+  row.addEventListener("click", () => openTaskDetailModal(entry.task.id));
+  return row;
 }
 
 function renderTeamView() {
-  const feed = getTeamActivityFeed();
-  renderTeamClientFilter();
-  const filteredFeed = currentTeamClientFilter === "all"
-    ? feed
-    : feed.filter(item => item.clientKey === currentTeamClientFilter);
-  const feedList = document.getElementById("teamActivityList");
+  const list = document.getElementById("teamActivityList");
   const empty = document.getElementById("teamActivityEmpty");
-  const invitesCount = Array.isArray(currentWorkspaceInvites) ? currentWorkspaceInvites.length : 0;
-  const membersCount = Array.isArray(currentWorkspaceMembers) ? currentWorkspaceMembers.length : 0;
+  renderTeamClientFilter();
+  const items = getVisibleTeamTaskEntries();
 
-  setTextIfExists("teamStatMembers", membersCount);
-  setTextIfExists("teamStatClients", clients.length);
-  setTextIfExists("teamStatWeekActivities", getTeamRecentWeekCount(feed));
-  setTextIfExists("teamStatInvites", invitesCount);
+  setTextIfExists("actionsViewTitle", currentWorkspace ? `Tim - ${currentWorkspace.name}` : "Tim - Bez workspace-a");
   setTextIfExists(
     "teamFeedHint",
     currentWorkspace
-      ? `Poslednje promene unutar workspace-a ${currentWorkspace.name}.`
-      : "Kad se povezes na workspace i pocnes da radis sa klijentima, ovde ce se pojaviti timski tragovi."
+      ? `Snapshot taskova unutar workspace-a ${currentWorkspace.name}.`
+      : "Kad tim krene da radi sa taskovima, ovde ces videti ko kome sta radi."
   );
 
-  if (!feedList || !empty) return;
+  document.querySelectorAll("[data-team-task-filter]").forEach(button => {
+    button.classList.toggle("is-active", button.dataset.teamTaskFilter === currentTeamTaskFilter);
+  });
 
-  feedList.innerHTML = "";
-  const recentItems = filteredFeed.slice(0, 8);
-  recentItems.forEach(item => feedList.appendChild(createTeamActivityCard(item)));
-  feedList.classList.toggle("hidden", recentItems.length === 0);
-  empty.classList.toggle("hidden", recentItems.length > 0);
+  if (!list || !empty) return;
+
+  list.innerHTML = "";
+  items.forEach(item => list.appendChild(createTeamActivityCard(item)));
+  empty.classList.toggle("hidden", items.length > 0);
 }
 
 function createTodayCard(client, suggestion, task) {
@@ -813,13 +942,14 @@ function createWaitingCard(client) {
   const waitingDays = daysSince(client.lastActionAt);
   const task = getClientActiveTask(client);
   const lastAction = client.lastActionHuman || "Poslata poruka";
+  const cityText = getClientCity(client);
 
   card.className = "client-card waiting-card";
   card.innerHTML = `
     <div class="card-head card-head-simple">
       <div class="card-title-wrap">
         <h4>${escapeHtml(client.name)}</h4>
-        <p class="card-subtitle">${escapeHtml(client.clientCity || "-")}</p>
+        <p class="card-subtitle">${escapeHtml(cityText || "-")}</p>
       </div>
       <span class="badge warning">Ceka odgovor</span>
     </div>
@@ -849,6 +979,7 @@ function createTaskCard(client, kind) {
   const task = getClientActiveTask(client);
   const dueDate = task?.dueDate || client.nextStepDate || "";
   const dueDays = daysUntil(dueDate);
+  const cityText = getClientCity(client);
   const badgeClass = kind === "overdue" ? "danger" : "neutral";
   const badgeText =
     kind === "overdue"
@@ -862,7 +993,7 @@ function createTaskCard(client, kind) {
     <div class="card-head card-head-simple">
       <div class="card-title-wrap">
         <h4>${escapeHtml(client.name)}</h4>
-        <p class="card-subtitle">${escapeHtml(client.clientCity || "-")}</p>
+        <p class="card-subtitle">${escapeHtml(cityText || "-")}</p>
       </div>
       <span class="badge ${badgeClass}">${escapeHtml(badgeText)}</span>
     </div>

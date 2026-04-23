@@ -3,6 +3,77 @@ function getClientById(id) {
   return clients.find(c => c.id === id);
 }
 
+function getClientCity(client) {
+  return client?.city || client?.clientCity || "";
+}
+
+function getClientAddress(client) {
+  return client?.address || client?.clientAddress || "";
+}
+
+function normalizeClientContact(contact = {}) {
+  return {
+    name: String(contact.name || contact.contactPerson || "").trim(),
+    role: String(contact.role || contact.contactRole || "").trim(),
+    email: String(contact.email || contact.contactEmail || "").trim(),
+    phone: String(contact.phone || contact.contactPhone || "").trim()
+  };
+}
+
+function contactHasAnyValue(contact) {
+  return Boolean(contact?.name || contact?.role || contact?.email || contact?.phone);
+}
+
+function getClientContacts(client) {
+  const rawContacts = Array.isArray(client?.contacts)
+    ? client.contacts
+    : Array.isArray(client?.payment?.contacts)
+      ? client.payment.contacts
+      : [];
+  const contacts = rawContacts.map(normalizeClientContact).filter(contactHasAnyValue);
+
+  if (contacts.length) return contacts;
+
+  const legacyContact = normalizeClientContact({
+    contactPerson: client?.contactPerson,
+    contactRole: client?.contactRole,
+    contactEmail: client?.contactEmail,
+    contactPhone: client?.contactPhone
+  });
+
+  return contactHasAnyValue(legacyContact) ? [legacyContact] : [];
+}
+
+function getPrimaryClientContact(client) {
+  return getClientContacts(client)[0] || null;
+}
+
+function normalizeBusinessType(value) {
+  switch (value) {
+    case "pharmacy": return "apoteka";
+    case "retail": return "maloprodaja";
+    case "b2b_services": return "usluge";
+    case "other": return "ostalo";
+    default: return value || "";
+  }
+}
+
+function getClientCommercialInputs(client = {}) {
+  const stored = client?.payment?.commercialInputs && typeof client.payment.commercialInputs === "object"
+    ? client.payment.commercialInputs
+    : {};
+
+  return {
+    businessType: normalizeBusinessType(client.businessType || stored.businessType || ""),
+    revenueBand: client.revenueBand || stored.revenueBand || "",
+    employeeCount: client.employeeCount ?? stored.employeeCount ?? null,
+    locationCount: client.locationCount ?? stored.locationCount ?? null,
+    decisionLevel: client.decisionLevel || stored.decisionLevel || "",
+    relationshipLevel: client.relationshipLevel || stored.relationshipLevel || "",
+    innovationReady: client.innovationReady || stored.innovationReady || ""
+  };
+}
+
 function nowISO() {
   return new Date().toISOString();
 }
@@ -239,7 +310,7 @@ function getDefaultBillingOwner() {
 
 function getTeamMemberNameById(userId, fallback = "Tim") {
   if (!userId) return fallback;
-  const match = getAssignableWorkspaceMembers().find(member => member.id === userId);
+  const match = getAssignableWorkspaceMembers().find(member => String(member.id) === String(userId));
   return match?.name || match?.email || fallback;
 }
 
@@ -873,7 +944,7 @@ function switchView(viewId) {
   const workspaceName = currentWorkspace?.name || "Bez workspace-a";
 
   if (clientsViewTitle) {
-    clientsViewTitle.textContent = `Klijenti - ${workspaceName}`;
+    clientsViewTitle.textContent = "Klijenti";
   }
 
   if (actionsViewTitle) {

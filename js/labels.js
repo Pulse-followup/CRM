@@ -1,10 +1,45 @@
 /* ------------------------- LABELS ------------------------- */
 function industryLabel(value) {
   switch (value) {
+    case "apoteka": return "Apoteka";
+    case "maloprodaja": return "Maloprodaja";
+    case "ugostiteljstvo": return "Ugostiteljstvo";
+    case "usluge": return "Usluge";
+    case "drzavne_institucije": return "Drzavne institucije";
+    case "proizvodnja": return "Proizvodnja";
+    case "distribucija": return "Distribucija";
+    case "ostalo": return "Ostalo";
     case "retail": return "Trgovina / Retail";
     case "pharmacy": return "Farmacija / Apoteka";
     case "b2b_services": return "B2B usluge";
     case "other": return "Drugo";
+    default: return "-";
+  }
+}
+
+function revenueBandLabel(value) {
+  switch (value) {
+    case "small": return "Mali";
+    case "medium": return "Srednji";
+    case "large": return "Veliki";
+    default: return "-";
+  }
+}
+
+function decisionLevelLabel(value) {
+  switch (value) {
+    case "owner": return "Vlasnik";
+    case "management": return "Management";
+    case "local": return "Lokalno";
+    default: return "-";
+  }
+}
+
+function relationshipLevelLabel(value) {
+  switch (value) {
+    case "new": return "Novi klijent";
+    case "communication": return "Imamo komunikaciju";
+    case "trust": return "Izgradjeno poverenje";
     default: return "-";
   }
 }
@@ -40,6 +75,34 @@ function yesNoLabel(value) {
   switch (value) {
     case "yes": return "Da";
     case "no": return "Ne";
+    default: return "-";
+  }
+}
+
+function projectTypeLabel(value) {
+  switch (value) {
+    case "kampanja": return "Kampanja";
+    case "usluga": return "Usluga";
+    case "prodaja": return "Prodaja";
+    case "odrzavanje": return "Odrzavanje";
+    default: return "-";
+  }
+}
+
+function projectFrequencyLabel(value) {
+  switch (value) {
+    case "jednokratno": return "Jednokratno";
+    case "mesecno": return "Mesecno";
+    case "kontinuirano": return "Kontinuirano";
+    default: return "-";
+  }
+}
+
+function projectStatusLabel(value) {
+  switch (value) {
+    case "aktivan": return "Aktivan";
+    case "pauza": return "Pauza";
+    case "zavrsen": return "Zavrsen";
     default: return "-";
   }
 }
