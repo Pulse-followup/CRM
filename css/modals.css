@@ -219,6 +219,57 @@
   font-size: 0.9rem;
 }
 
+.task-modal-list {
+  display: grid;
+  gap: 12px;
+}
+
+.task-modal-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.task-modal-item:last-child {
+  border-bottom: 0;
+}
+
+.task-modal-item strong,
+.task-modal-item p {
+  margin: 0;
+}
+
+.task-modal-item p {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.task-detail-box {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.task-detail-box p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.task-detail-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.task-detail-actions .btn {
+  width: 100%;
+}
+
 .modal-inline-error {
   margin: 0;
   color: #ffd6d6;

@@ -260,12 +260,12 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .team-client-filter {
-  max-width: 360px;
-  margin-bottom: 14px;
+  max-width: 280px;
+  margin-bottom: 10px;
 }
 
 .team-activity-topline {
@@ -304,6 +304,116 @@
 .team-task-line {
   color: var(--text);
   font-weight: 700;
+}
+
+.team-task-list {
+  display: grid;
+  border-top: 1px solid var(--card-border);
+}
+
+.team-task-row {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  padding: 9px 0;
+  border: 0;
+  border-bottom: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.team-task-row:hover {
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.team-task-row:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.team-task-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.team-task-line-top,
+.team-task-line-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.team-task-flow,
+.team-task-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-task-flow {
+  font-size: 0.92rem;
+  line-height: 1.24;
+  font-weight: 700;
+}
+
+.team-task-meta {
+  font-size: 0.81rem;
+  color: var(--text-soft);
+  line-height: 1.2;
+}
+
+.team-client-badge {
+  min-height: 22px;
+  padding: 2px 7px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  opacity: 0.78;
+  background: rgba(255, 255, 255, 0.032);
+  border-color: rgba(255, 255, 255, 0.07);
+  color: var(--muted);
+}
+
+.team-task-line-bottom .badge {
+  min-height: 24px;
+  padding: 3px 8px;
+  font-size: 0.74rem;
+}
+
+@media (max-width: 640px) {
+  .team-task-row {
+    gap: 3px;
+    padding: 10px 0;
+  }
+
+  .team-task-line-top,
+  .team-task-line-bottom {
+    gap: 6px;
+  }
+
+  .team-client-filter {
+    max-width: 100%;
+  }
+
+  .team-task-flow {
+    font-size: 0.88rem;
+  }
+
+  .team-task-meta {
+    font-size: 0.77rem;
+  }
+
+  .team-client-badge,
+  .team-task-line-bottom .badge {
+    min-height: 21px;
+    padding: 2px 6px;
+    font-size: 0.68rem;
+  }
 }
 
 .task-badge-stack {
