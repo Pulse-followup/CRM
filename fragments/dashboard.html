@@ -1,37 +1,29 @@
 <section id="dashboardView" class="view active">
   <section class="dashboard-stack home-dashboard-stack">
     <div class="workspace-view-title">
-      <h2>Moji zadaci</h2>
+      <h2>Zadaci</h2>
       <p id="dashboardWorkspaceTitle" class="workspace-view-subtitle">Bez workspace-a</p>
     </div>
 
     <section class="panel panel-today dashboard-area-today">
       <div class="panel-head home-panel-head">
         <div>
-          <h3>Lista zadataka</h3>
-          <p class="panel-subtext">Filteri menjaju samo rok prikaza, ne status zadatka.</p>
+          <h3>Svi zadaci</h3>
+          <p class="panel-subtext">Pregled taskova iz svih projekata.</p>
         </div>
       </div>
 
-      <div class="task-filter-row" id="taskDueFilterRow">
-        <button class="btn btn-secondary btn-sm is-active" type="button" data-task-due-filter="all">Svi</button>
-        <button class="btn btn-secondary btn-sm" type="button" data-task-due-filter="today">Danas</button>
-        <button class="btn btn-secondary btn-sm" type="button" data-task-due-filter="tomorrow">Sutra</button>
-        <button class="btn btn-secondary btn-sm" type="button" data-task-due-filter="week">Ove nedelje</button>
-        <button class="btn btn-secondary btn-sm" type="button" data-task-due-filter="none">Bez roka</button>
+      <div class="task-filter-row" id="taskListFilterRow">
+        <button class="btn btn-secondary btn-sm is-active" type="button" data-task-list-filter="all">Svi</button>
+        <button class="btn btn-secondary btn-sm" type="button" data-task-list-filter="active">Aktivni</button>
+        <button class="btn btn-secondary btn-sm" type="button" data-task-list-filter="mine">Moji</button>
       </div>
 
-      <div class="task-filter-row hidden" id="billingClientFilterWrap">
-        <select id="billingClientFilter" class="input team-client-filter" aria-label="Filter po klijentu">
-          <option value="all">Svi klijenti</option>
-        </select>
-      </div>
-
-      <div id="taskList" class="cards-list"></div>
+      <div id="taskList" class="global-task-list"></div>
 
       <div id="taskListEmpty" class="empty-state hidden">
-        <h4>Nema zadataka za izabrani rok</h4>
-        <p>Promeni filter ili dodaj novu aktivnost sa zadatkom.</p>
+        <h4>Nema zadataka</h4>
+        <p>Promeni filter ili kreiraj task iz projekta.</p>
       </div>
     </section>
   </section>

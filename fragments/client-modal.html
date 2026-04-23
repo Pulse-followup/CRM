@@ -5,7 +5,7 @@
     <div class="modal-head">
       <div>
         <h3 id="clientModalTitle">Novi klijent</h3>
-        <p id="clientModalSubtitle">Azuriraj osnovne podatke i komercijalni pregled.</p>
+        <p id="clientModalSubtitle">Azuriraj osnovne podatke klijenta.</p>
       </div>
 
       <button id="closeClientModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
@@ -51,11 +51,16 @@
           />
         </div>
 
+      </section>
+
+      <section class="form-section form-section-general">
+        <h4>Kontakti</h4>
+        <p class="form-section-hint">Osnovni kontakt za komunikaciju sa klijentom.</p>
+
         <div class="form-subgroup">
-          <strong class="form-subgroup-title">Kontakt</strong>
           <div class="form-two-col">
             <div class="field">
-              <label for="contactPerson">Kontakt osoba</label>
+              <label for="contactPerson">Ime</label>
               <input
                 id="contactPerson"
                 class="input"
@@ -66,26 +71,17 @@
 
             <div class="field">
               <label for="contactRole">Funkcija</label>
-              <input
-                id="contactRole"
-                class="input"
-                type="text"
-                placeholder="npr. Vlasnik / Menadzer / Nabavka"
-              />
+              <select id="contactRole" class="input">
+                <option value="">Izaberi</option>
+                <option value="vlasnik">Vlasnik</option>
+                <option value="prodaja">Prodaja</option>
+                <option value="marketing">Marketing</option>
+                <option value="finansije">Finansije</option>
+              </select>
             </div>
           </div>
 
           <div class="form-two-col">
-            <div class="field">
-              <label for="contactPhone">Telefon</label>
-              <input
-                id="contactPhone"
-                class="input"
-                type="text"
-                placeholder="npr. 06x..."
-              />
-            </div>
-
             <div class="field">
               <label for="contactEmail">Email</label>
               <input
@@ -95,147 +91,92 @@
                 placeholder="npr. ime@firma.rs"
               />
             </div>
+
+            <div class="field">
+              <label for="contactPhone">Telefon</label>
+              <input
+                id="contactPhone"
+                class="input"
+                type="text"
+                placeholder="npr. 06x..."
+              />
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="form-section form-section-status">
-        <h4>Interna beleska</h4>
-        <p class="form-section-hint">Za slobodnu napomenu o klijentu. Aktivnosti, status i akcije vode se kroz drawer i tab Zadaci.</p>
-
-        <div class="field">
-          <label for="lastActionNote">Kratka beleska</label>
-          <textarea
-            id="lastActionNote"
-            class="input textarea"
-            placeholder="npr. Dogovoren pilot na lokaciji Galerija, cekamo termin."
-          ></textarea>
-        </div>
-      </section>
-
       <section class="form-section form-section-commercial">
-        <h4>Komercijalni pregled</h4>
-        <p class="form-section-hint">Dodatni prodajni kontekst koji ne mora svako iz tima da koristi svaki put.</p>
+        <h4>Komercijalni inputi</h4>
+        <p class="form-section-hint">Osnovni komercijalni kontekst za Customer Card.</p>
+
+        <div class="form-two-col">
+          <div class="field">
+            <label for="businessType">Tip delatnosti</label>
+            <select id="businessType" class="input">
+              <option value="">Izaberi</option>
+              <option value="apoteka">Apoteka</option>
+              <option value="maloprodaja">Maloprodaja</option>
+              <option value="ugostiteljstvo">Ugostiteljstvo</option>
+              <option value="usluge">Usluge</option>
+              <option value="drzavne_institucije">Drzavne institucije</option>
+              <option value="proizvodnja">Proizvodnja</option>
+              <option value="distribucija">Distribucija</option>
+              <option value="ostalo">Ostalo</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="revenueBand">Promet</label>
+            <select id="revenueBand" class="input">
+              <option value="">Izaberi</option>
+              <option value="small">Mali</option>
+              <option value="medium">Srednji</option>
+              <option value="large">Veliki</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-two-col">
+          <div class="field">
+            <label for="employeeCount">Broj zaposlenih</label>
+            <input id="employeeCount" class="input" type="number" min="0" step="1" />
+          </div>
+
+          <div class="field">
+            <label for="locationCount">Broj objekata</label>
+            <input id="locationCount" class="input" type="number" min="0" step="1" />
+          </div>
+        </div>
+
+        <div class="form-two-col">
+          <div class="field">
+            <label for="decisionLevel">Nivo odlucivanja</label>
+            <select id="decisionLevel" class="input">
+              <option value="">Izaberi</option>
+              <option value="owner">Vlasnik</option>
+              <option value="management">Management</option>
+              <option value="local">Lokalno</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="relationshipLevel">Odnos</label>
+            <select id="relationshipLevel" class="input">
+              <option value="">Izaberi</option>
+              <option value="new">Novi klijent</option>
+              <option value="communication">Imamo komunikaciju</option>
+              <option value="trust">Izgradjeno poverenje</option>
+            </select>
+          </div>
+        </div>
 
         <div class="field">
-          <label for="companySize">Velicina klijenta</label>
-          <select id="companySize" class="input" required>
+          <label for="innovationReady">Spremnost za inovacije</label>
+          <select id="innovationReady" class="input">
             <option value="">Izaberi</option>
-            <option value="1">Mali</option>
-            <option value="2-5">Srednji</option>
-            <option value="5+">Veliki</option>
+            <option value="yes">Da</option>
+            <option value="no">Ne</option>
           </select>
-        </div>
-
-        <div class="field">
-          <label for="decisionModel">Nacin odlucivanja</label>
-          <select id="decisionModel" class="input" required>
-            <option value="">Izaberi</option>
-            <option value="local">Vlasnik / direktno</option>
-            <option value="regional">Menadzer / lokalno</option>
-            <option value="central">Centrala / vise nivoa</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="revenueDriverPrimary">Revenue fokus</label>
-          <select id="revenueDriverPrimary" class="input" required>
-            <option value="">Izaberi</option>
-            <option value="services">Usluge</option>
-            <option value="core_assortment">Roba / asortiman</option>
-            <option value="promo_sales">Akcije / promo</option>
-            <option value="premium">Premium / konsulting</option>
-            <option value="consultative">Savetodajna prodaja</option>
-            <option value="projects">Projekti / piloti</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="leadTemperature">Koliko je lead zagrejan</label>
-          <select id="leadTemperature" class="input" required>
-            <option value="">Izaberi</option>
-            <option value="cold">Hladan</option>
-            <option value="warm">Topao</option>
-            <option value="hot">Vruc</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="budgetStatus">Budzet / spremnost</label>
-          <select id="budgetStatus" class="input" required>
-            <option value="">Izaberi</option>
-            <option value="unknown">Nepoznato</option>
-            <option value="exploring">Ispituju opcije</option>
-            <option value="planned">Planiran budzet</option>
-            <option value="approved">Odobren budzet</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="urgencyLevel">Urgentnost potrebe</label>
-          <select id="urgencyLevel" class="input" required>
-            <option value="">Izaberi</option>
-            <option value="low">Niska</option>
-            <option value="medium">Srednja</option>
-            <option value="high">Visoka</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="pilotReadiness">Spremnost za pilot</label>
-          <select id="pilotReadiness" class="input" required>
-            <option value="">Izaberi</option>
-            <option value="none">Nema interesa</option>
-            <option value="possible">Postoji potencijal</option>
-            <option value="discussed">Pilot je u razgovoru</option>
-            <option value="confirmed">Pilot dogovoren</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="relationshipStrength">Jacina odnosa</label>
-          <select id="relationshipStrength" class="input" required>
-            <option value="">Izaberi</option>
-            <option value="new">Novi kontakt</option>
-            <option value="working">Imamo komunikaciju</option>
-            <option value="trusted">Dobar odnos i poverenje</option>
-          </select>
-        </div>
-      </section>
-
-      <section id="dealInfoSection" class="form-section form-section-commercial" data-pro-feature="deal_info">
-        <h4>Deal info</h4>
-
-        <p id="dealInfoLockedNote" class="inline-upsell-note hidden">
-          Deal info je deo Pro paketa. Otkljucaj Pro za pracenje vrednosti prilike, verovatnoce i datuma odluke.
-        </p>
-
-        <div class="field">
-          <label for="dealValue">Procenjena vrednost prilike</label>
-          <input
-            id="dealValue"
-            class="input"
-            type="number"
-            min="0"
-            step="1"
-            placeholder="npr. 3500"
-          />
-        </div>
-
-        <div class="field">
-          <label for="dealProbability">Verovatnoca zatvaranja</label>
-          <select id="dealProbability" class="input">
-            <option value="">Izaberi</option>
-            <option value="25">25% - rano interesovanje</option>
-            <option value="50">50% - realna prilika</option>
-            <option value="75">75% - ozbiljni pregovori</option>
-            <option value="90">90% - pred zatvaranjem</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="expectedDecisionDate">Ocekivani datum odluke</label>
-          <input id="expectedDecisionDate" class="input" type="date" />
         </div>
       </section>
 

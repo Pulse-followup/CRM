@@ -1,32 +1,11 @@
 <section id="clientsView" class="view">
-  <div class="workspace-view-title workspace-view-title-compact">
-    <h2 id="clientsViewTitle">Klijenti - Bez workspace-a</h2>
+  <div class="workspace-view-title workspace-view-title-compact clients-view-header">
+    <h2 id="clientsViewTitle">Klijenti</h2>
   </div>
 
-  <section class="panel clients-toolbar-panel">
-    <div class="panel-head panel-head-row">
-      <div>
-        <h3>Klijenti</h3>
-        <p>Baza klijenata, pretraga, detalji i sinhronizacija kroz workspace.</p>
-      </div>
-
-      <div class="clients-toolbar-actions">
-        <button id="addClientBtnMobilePanel" class="btn btn-primary">+ Novi klijent</button>
-        <label for="importClientsInputMobilePanel" class="btn btn-secondary import-label">Import baze</label>
-        <button id="exportClientsBtnMobilePanel" class="btn btn-secondary">Export baze</button>
-        <input id="importClientsInputMobilePanel" type="file" accept="application/json" class="hidden-file-input" />
-      </div>
-    </div>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head panel-head-row">
-      <div>
-        <h3>Lista klijenata</h3>
-        <p>Jednostavan pregled statusa saradnje.</p>
-      </div>
-
-      <div class="panel-tools">
+  <section class="panel clients-list-shell">
+    <div class="clients-control-bar">
+      <div class="clients-control-search">
         <input
           type="search"
           id="clientSearch"
@@ -34,18 +13,40 @@
           placeholder="Pretraga klijenata..."
         />
       </div>
+
+      <div class="clients-toolbar-actions">
+        <button id="addClientBtnMobilePanel" class="btn btn-primary">+ Novi klijent</button>
+        <div class="clients-header-menu" data-clients-header-menu>
+          <button
+            id="clientsHeaderMenuToggle"
+            class="btn btn-secondary clients-header-menu-toggle"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="clientsHeaderMenu"
+          >
+            &hellip;
+          </button>
+          <div id="clientsHeaderMenu" class="clients-header-menu-popover hidden" aria-hidden="true">
+            <label for="importClientsInputMobilePanel" class="clients-header-menu-item import-label" data-clients-header-menu-close>Import baze</label>
+            <button id="exportClientsBtnMobilePanel" class="clients-header-menu-item" type="button" data-clients-header-menu-close>Export baze</button>
+          </div>
+        </div>
+        <input id="importClientsInputMobilePanel" type="file" accept="application/json" class="hidden-file-input" />
+      </div>
     </div>
 
     <div id="clientsModeBar" class="clients-mode-bar hidden">
       <span id="clientsModeLabel" class="badge info">Prikaz</span>
-      <button id="clearClientsModeBtn" class="btn btn-secondary btn-sm" type="button">Prikaži sve</button>
+      <button id="clearClientsModeBtn" class="btn btn-secondary btn-sm" type="button">Prikazi sve</button>
     </div>
 
     <div id="clientsList" class="cards-list"></div>
 
     <div id="clientsEmpty" class="empty-state hidden">
       <h4>Nema klijenata</h4>
-      <p>Klikni na “Novi klijent” i kreiraj prvi zapis.</p>
+      <p>Klikni na "Novi klijent" i kreiraj prvi zapis.</p>
+      <button id="addClientBtnEmpty" class="btn btn-primary clients-empty-action" type="button">+ Novi klijent</button>
     </div>
   </section>
 </section>

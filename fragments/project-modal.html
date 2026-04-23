@@ -1,0 +1,81 @@
+<div id="projectModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="projectModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="projectModalTitle">Novi projekat</h3>
+        <p id="projectModalSubtitle">Dodaj projekat za trenutno otvorenog klijenta.</p>
+      </div>
+
+      <button id="closeProjectModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <form id="projectForm" class="modal-body form-grid" novalidate>
+      <input type="hidden" id="projectId" />
+      <input type="hidden" id="projectClientId" />
+
+      <section class="form-section form-section-general">
+        <h4>Projekat</h4>
+
+        <div class="field">
+          <label for="projectName">Naziv projekta</label>
+          <input
+            id="projectName"
+            class="input"
+            type="text"
+            placeholder="npr. Kampanja april"
+            required
+          />
+        </div>
+
+        <div class="form-two-col">
+          <div class="field">
+            <label for="projectType">Tip</label>
+            <select id="projectType" class="input">
+              <option value="">Izaberi</option>
+              <option value="kampanja">Kampanja</option>
+              <option value="usluga">Usluga</option>
+              <option value="prodaja">Prodaja</option>
+              <option value="odrzavanje">Odrzavanje</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="projectFrequency">Frekvencija</label>
+            <select id="projectFrequency" class="input">
+              <option value="">Izaberi</option>
+              <option value="jednokratno">Jednokratno</option>
+              <option value="mesecno">Mesecno</option>
+              <option value="kontinuirano">Kontinuirano</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-two-col">
+          <div class="field">
+            <label for="projectEstimatedValue">Procenjena vrednost</label>
+            <input id="projectEstimatedValue" class="input" type="number" min="0" step="1" placeholder="npr. 5000" />
+          </div>
+
+          <div class="field">
+            <label for="projectStatus">Status</label>
+            <select id="projectStatus" class="input">
+              <option value="">Izaberi</option>
+              <option value="aktivan">Aktivan</option>
+              <option value="pauza">Pauza</option>
+              <option value="zavrsen">Zavrsen</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <div class="form-actions">
+        <div class="form-actions-right">
+          <button type="button" id="cancelProjectBtn" class="btn btn-secondary">Otkazi</button>
+          <button type="submit" class="btn btn-primary">Sacuvaj projekat</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>

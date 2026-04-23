@@ -5,8 +5,13 @@
 
   <section class="panel">
     <div class="panel-head">
-      <h3>Skorasnje aktivnosti</h3>
-      <p id="teamFeedHint">Ovde ces videti sta je tim poslednje radio nad klijentima i workspace-om.</p>
+      <h3>Ko radi sta</h3>
+      <p id="teamFeedHint">Snapshot taskova kroz tim.</p>
+    </div>
+
+    <div class="task-filter-row" id="teamTaskFilterRow">
+      <button class="btn btn-secondary btn-sm is-active" type="button" data-team-task-filter="all">Svi</button>
+      <button class="btn btn-secondary btn-sm" type="button" data-team-task-filter="mine">Moji</button>
     </div>
 
     <div class="field team-client-filter">
@@ -16,11 +21,11 @@
       </select>
     </div>
 
-    <div id="teamActivityEmpty" class="empty-state">
-      <h4>Jos nema timskih aktivnosti</h4>
-      <p>Cim evidentiras novu aktivnost ili status nad klijentom, ovde ce se pojaviti trag za ceo workspace.</p>
-    </div>
+    <div id="teamActivityList" class="team-task-list"></div>
 
-    <div id="teamActivityList" class="cards-list hidden"></div>
+    <div id="teamActivityEmpty" class="empty-state hidden">
+      <h4>Jos nema aktivnosti u timu</h4>
+      <p>Kada tim krene da dodeljuje i delegira taskove, ovde ces videti ko radi sta.</p>
+    </div>
   </section>
 </section>

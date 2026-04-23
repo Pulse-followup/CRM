@@ -1,0 +1,29 @@
+<div id="projectTasksModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="projectTasksModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="projectTasksModalTitle">Taskovi projekta</h3>
+        <p id="projectTasksModalSubtitle">Minimalni pregled taskova za izabrani projekat.</p>
+      </div>
+
+      <button id="closeProjectTasksModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <div class="modal-body">
+      <div id="projectTasksList" class="task-modal-list"></div>
+
+      <div id="projectTasksEmpty" class="empty-state compact hidden">
+        <p>Nema taskova</p>
+      </div>
+
+      <div class="form-actions">
+        <div class="form-actions-right">
+          <button type="button" id="newTaskFromProjectTasksBtn" class="btn btn-secondary">Novi task</button>
+          <button type="button" id="closeProjectTasksBtn" class="btn btn-primary">Zatvori</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

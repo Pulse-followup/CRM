@@ -1,0 +1,39 @@
+<div id="taskDelegateModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="taskDelegateModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3>Delegiraj task</h3>
+        <p>Napravi novi task za drugog korisnika.</p>
+      </div>
+
+      <button id="closeTaskDelegateModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <form id="taskDelegateForm" class="modal-body form-grid" novalidate>
+      <input type="hidden" id="delegateTaskId" />
+
+      <section class="form-section form-section-general">
+        <div class="field">
+          <label for="delegateTaskAssignee">Korisnik</label>
+          <select id="delegateTaskAssignee" class="input">
+            <option value="">Izaberi korisnika</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="delegateTaskDescription">Opis</label>
+          <textarea id="delegateTaskDescription" class="input textarea" placeholder="Opciona napomena za novi task"></textarea>
+        </div>
+      </section>
+
+      <div class="form-actions">
+        <div class="form-actions-right">
+          <button type="button" id="cancelTaskDelegateBtn" class="btn btn-secondary">Otkazi</button>
+          <button type="submit" class="btn btn-primary">Potvrdi</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>

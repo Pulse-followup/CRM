@@ -1,0 +1,67 @@
+<div id="taskModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="taskModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="taskModalTitle">Novi task</h3>
+        <p id="taskModalSubtitle">Dodaj task za izabrani projekat.</p>
+      </div>
+
+      <button id="closeTaskModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <form id="taskForm" class="modal-body form-grid" novalidate>
+      <input type="hidden" id="taskProjectId" />
+
+      <section class="form-section form-section-general">
+        <h4>Task</h4>
+
+        <div class="field">
+          <label for="taskActionType">Tip akcije</label>
+          <select id="taskActionType" class="input">
+            <option value="">Izaberi</option>
+            <option value="poziv">Poziv</option>
+            <option value="poruka">Poruka</option>
+            <option value="email">Email</option>
+            <option value="sastanak">Sastanak</option>
+            <option value="ponuda">Ponuda</option>
+            <option value="prodaja">Prodaja</option>
+            <option value="usluga">Usluga</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="taskTitle">Naslov</label>
+          <input id="taskTitle" class="input" type="text" placeholder="npr. Pozvati klijenta za potvrdu termina" />
+        </div>
+
+        <div class="field">
+          <label for="taskDescription">Opis</label>
+          <textarea id="taskDescription" class="input textarea" placeholder="Kratak opis taska"></textarea>
+        </div>
+
+        <div class="form-two-col">
+          <div class="field">
+            <label for="taskAssignedTo">Dodeljen korisniku</label>
+            <select id="taskAssignedTo" class="input">
+              <option value="">Izaberi korisnika</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="taskDueDate">Rok</label>
+            <input id="taskDueDate" class="input" type="date" />
+          </div>
+        </div>
+      </section>
+
+      <div class="form-actions">
+        <div class="form-actions-right">
+          <button type="button" id="cancelTaskBtn" class="btn btn-secondary">Otkazi</button>
+          <button type="submit" class="btn btn-primary">Sacuvaj task</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>

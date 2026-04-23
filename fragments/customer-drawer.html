@@ -14,52 +14,18 @@
     <div class="drawer-body">
       <section class="drawer-section section-accent-neutral">
         <div class="section-head section-head-row">
-          <h4>Istorija aktivnosti</h4>
-        </div>
-
-        <div id="timelineList" class="timeline-list"></div>
-
-        <div id="timelineEmpty" class="empty-state compact hidden">
-          <p>Nema evidentiranih aktivnosti.</p>
-        </div>
-      </section>
-
-      <section class="drawer-section section-accent-neutral">
-        <div class="section-head section-head-row">
           <h4>Osnovni podaci</h4>
           <button id="editClientBtnDrawer" class="btn btn-secondary btn-sm">Izmeni podatke</button>
         </div>
 
         <div class="detail-groups">
           <div class="detail-group">
-            <h5>Kontakt i firma</h5>
+            <h5>Osnovni podaci</h5>
             <dl class="detail-list">
               <div>
-                <dt>Naziv klijenta</dt>
+                <dt>Naziv</dt>
                 <dd id="detailClientName">-</dd>
               </div>
-              <div>
-                <dt>Kontakt osoba</dt>
-                <dd id="detailContactPerson">-</dd>
-              </div>
-              <div>
-                <dt>Funkcija</dt>
-                <dd id="detailContactRole">-</dd>
-              </div>
-              <div>
-                <dt>Telefon</dt>
-                <dd id="detailPhone">-</dd>
-              </div>
-              <div>
-                <dt>Email</dt>
-                <dd id="detailEmail">-</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div class="detail-group">
-            <h5>Lokacija</h5>
-            <dl class="detail-list">
               <div>
                 <dt>Grad</dt>
                 <dd id="detailCity">-</dd>
@@ -73,117 +39,76 @@
         </div>
       </section>
 
-      <details class="drawer-fold">
-        <summary class="drawer-fold-summary">Sledeci korak i status</summary>
-        <section class="drawer-section section-accent-neutral">
-          <div class="detail-groups">
-            <div class="detail-group">
-              <dl class="detail-list">
-                <div>
-                  <dt>Trenutni status</dt>
-                  <dd id="detailStage">-</dd>
-                </div>
-                <div>
-                  <dt>Sledeci korak</dt>
-                  <dd id="detailNextStep">-</dd>
-                </div>
-                <div>
-                  <dt>Rok</dt>
-                  <dd id="detailNextStepDate">-</dd>
-                </div>
-                <div>
-                  <dt>Poslednja beleska</dt>
-                  <dd id="detailLastActionNote">-</dd>
-                </div>
-              </dl>
-            </div>
+      <section class="drawer-section section-accent-neutral">
+        <div class="section-head section-head-row">
+          <h4>Kontakti</h4>
+        </div>
+
+        <div id="contactsList" class="detail-groups"></div>
+
+        <div id="contactsEmpty" class="empty-state compact hidden">
+          <p>Nema unetih kontakata</p>
+        </div>
+      </section>
+
+      <section class="drawer-section section-accent-neutral">
+        <div class="section-head section-head-row">
+          <h4>Komercijalni inputi</h4>
+        </div>
+
+        <div class="detail-groups">
+          <div class="detail-group">
+            <dl class="detail-list">
+              <div>
+                <dt>Tip delatnosti</dt>
+                <dd id="detailBusinessType">-</dd>
+              </div>
+              <div>
+                <dt>Promet</dt>
+                <dd id="detailRevenueBand">-</dd>
+              </div>
+              <div>
+                <dt>Broj zaposlenih</dt>
+                <dd id="detailEmployeeCount">-</dd>
+              </div>
+              <div>
+                <dt>Broj objekata</dt>
+                <dd id="detailLocationCount">-</dd>
+              </div>
+              <div>
+                <dt>Nivo odlucivanja</dt>
+                <dd id="detailDecisionLevel">-</dd>
+              </div>
+              <div>
+                <dt>Odnos</dt>
+                <dd id="detailRelationshipLevel">-</dd>
+              </div>
+              <div>
+                <dt>Spremnost za inovacije</dt>
+                <dd id="detailInnovationReady">-</dd>
+              </div>
+            </dl>
           </div>
-        </section>
-      </details>
+        </div>
+      </section>
 
-      <details class="drawer-fold">
-        <summary class="drawer-fold-summary">Komercijalni pregled</summary>
-        <section class="drawer-section section-accent-neutral">
-          <div class="detail-groups">
-            <div class="detail-group">
-              <h5>Deal info</h5>
-              <dl class="detail-list">
-                <div>
-                  <dt>Vrednost prilike</dt>
-                  <dd id="detailDealValue">-</dd>
-                </div>
-                <div>
-                  <dt>Verovatnoca</dt>
-                  <dd id="detailDealProbability">-</dd>
-                </div>
-                <div>
-                  <dt>Ocekivana odluka</dt>
-                  <dd id="detailExpectedDecisionDate">-</dd>
-                </div>
-              </dl>
-            </div>
+      <section class="drawer-section section-accent-neutral">
+        <div class="section-head section-head-row">
+          <h4>Projekti</h4>
+          <button id="newProjectBtnDrawer" class="btn btn-secondary btn-sm">Novi projekat</button>
+        </div>
 
-            <div class="detail-group">
-              <h5>Komercijalni signal</h5>
-              <dl class="detail-list">
-                <div>
-                  <dt>Komercijalni potencijal</dt>
-                  <dd id="assessmentScale">-</dd>
-                </div>
-                <div>
-                  <dt>Spremnost za kupovinu</dt>
-                  <dd id="assessmentComplexity">-</dd>
-                </div>
-                <div>
-                  <dt>Momentum naloga</dt>
-                  <dd id="assessmentPotential">-</dd>
-                </div>
-              </dl>
-            </div>
-          </div>
-        </section>
-      </details>
+        <div id="projectsList" class="project-list"></div>
 
-      <details class="drawer-fold">
-        <summary class="drawer-fold-summary">Naplata</summary>
-        <section class="drawer-section section-accent-neutral">
-          <div class="payment-inline-box">
-            <span id="paymentSummaryBadgeInline" class="badge neutral">Naplata: bez podataka</span>
-            <p id="paymentSummaryTextInline">Nema podataka o naplati.</p>
-          </div>
+        <div id="projectsEmpty" class="empty-state compact hidden">
+          <p>Nema projekata</p>
+        </div>
 
-          <div class="quick-actions-scroll">
-            <button id="openPaymentModalBtnSecondary" class="btn btn-secondary" data-pro-feature="payments">Otvori naplatu</button>
-          </div>
-        </section>
-      </details>
-
-      <details class="drawer-fold">
-        <summary class="drawer-fold-summary">Analiza</summary>
-        <section class="drawer-section section-accent-primary">
-          <div class="section-head">
-            <h4>Pulse Score</h4>
-          </div>
-
-          <div class="customer-score-wrap">
-            <strong id="detailPulseScore" class="pulse-score-value">0%</strong>
-            <span id="detailPulseBand" class="pulse-score-band">Aktivno</span>
-            <p id="detailPulseExplanation" class="pulse-score-explanation">Score se formira iz potencijala, spremnosti i momentuma.</p>
-          </div>
-
-          <div class="signal-grid" data-pro-feature="pulse_score">
-            <div class="signal-box signal-box-positive">
-              <h5>Pozitivni signali</h5>
-              <ul id="positiveSignalsList" class="signal-list"></ul>
-            </div>
-
-            <div class="signal-box signal-box-risk">
-              <h5>Rizici / red flags</h5>
-              <ul id="riskSignalsList" class="signal-list"></ul>
-            </div>
-          </div>
-        </section>
-      </details>
+        <details id="archivedProjectsBlock" class="archived-projects hidden">
+          <summary>Arhivirani projekti</summary>
+          <div id="archivedProjectsList" class="project-list"></div>
+        </details>
+      </section>
     </div>
   </div>
 </aside>

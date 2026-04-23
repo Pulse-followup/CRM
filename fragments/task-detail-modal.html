@@ -1,0 +1,31 @@
+<div id="taskDetailModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="taskDetailModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="taskDetailModalTitle">Task</h3>
+        <p id="taskDetailModalSubtitle">Detalji i akcije taska.</p>
+      </div>
+
+      <button id="closeTaskDetailModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="task-detail-box">
+        <p id="taskDetailStatus">Status: -</p>
+        <p id="taskDetailDueDate">Rok: -</p>
+        <p id="taskDetailAssignedTo">Dodeljeno: -</p>
+        <p id="taskDetailDescription">Opis: -</p>
+      </div>
+
+      <div id="taskDetailActions" class="task-detail-actions"></div>
+
+      <div class="form-actions">
+        <div class="form-actions-right">
+          <button type="button" id="closeTaskDetailBtn" class="btn btn-secondary">Zatvori</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
