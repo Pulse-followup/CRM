@@ -135,10 +135,6 @@ function bindStaticEvents() {
   });
   document.addEventListener("click", handleClientsHeaderMenuDocumentClick);
 
-  document.querySelectorAll("[data-task-list-filter]").forEach(button => {
-    button.addEventListener("click", () => setTaskListFilter(button.dataset.taskListFilter || "all"));
-  });
-
   document.querySelectorAll("[data-team-task-filter]").forEach(button => {
     button.addEventListener("click", () => setTeamTaskFilter(button.dataset.teamTaskFilter || "all"));
   });

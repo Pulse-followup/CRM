@@ -1,5 +1,4 @@
 let currentTaskDueFilter = "all";
-let currentTaskListFilter = "all";
 let currentTeamTaskFilter = "all";
 let currentTeamClientFilter = "all";
 let currentBillingClientFilter = "all";
@@ -142,11 +141,6 @@ function setTaskDueFilter(filter = "all") {
   renderDashboard();
 }
 
-function setTaskListFilter(filter = "all") {
-  currentTaskListFilter = ["all", "active", "mine"].includes(filter) ? filter : "all";
-  renderDashboard();
-}
-
 function setTeamTaskFilter(filter = "all") {
   currentTeamTaskFilter = ["all", "mine"].includes(filter) ? filter : "all";
   renderTeamView();
@@ -248,13 +242,9 @@ function isGlobalTaskOverdue(task) {
 
 function getGlobalTaskSortGroup(entry) {
   if (entry.overdue) return 0;
-  switch (entry.task.status) {
-    case "u_radu": return 1;
-    case "dodeljen": return 2;
-    case "na_cekanju": return 3;
-    case "zavrsen": return 4;
-    default: return 5;
-  }
+  if (entry.isDueToday) return 1;
+  if (entry.isFuture) return 2;
+  return 3;
 }
 
 function getGlobalTaskDueSortValue(task) {
@@ -263,29 +253,32 @@ function getGlobalTaskDueSortValue(task) {
 }
 
 function getGlobalTaskEntries() {
+  const todayStart = getLocalDayStart().getTime();
   return getAllTasks().map(task => ({
     task,
     project: getProjectById(task.projectId),
     client: clients.find(client => String(client.id) === String(task.clientId)),
-    overdue: isGlobalTaskOverdue(task)
+    overdue: isGlobalTaskOverdue(task),
+    dueSortValue: getGlobalTaskDueSortValue(task),
+    isDueToday: getTaskListDueDay(task?.dueDate)?.getTime() === todayStart,
+    isFuture: (getTaskListDueDay(task?.dueDate)?.getTime() || 0) > todayStart
   }));
 }
 
 function getVisibleGlobalTaskEntries() {
   const currentUserId = String(supabaseUser?.id || "");
+  const allowedStatuses = new Set(["dodeljen", "u_radu", "na_cekanju"]);
   return getGlobalTaskEntries()
-    .filter(entry => {
-      if (currentTaskListFilter === "active") return entry.task.status !== "zavrsen";
-      if (currentTaskListFilter === "mine") {
-        return currentUserId && String(entry.task.assignedToUserId || entry.task.assignedTo || "") === currentUserId;
-      }
-      return true;
-    })
+    .filter(entry =>
+      currentUserId &&
+      String(entry.task.assignedToUserId || entry.task.assignedTo || "") === currentUserId &&
+      allowedStatuses.has(String(entry.task.status || ""))
+    )
     .sort((a, b) => {
       const groupDiff = getGlobalTaskSortGroup(a) - getGlobalTaskSortGroup(b);
       if (groupDiff !== 0) return groupDiff;
 
-      const dueDiff = getGlobalTaskDueSortValue(a.task) - getGlobalTaskDueSortValue(b.task);
+      const dueDiff = a.dueSortValue - b.dueSortValue;
       if (dueDiff !== 0) return dueDiff;
 
       const projectDiff = String(a.project?.name || "").localeCompare(String(b.project?.name || ""), "sr");
@@ -296,10 +289,6 @@ function getVisibleGlobalTaskEntries() {
 }
 
 function renderDashboard() {
-  document.querySelectorAll("[data-task-list-filter]").forEach(button => {
-    button.classList.toggle("is-active", button.dataset.taskListFilter === currentTaskListFilter);
-  });
-
   renderCardCollection("taskList", "taskListEmpty", getVisibleGlobalTaskEntries(), entry => createGlobalTaskListRow(entry));
 }
 
