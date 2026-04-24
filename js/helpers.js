@@ -941,14 +941,12 @@ function switchView(viewId) {
     topbar.classList.add("topbar-hidden");
   }
 
-  const workspaceName = currentWorkspace?.name || "Bez workspace-a";
-
   if (clientsViewTitle) {
     clientsViewTitle.textContent = "Klijenti";
   }
 
   if (actionsViewTitle) {
-    actionsViewTitle.textContent = `Tim - ${workspaceName}`;
+    actionsViewTitle.textContent = "Tim";
   }
 
   if (!title || !subtitle) return;

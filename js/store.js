@@ -471,6 +471,15 @@ async function resolveClientSource(options = {}) {
       if (!silent) {
         showToast("Workspace klijenti nisu ucitani, prikazujem lokalni cache.");
       }
+    } else if (typeof getWorkspaceClientsProbe === "function" && canUseTeamFeatures() && currentWorkspace?.id) {
+      const probe = getWorkspaceClientsProbe();
+      if (!probe.ok) {
+        console.warn("[Pulse Clients] Workspace source unavailable, falling back to local cache.", {
+          workspaceId: currentWorkspace?.id || null,
+          reason: probe.code,
+          message: probe.message
+        });
+      }
     }
 
     const loadedCache = loadClients();
@@ -493,9 +502,13 @@ function mapClientRowToLocal(row) {
   const payment = row.payment && typeof row.payment === "object"
     ? row.payment
     : {};
+  const rowCommercialInputs = row.commercial_inputs && typeof row.commercial_inputs === "object"
+    ? row.commercial_inputs
+    : {};
   const commercialInputs = getClientCommercialInputs({
+    ...rowCommercialInputs,
     payment,
-    businessType: row.business_type || ""
+    businessType: row.business_type || rowCommercialInputs.businessType || ""
   });
 
   return {

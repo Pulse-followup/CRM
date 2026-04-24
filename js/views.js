@@ -858,13 +858,92 @@ function renderTeamView() {
   renderTeamClientFilter();
   const items = getVisibleTeamTaskEntries();
 
-  setTextIfExists("actionsViewTitle", currentWorkspace ? `Tim - ${currentWorkspace.name}` : "Tim - Bez workspace-a");
-  setTextIfExists(
-    "teamFeedHint",
-    currentWorkspace
-      ? `Snapshot taskova unutar workspace-a ${currentWorkspace.name}.`
-      : "Kad tim krene da radi sa taskovima, ovde ces videti ko kome sta radi."
+  setTextIfExists("actionsViewTitle", "Tim");
+
+  document.querySelectorAll("[data-team-task-filter]").forEach(button => {
+    button.classList.toggle("is-active", button.dataset.teamTaskFilter === currentTeamTaskFilter);
+  });
+
+  if (!list || !empty) return;
+
+  list.innerHTML = "";
+  items.forEach(item => list.appendChild(createTeamActivityCard(item)));
+  empty.classList.toggle("hidden", items.length > 0);
+}
+
+function isTechnicalTeamLabel(value) {
+  const label = String(value || "").trim();
+  if (!label) return true;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(label);
+}
+
+function getTeamPersonLabel(primaryLabel, personId, fallbackValue = "") {
+  const resolvedLabel = String(primaryLabel || "").trim();
+  if (resolvedLabel && !isTechnicalTeamLabel(resolvedLabel)) return resolvedLabel;
+
+  const teamLabel = String(getTeamMemberNameById(personId, "") || "").trim();
+  if (teamLabel && !isTechnicalTeamLabel(teamLabel)) return teamLabel;
+
+  const fallbackLabel = String(fallbackValue || "").trim();
+  if (fallbackLabel && !isTechnicalTeamLabel(fallbackLabel)) return fallbackLabel;
+
+  return "";
+}
+
+function getTeamTaskFlowLabel(task) {
+  const assignedLabel = getTeamPersonLabel(
+    task.assignedToLabel,
+    task.assignedToUserId || task.assignedTo,
+    task.assignedTo
   );
+  const sourceLabel = getTeamPersonLabel(
+    task.delegatedByLabel || task.createdByLabel,
+    task.delegatedByUserId || task.createdByUserId
+  );
+
+  if (sourceLabel && assignedLabel) return `${sourceLabel} → ${assignedLabel}`;
+  if (assignedLabel) return `Sistem → ${assignedLabel}`;
+  if (sourceLabel) return sourceLabel;
+  return "Tim";
+}
+
+function createTeamActivityCard(entry) {
+  const row = document.createElement("button");
+  const taskTypeLabel = taskActionTypeLabel(entry.task.actionType) || "Task";
+  const projectLabel = String(entry.project?.name || "").trim();
+  const dueLabel = taskDueDateShortLabel(entry.task.dueDate);
+  const status = getTeamTaskDisplayStatus(entry.task, entry.overdue);
+  const metaParts = [`#${entry.task.sequenceNumber || "-"}`, taskTypeLabel];
+
+  if (projectLabel) {
+    metaParts.push(projectLabel);
+  }
+
+  metaParts.push(dueLabel);
+
+  row.type = "button";
+  row.className = "team-task-row";
+  row.innerHTML = `
+    <span class="team-task-line-top">
+      <span class="team-task-flow">${escapeHtml(getTeamTaskFlowLabel(entry.task))}</span>
+      <span class="badge neutral team-client-badge">${escapeHtml(entry.client?.name || "Klijent")}</span>
+    </span>
+    <span class="team-task-line-bottom">
+      <span class="team-task-meta">${metaParts.map(part => escapeHtml(part)).join(" &bull; ")}</span>
+      <span class="${status.className}">${escapeHtml(status.label)}</span>
+    </span>
+  `;
+  row.addEventListener("click", () => openTaskDetailModal(entry.task.id));
+  return row;
+}
+
+function renderTeamView() {
+  const list = document.getElementById("teamActivityList");
+  const empty = document.getElementById("teamActivityEmpty");
+  renderTeamClientFilter();
+  const items = getVisibleTeamTaskEntries();
+
+  setTextIfExists("actionsViewTitle", "Tim");
 
   document.querySelectorAll("[data-team-task-filter]").forEach(button => {
     button.classList.toggle("is-active", button.dataset.teamTaskFilter === currentTeamTaskFilter);

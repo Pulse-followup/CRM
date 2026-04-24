@@ -157,7 +157,33 @@ function taskMemberLabel(member) {
 function getCurrentTaskUserMetadata() {
   return {
     userId: supabaseUser?.id ? String(supabaseUser.id) : null,
-    label: getCurrentUserDisplayName()
+    label: getCurrentUserDisplayName(),
+    role: normalizeWorkspaceRole(currentMembership?.role || "member"),
+    isAdmin: isCurrentUserAdminRole()
+  };
+}
+
+function getTaskAssignedUserId(task) {
+  return String(task?.assignedToUserId || task?.assignedTo || "").trim();
+}
+
+function getTaskPermissionContext(task) {
+  const currentUser = getCurrentTaskUserMetadata();
+  const currentUserId = String(currentUser.userId || "").trim();
+  const assignedUserId = getTaskAssignedUserId(task);
+  const isOwner = Boolean(currentUserId && assignedUserId && assignedUserId === currentUserId);
+  const isAdmin = Boolean(currentUser.isAdmin);
+
+  return {
+    currentUser,
+    currentUserId,
+    assignedUserId,
+    isOwner,
+    isAdmin,
+    isNonOwner: !isOwner && !isAdmin,
+    canTakeOver: Boolean(currentUserId && !isOwner),
+    canDelegate: Boolean(isOwner || isAdmin),
+    canManageStatus: Boolean(isOwner || isAdmin)
   };
 }
 
@@ -554,24 +580,38 @@ function renderTaskDetailActions(task) {
   const actions = document.getElementById("taskDetailActions");
   if (!actions) return;
 
+  const permissions = getTaskPermissionContext(task);
   const buttons = [];
   const addAction = (label, status, className = "btn btn-secondary") => {
     buttons.push(`<button type="button" class="${className}" data-task-next-status="${status}">${label}</button>`);
   };
 
-  if (task.status === "dodeljen") {
+  if (permissions.isOwner) {
+    if (task.status === "dodeljen") {
+      addAction("Preuzmi", "u_radu", "btn btn-primary");
+      addAction("Na cekanju", "na_cekanju");
+      buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
+    } else if (task.status === "u_radu") {
+      addAction("Zavrsi", "zavrsen", "btn btn-primary");
+      addAction("Na cekanju", "na_cekanju");
+      buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
+    } else if (task.status === "na_cekanju") {
+      addAction("Vrati u rad", "u_radu", "btn btn-primary");
+      buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
+    } else if (task.status === "zavrsen" && permissions.isAdmin) {
+      addAction("Posalji na naplatu", "poslat_na_naplatu", "btn btn-primary");
+    }
+  } else if (permissions.isAdmin) {
+    if (task.status === "zavrsen") {
+      addAction("Posalji na naplatu", "poslat_na_naplatu", "btn btn-primary");
+    } else {
+      if (permissions.canTakeOver) {
+        addAction("Preuzmi", "u_radu", "btn btn-primary");
+      }
+      buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
+    }
+  } else if (permissions.isNonOwner && permissions.canTakeOver) {
     addAction("Preuzmi", "u_radu", "btn btn-primary");
-    buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
-    addAction("Na cekanju", "na_cekanju");
-  } else if (task.status === "u_radu") {
-    addAction("Zavrsi", "zavrsen", "btn btn-primary");
-    addAction("Na cekanju", "na_cekanju");
-    buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
-  } else if (task.status === "na_cekanju") {
-    addAction("Vrati u rad", "u_radu", "btn btn-primary");
-    buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
-  } else if (task.status === "zavrsen" && isCurrentUserAdminRole()) {
-    addAction("Posalji na naplatu", "poslat_na_naplatu", "btn btn-primary");
   }
 
   actions.innerHTML = buttons.length
@@ -593,12 +633,32 @@ function handleTaskStatusChange(nextStatus) {
     return;
   }
 
-  if (nextStatus === "poslat_na_naplatu" && !isCurrentUserAdminRole()) {
-    showToast("Samo admin moze da posalje task na naplatu.");
+  const permissions = getTaskPermissionContext(task);
+
+  if (nextStatus === "poslat_na_naplatu") {
+    if (!permissions.isAdmin) {
+      showToast("Samo admin moze da posalje task na naplatu.");
+      return;
+    }
+    if (task.status !== "zavrsen") {
+      showToast("Na naplatu se salje tek zavrsen task.");
+      return;
+    }
+  } else if (!permissions.canManageStatus && !(nextStatus === "u_radu" && permissions.canTakeOver)) {
+    showToast("Nemate pravo da menjate status ovog taska.");
     return;
   }
 
-  const updatedTask = updateTaskStatus(task.id, nextStatus);
+  const updatedTask =
+    nextStatus === "u_radu" && permissions.canTakeOver && !permissions.isOwner
+      ? saveTask({
+          ...task,
+          assignedTo: permissions.currentUser.userId || task.assignedTo,
+          assignedToUserId: permissions.currentUser.userId || task.assignedToUserId,
+          assignedToLabel: permissions.currentUser.label || task.assignedToLabel || task.assignedTo || "",
+          status: "u_radu"
+        })
+      : updateTaskStatus(task.id, nextStatus);
   if (!updatedTask) {
     showToast("Status taska nije sacuvan.");
     return;
@@ -606,13 +666,22 @@ function handleTaskStatusChange(nextStatus) {
 
   refreshTaskProjectUi(updatedTask.projectId);
   renderTaskDetailModal(updatedTask);
-  showToast("Status taska je azuriran.");
+  showToast(
+    nextStatus === "u_radu" && permissions.canTakeOver && !permissions.isOwner
+      ? "Task je preuzet."
+      : "Status taska je azuriran."
+  );
 }
 
 function openTaskDelegateModal(taskId) {
   const task = getTaskById(taskId);
   if (!task) {
     showToast("Task nije pronadjen.");
+    return;
+  }
+
+  if (!getTaskPermissionContext(task).canDelegate) {
+    showToast("Samo vlasnik taska ili admin mogu da delegiraju.");
     return;
   }
 
@@ -657,6 +726,12 @@ function handleTaskDelegateSubmit(e) {
   const task = getTaskById(getValue("delegateTaskId"));
   if (!task) {
     showToast("Task nije pronadjen.");
+    return;
+  }
+
+  const permissions = getTaskPermissionContext(task);
+  if (!permissions.canDelegate) {
+    showToast("Samo vlasnik taska ili admin mogu da delegiraju.");
     return;
   }
 

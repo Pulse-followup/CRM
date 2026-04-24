@@ -9,6 +9,12 @@ let currentWorkspaceInvites = [];
 let isEditingWorkspaceName = false;
 let workspaceClientsReady = false;
 let workspaceActivitiesReady = false;
+let workspaceClientsProbe = {
+  ok: false,
+  code: "idle",
+  message: "",
+  count: null
+};
 const MEMBER_DIRECTORY_KEY = "pulse_workspace_member_directory_v1";
 const WORKSPACE_INVITE_CODE_KEY = "pulse_workspace_invite_code_v1";
 const WORKSPACE_INVITE_QUERY_PARAM = "invite";
@@ -266,6 +272,20 @@ function canUseWorkspaceActivityStore() {
   return Boolean(canUseTeamFeatures() && currentWorkspace?.id && workspaceActivitiesReady);
 }
 
+function getWorkspaceClientsProbe() {
+  return { ...workspaceClientsProbe };
+}
+
+function setWorkspaceClientsProbe(next = {}) {
+  workspaceClientsProbe = {
+    ok: Boolean(next.ok),
+    code: String(next.code || "unknown"),
+    message: String(next.message || ""),
+    count: Number.isFinite(next.count) ? next.count : null
+  };
+  return getWorkspaceClientsProbe();
+}
+
 function isMissingRelationError(error) {
   return Boolean(error?.message && /relation .* does not exist/i.test(error.message));
 }
@@ -291,18 +311,80 @@ async function detectTeamSchema() {
 }
 
 async function detectWorkspaceClientsStore() {
-  if (!canUseTeamFeatures() || !currentWorkspace?.id) {
+  if (!supabaseClient) {
     workspaceClientsReady = false;
+    setWorkspaceClientsProbe({
+      ok: false,
+      code: "no_supabase_client",
+      message: "Supabase client nije inicijalizovan."
+    });
     return false;
   }
 
-  const { error } = await supabaseClient
+  if (!supabaseUser) {
+    workspaceClientsReady = false;
+    setWorkspaceClientsProbe({
+      ok: false,
+      code: "no_supabase_session",
+      message: "Supabase sesija nije aktivna."
+    });
+    return false;
+  }
+
+  if (!teamSchemaReady) {
+    workspaceClientsReady = false;
+    setWorkspaceClientsProbe({
+      ok: false,
+      code: "team_schema_unavailable",
+      message: "Workspace schema nije dostupan."
+    });
+    return false;
+  }
+
+  if (!currentWorkspace?.id) {
+    workspaceClientsReady = false;
+    setWorkspaceClientsProbe({
+      ok: false,
+      code: "no_workspace",
+      message: "Nema aktivnog workspace-a."
+    });
+    return false;
+  }
+
+  const { count, error } = await supabaseClient
     .from("clients")
-    .select("id")
+    .select("id", { head: true, count: "exact" })
     .eq("workspace_id", currentWorkspace.id)
     .limit(1);
 
-  workspaceClientsReady = !error;
+  if (error) {
+    workspaceClientsReady = false;
+    const probe = setWorkspaceClientsProbe({
+      ok: false,
+      code: error.code || "clients_query_failed",
+      message: error.message || "Clients query nije uspela."
+    });
+    console.warn("[Pulse Clients] Supabase clients probe failed.", {
+      workspaceId: currentWorkspace.id,
+      code: probe.code,
+      message: probe.message,
+      details: error.details || null,
+      hint: error.hint || null
+    });
+    return false;
+  }
+
+  workspaceClientsReady = true;
+  const probe = setWorkspaceClientsProbe({
+    ok: true,
+    code: "ok",
+    message: "Clients tabela je dostupna.",
+    count
+  });
+  console.info("[Pulse Clients] Supabase clients probe ok.", {
+    workspaceId: currentWorkspace.id,
+    count: probe.count
+  });
   return workspaceClientsReady;
 }
 
@@ -864,7 +946,7 @@ function renderSessionUI() {
         : "Bez workspace-a"
   );
   setTextIfExists("clientsViewTitle", "Klijenti");
-  setTextIfExists("actionsViewTitle", `Tim - ${workspaceName}`);
+  setTextIfExists("actionsViewTitle", "Tim");
   setTextIfExists(
     "settingsProfileHint",
     isCloudEnabled() ? "Profil je povezan sa Supabase nalogom." : "Prijavi se u Pulse cloud da bismo povezali nalog i workspace."
