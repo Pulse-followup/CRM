@@ -1,31 +1,27 @@
 <section id="actionsView" class="view">
-  <div class="workspace-view-title workspace-view-title-compact">
-    <h2 id="actionsViewTitle">Tim - Bez workspace-a</h2>
+  <div class="workspace-view-title workspace-view-title-compact team-view-header">
+    <h2 id="actionsViewTitle">Tim</h2>
   </div>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h3>Ko radi sta</h3>
-      <p id="teamFeedHint">Snapshot taskova kroz tim.</p>
-    </div>
+  <section class="panel team-view-shell">
+    <div class="team-view-controls">
+      <div class="task-filter-row" id="teamTaskFilterRow">
+        <button class="btn btn-secondary btn-sm is-active" type="button" data-team-task-filter="all">Svi</button>
+        <button class="btn btn-secondary btn-sm" type="button" data-team-task-filter="mine">Moji</button>
+      </div>
 
-    <div class="task-filter-row" id="teamTaskFilterRow">
-      <button class="btn btn-secondary btn-sm is-active" type="button" data-team-task-filter="all">Svi</button>
-      <button class="btn btn-secondary btn-sm" type="button" data-team-task-filter="mine">Moji</button>
-    </div>
-
-    <div class="field team-client-filter">
-      <label for="teamClientFilter">Klijent</label>
-      <select id="teamClientFilter" class="input">
-        <option value="all">Svi klijenti</option>
-      </select>
+      <div class="team-client-filter">
+        <select id="teamClientFilter" class="input" aria-label="Filter po klijentu">
+          <option value="all">Svi klijenti</option>
+        </select>
+      </div>
     </div>
 
     <div id="teamActivityList" class="team-task-list"></div>
 
     <div id="teamActivityEmpty" class="empty-state hidden">
       <h4>Jos nema aktivnosti u timu</h4>
-      <p>Kada tim krene da dodeljuje i delegira taskove, ovde ces videti ko radi sta.</p>
+      <p>Taskovi ce se ovde pojaviti cim tim pocne da ih dodeljuje i preuzima.</p>
     </div>
   </section>
 </section>
