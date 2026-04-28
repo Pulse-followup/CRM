@@ -1,0 +1,52 @@
+<div id="taskBillingModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="taskBillingModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="taskBillingModalTitle">Kreiraj naplatni nalog</h3>
+        <p id="taskBillingModalSubtitle">Unesi osnovne podatke za naplatu iz zavrsenog taska.</p>
+      </div>
+
+      <button id="closeTaskBillingModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <div class="modal-body">
+      <form id="taskBillingForm">
+        <input id="taskBillingTaskId" type="hidden" />
+
+        <div class="field">
+          <label for="taskBillingDescription">Opis</label>
+          <textarea id="taskBillingDescription" class="input textarea" placeholder="Opis za naplatni nalog"></textarea>
+        </div>
+
+        <div class="project-form-grid">
+          <div class="field">
+            <label for="taskBillingAmount">Iznos</label>
+            <input id="taskBillingAmount" class="input" type="number" min="0" step="0.01" placeholder="npr. 5000" />
+          </div>
+
+          <div class="field">
+            <label for="taskBillingCurrency">Valuta</label>
+            <input id="taskBillingCurrency" class="input" type="text" value="RSD" />
+          </div>
+
+          <div class="field">
+            <label for="taskBillingDueDate">Rok placanja</label>
+            <input id="taskBillingDueDate" class="input" type="date" />
+          </div>
+
+          <div class="field">
+            <label for="taskBillingInvoiceNumber">Broj fakture</label>
+            <input id="taskBillingInvoiceNumber" class="input" type="text" placeholder="Opcionalno" />
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" id="cancelTaskBillingBtn" class="btn btn-secondary">Odustani</button>
+          <button type="submit" class="btn btn-primary">Sacuvaj naplatni nalog</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
