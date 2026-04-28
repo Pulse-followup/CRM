@@ -260,12 +260,12 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .team-client-filter {
-  max-width: 280px;
-  margin-bottom: 10px;
+  max-width: 360px;
+  margin-bottom: 14px;
 }
 
 .team-activity-topline {
@@ -306,120 +306,120 @@
   font-weight: 700;
 }
 
-.team-task-list {
-  display: grid;
-  border-top: 1px solid var(--card-border);
-}
-
-.team-task-row {
-  width: 100%;
-  display: grid;
-  gap: 4px;
-  padding: 9px 0;
-  border: 0;
-  border-bottom: 1px solid var(--card-border);
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.team-task-row:hover {
-  background: rgba(255, 255, 255, 0.022);
-}
-
-.team-task-row:active {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.team-task-row:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 3px;
-}
-
-.team-task-line-top,
-.team-task-line-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.team-task-flow,
-.team-task-meta {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.team-task-flow {
-  font-size: 0.92rem;
-  line-height: 1.24;
-  font-weight: 700;
-}
-
-.team-task-meta {
-  font-size: 0.81rem;
-  color: var(--text-soft);
-  line-height: 1.2;
-}
-
-.team-client-badge {
-  min-height: 22px;
-  padding: 2px 7px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  opacity: 0.78;
-  background: rgba(255, 255, 255, 0.032);
-  border-color: rgba(255, 255, 255, 0.07);
-  color: var(--muted);
-}
-
-.team-task-line-bottom .badge {
-  min-height: 24px;
-  padding: 3px 8px;
-  font-size: 0.74rem;
-}
-
-@media (max-width: 640px) {
-  .team-task-row {
-    gap: 3px;
-    padding: 10px 0;
-  }
-
-  .team-task-line-top,
-  .team-task-line-bottom {
-    gap: 6px;
-  }
-
-  .team-client-filter {
-    max-width: 100%;
-  }
-
-  .team-task-flow {
-    font-size: 0.88rem;
-  }
-
-  .team-task-meta {
-    font-size: 0.77rem;
-  }
-
-  .team-client-badge,
-  .team-task-line-bottom .badge {
-    min-height: 21px;
-    padding: 2px 6px;
-    font-size: 0.68rem;
-  }
-}
-
 .task-badge-stack {
   display: flex;
   align-items: flex-end;
   justify-content: flex-start;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* ------------------------- TASK ROWS / ZADACI + TIM FIX ------------------------- */
+
+.global-task-row,
+.team-task-row {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(207, 223, 255, 0.10);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  transition: var(--transition);
+}
+
+.global-task-row:hover,
+.team-task-row:hover {
+  background: rgba(77, 163, 255, 0.09);
+  border-color: rgba(77, 163, 255, 0.20);
+  transform: translateY(-1px);
+}
+
+.global-task-main,
+.team-task-line-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #e6f0ff;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.global-task-project,
+.team-task-project {
+  color: #e6f0ff;
+  font-weight: 800;
+}
+
+.global-task-client,
+.global-task-title,
+.team-task-line-bottom,
+.team-task-meta {
+  color: #7fb3ff;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.global-task-client,
+.team-task-client {
+  color: #8fbfff;
+  font-weight: 700;
+}
+
+.global-task-title,
+.team-task-title {
+  color: #c9d6f3;
+}
+
+.global-task-row .badge,
+.team-task-row .badge {
+  flex: 0 0 auto;
+  color: #eaf3ff;
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.global-task-row .badge.info,
+.team-task-row .badge.info {
+  color: #dfe7ff;
+  background: rgba(138, 152, 255, 0.18);
+  border-color: rgba(138, 152, 255, 0.24);
+}
+
+.global-task-row .badge.success,
+.team-task-row .badge.success {
+  color: #dcffe9;
+  background: rgba(47, 209, 123, 0.18);
+  border-color: rgba(47, 209, 123, 0.24);
+}
+
+.global-task-row .badge.warning,
+.team-task-row .badge.warning {
+  color: #ffe7bc;
+  background: rgba(255, 190, 85, 0.18);
+  border-color: rgba(255, 190, 85, 0.24);
+}
+
+.global-task-row .badge.danger,
+.team-task-row .badge.danger {
+  color: #ffd9d9;
+  background: rgba(255, 114, 114, 0.18);
+  border-color: rgba(255, 114, 114, 0.24);
+}
+
+@media (max-width: 640px) {
+  .global-task-main,
+  .team-task-line-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .global-task-row,
+  .team-task-row {
+    padding: 11px 12px;
+  }
 }

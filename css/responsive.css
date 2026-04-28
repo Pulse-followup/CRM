@@ -131,21 +131,13 @@
   }
 
   .clients-toolbar-actions {
-    width: auto;
-    margin-left: auto;
+    width: 100%;
   }
 
-  .clients-toolbar-actions .btn {
-    flex: 0 0 auto;
+  .clients-toolbar-actions .btn,
+  .clients-toolbar-actions .import-label {
+    flex: 1;
     justify-content: center;
-  }
-
-  .clients-control-bar {
-    gap: 8px;
-  }
-
-  .clients-control-search {
-    flex: 1 1 auto;
   }
 
   .panel-head-row {
@@ -191,29 +183,6 @@
 }
 
 @media (max-width: 520px) {
-  .clients-control-bar {
-    gap: 6px;
-  }
-
-  .clients-control-search .search-input {
-    padding: 10px 12px;
-    font-size: 0.86rem;
-  }
-
-  .clients-toolbar-actions {
-    gap: 6px;
-  }
-
-  .clients-header-menu-popover {
-    right: 0;
-    min-width: 156px;
-  }
-
-  .clients-toolbar-actions .btn-primary {
-    padding: 0 12px;
-    font-size: 0.84rem;
-  }
-
   .modal-content {
     margin: 20px auto;
     width: 94%;
