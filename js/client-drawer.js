@@ -147,7 +147,7 @@ function taskEntityStatusBadgeClass(value) {
 function taskReviewStatusLabel(value) {
   switch (value) {
     case "pending_review": return "Ceka pregled admina";
-    case "billing_ready": return "Naplatni nalog kreiran";
+    case "cost_added": return "Ukljuceno u trosak projekta";
     case "archived_no_billing": return "Arhivirano bez naplate";
     case "returned": return "Vraceno na doradu";
     default: return "";
@@ -160,11 +160,98 @@ function getEffectiveTaskReviewStatus(task) {
   return String(task?.status || "").trim() === "zavrsen" ? "pending_review" : "";
 }
 
-function buildTaskBillingDefaultDescription(task) {
-  const project = typeof getProjectById === "function" ? getProjectById(task?.projectId) : null;
-  const description = String(task?.description || task?.title || "").trim();
-  if (project?.name && description) return `${project.name} - ${description}`;
-  return project?.name || description || "Naplatni nalog";
+function taskBillableStatusLabel(value) {
+  switch (value) {
+    case "billable": return "Ukljuceno u trosak projekta";
+    case "non_billable": return "Arhivirano bez naplate";
+    default: return "";
+  }
+}
+
+function formatTaskCostRsd(value) {
+  const amount = Number(value || 0);
+  return `${new Intl.NumberFormat("sr-RS", { maximumFractionDigits: 0 }).format(Number.isFinite(amount) ? amount : 0)} RSD`;
+}
+
+function getTaskHourlyRate(task) {
+  const assigneeId = String(task?.assignedToUserId || task?.assignedTo || "").trim();
+  const currentUser = getCurrentTaskUserMetadata();
+  const workspaceMember = typeof getAssignableWorkspaceMembers === "function"
+    ? getAssignableWorkspaceMembers().find(member => String(member.id) === assigneeId)
+    : null;
+  const remembered = typeof getRememberedMemberProfile === "function" ? getRememberedMemberProfile(assigneeId) : null;
+  const currentProfileRate = currentUser.userId && currentUser.userId === assigneeId
+    ? (currentProfile?.hourlyRate ?? currentProfile?.hourly_rate ?? null)
+    : null;
+  const rawRate = workspaceMember?.hourlyRate ??
+    workspaceMember?.hourly_rate ??
+    remembered?.hourlyRate ??
+    remembered?.hourly_rate ??
+    currentProfileRate ??
+    1500;
+  const rate = Number(rawRate);
+  return Number.isFinite(rate) && rate > 0 ? rate : 1500;
+}
+
+function calculateTaskLaborCost(timeSpentMinutes, task) {
+  const minutes = Number(timeSpentMinutes || 0);
+  if (!Number.isFinite(minutes) || minutes <= 0) return 0;
+  return Math.round((minutes / 60) * getTaskHourlyRate(task));
+}
+
+function getTaskCostInputState(task) {
+  const currentUser = getCurrentTaskUserMetadata();
+  const currentUserId = String(currentUser.userId || "").trim();
+  const assignedToUserId = String(task?.assignedToUserId || task?.assignedTo || "").trim();
+  const status = String(task?.status || "").trim();
+  const reviewStatus = getEffectiveTaskReviewStatus(task);
+  const isAssignedWorker = Boolean(currentUserId && assignedToUserId && currentUserId === assignedToUserId);
+  const isAdminReview = currentUser.isAdmin && status === "zavrsen" && reviewStatus === "pending_review";
+  const isWorkerEntry = isAssignedWorker && ["dodeljen", "u_radu", "na_cekanju"].includes(status);
+
+  return {
+    currentUser,
+    isAssignedWorker,
+    isAdminReview,
+    isWorkerEntry,
+    shouldShow: isAdminReview || isWorkerEntry
+  };
+}
+
+function renderTaskReviewInputs(task) {
+  const panel = document.getElementById("taskDetailReviewInputs");
+  if (!panel) return;
+
+  const { shouldShow } = getTaskCostInputState(task);
+
+  panel.classList.toggle("hidden", !shouldShow);
+  if (!shouldShow) return;
+
+  setValueIfExists("taskReviewTimeSpent", task.timeSpentMinutes || 0);
+  setValueIfExists("taskReviewMaterialCost", task.materialCost || 0);
+  setValueIfExists("taskReviewMaterialDescription", task.materialDescription || "");
+}
+
+function collectTaskReviewCostPayload(task, options = {}) {
+  const { errorMessage = "Unesite utroseno vreme." } = options;
+  const timeSpentMinutes = Number(getValue("taskReviewTimeSpent") || 0);
+  if (!Number.isFinite(timeSpentMinutes) || timeSpentMinutes <= 0) {
+    showToast(errorMessage);
+    return null;
+  }
+
+  const materialCostRaw = Number(getValue("taskReviewMaterialCost") || 0);
+  const materialCost = Number.isFinite(materialCostRaw) && materialCostRaw > 0
+    ? Math.round(materialCostRaw)
+    : 0;
+  const materialDescription = String(getValue("taskReviewMaterialDescription") || "").trim();
+
+  return {
+    timeSpentMinutes: Math.round(timeSpentMinutes),
+    laborCost: calculateTaskLaborCost(timeSpentMinutes, task),
+    materialCost,
+    materialDescription
+  };
 }
 
 function taskDueDateShortLabel(value) {
@@ -187,11 +274,12 @@ function taskMemberLabel(member) {
 }
 
 function getCurrentTaskUserMetadata() {
+  const appRole = typeof getCurrentAppRole === "function" ? getCurrentAppRole() : "admin";
   return {
     userId: supabaseUser?.id ? String(supabaseUser.id) : null,
     label: getCurrentUserDisplayName(),
-    role: normalizeWorkspaceRole(currentMembership?.role || "member"),
-    isAdmin: isCurrentUserAdminRole()
+    role: appRole,
+    isAdmin: appRole === "admin"
   };
 }
 
@@ -286,20 +374,22 @@ function renderProjectItems(list, projectItems, mode) {
           <button type="button" class="btn btn-secondary btn-sm project-archive-btn" data-project-archive-id="${escapeHtml(project.id)}">Arhiviraj</button>
         </div>
       `;
-    const taskCount = getTasksByProjectId(project.id).length;
+      const taskCount = getTasksByProjectId(project.id).length;
+      const costSummary = getProjectCostSummary(project.id);
 
-    item.innerHTML = `
-      <div class="project-list-item-head">
-        <strong>${escapeHtml(project.name || "Projekat")}</strong>
-      </div>
-      <p class="project-meta-line">${escapeHtml(projectTypeLabel(project.type))} &bull; ${escapeHtml(projectStatusLabel(project.status))}</p>
-      ${projectMeta.length ? `<p class="project-meta-line project-meta-secondary">${escapeHtml(projectMeta.join(" - "))}</p>` : ""}
-      <p class="project-task-summary">Taskovi: ${taskCount}</p>
-      <div class="project-list-actions">${actions}</div>
-    `;
-    list.appendChild(item);
-  });
-}
+      item.innerHTML = `
+        <div class="project-list-item-head">
+          <strong>${escapeHtml(project.name || "Projekat")}</strong>
+        </div>
+        <p class="project-meta-line">${escapeHtml(projectTypeLabel(project.type))} &bull; ${escapeHtml(projectStatusLabel(project.status))}</p>
+        ${projectMeta.length ? `<p class="project-meta-line project-meta-secondary">${escapeHtml(projectMeta.join(" - "))}</p>` : ""}
+        <p class="project-task-summary">Taskovi: ${taskCount}</p>
+        <p class="project-task-summary">Obracun: ${escapeHtml(formatTaskCostRsd(costSummary.totalCost))}</p>
+        <div class="project-list-actions">${actions}</div>
+      `;
+      list.appendChild(item);
+    });
+  }
 
 function openNewProjectModal(clientId) {
   const client = clients.find(c => String(c.id) === String(clientId));
@@ -532,6 +622,8 @@ function renderProjectTasksModal(project) {
 
   setTextIfExists("projectTasksModalTitle", `Taskovi projekta - ${project.name || "Projekat"}`);
   setTextIfExists("projectTasksModalSubtitle", `Taskovi: ${projectTasks.length}`);
+  renderProjectBillingStatus(project);
+  renderProjectCostSummary(project.id);
 
   list.innerHTML = "";
   empty.classList.toggle("hidden", projectTasks.length > 0);
@@ -548,6 +640,104 @@ function renderProjectTasksModal(project) {
   });
 
   list.querySelectorAll("[data-task-detail-id]").forEach(item => {
+    item.addEventListener("click", () => openTaskDetailModal(item.dataset.taskDetailId));
+  });
+}
+
+function renderProjectBillingStatus(project) {
+  const statusEl = document.getElementById("projectBillingStatus");
+  const createBtn = document.getElementById("createProjectBillingBtn");
+  const billingRecord = getActiveBillingByProjectId(project.id);
+  const canCreate = typeof isCurrentUserAdminRole === "function" && isCurrentUserAdminRole();
+
+  if (statusEl) {
+    statusEl.innerHTML = billingRecord
+      ? `Nalog za naplatu: ${escapeHtml(getBillingDisplayId(billingRecord))} • <span class="${billingStatusBadgeClass(billingRecord.status)}">${escapeHtml(billingStatusLabel(billingRecord.status))}</span>`
+      : "Nalog za naplatu: -";
+  }
+
+  if (createBtn) {
+    createBtn.classList.toggle("hidden", !canCreate);
+    createBtn.disabled = Boolean(billingRecord);
+  }
+}
+
+function getProjectTaskEntities(projectId, options = {}) {
+  const { includeArchived = true } = options;
+  return (Array.isArray(tasks) ? tasks : [])
+    .map(task => typeof normalizeTaskEntity === "function" ? normalizeTaskEntity(task) : task)
+    .filter(task => {
+      if (!task) return false;
+      if (String(task.projectId) !== String(projectId)) return false;
+      if (!includeArchived && task.archived === true) return false;
+      return true;
+    });
+}
+
+function getProjectCostSummary(projectId) {
+  const projectTasks = getProjectTaskEntities(projectId, { includeArchived: true });
+  const includedTasks = projectTasks.filter(task => task.includedInCost === true);
+  const nonBillableTasks = projectTasks.filter(task => String(task.billableStatus || "") === "non_billable");
+
+  const totals = includedTasks.reduce((acc, task) => {
+    acc.timeSpentMinutes += Number(task.timeSpentMinutes || 0);
+    acc.laborCost += Number(task.laborCost || 0);
+    acc.materialCost += Number(task.materialCost || 0);
+    return acc;
+  }, {
+    timeSpentMinutes: 0,
+    laborCost: 0,
+    materialCost: 0
+  });
+
+  return {
+    includedTasks,
+    nonBillableTasks,
+    timeSpentMinutes: totals.timeSpentMinutes,
+    laborCost: totals.laborCost,
+    materialCost: totals.materialCost,
+    totalCost: totals.laborCost + totals.materialCost
+  };
+}
+
+function createProjectCostTaskRow(task, options = {}) {
+  const { includeReason = false } = options;
+  const item = document.createElement("div");
+  item.className = "task-modal-item";
+  item.dataset.taskDetailId = task.id;
+  const title = task.title || taskActionTypeLabel(task.actionType);
+  const baseLine = `#${task.sequenceNumber || "-"} • ${title} • ${Number(task.timeSpentMinutes || 0)} min • ${formatTaskCostRsd(task.laborCost || 0)} • ${formatTaskCostRsd(task.materialCost || 0)}`;
+  item.innerHTML = `
+    <strong>${escapeHtml(baseLine)}</strong>
+    ${includeReason ? `<p>Razlog: ${escapeHtml(task.nonBillableReason || "-")}</p>` : ""}
+  `;
+  return item;
+}
+
+function renderProjectCostSummary(projectId) {
+  const summary = getProjectCostSummary(projectId);
+  setTextIfExists("projectCostTime", `Ukupno vreme: ${Number(summary.timeSpentMinutes || 0)} min`);
+  setTextIfExists("projectCostLabor", `Trosak rada: ${formatTaskCostRsd(summary.laborCost || 0)}`);
+  setTextIfExists("projectCostMaterial", `Trosak materijala: ${formatTaskCostRsd(summary.materialCost || 0)}`);
+  setTextIfExists("projectCostTotal", `Ukupan trosak: ${formatTaskCostRsd(summary.totalCost || 0)}`);
+
+  const includedList = document.getElementById("projectIncludedCostList");
+  const includedEmpty = document.getElementById("projectIncludedCostEmpty");
+  if (includedList && includedEmpty) {
+    includedList.innerHTML = "";
+    summary.includedTasks.forEach(task => includedList.appendChild(createProjectCostTaskRow(task)));
+    includedEmpty.classList.toggle("hidden", summary.includedTasks.length > 0);
+  }
+
+  const nonBillableList = document.getElementById("projectNonBillableList");
+  const nonBillableEmpty = document.getElementById("projectNonBillableEmpty");
+  if (nonBillableList && nonBillableEmpty) {
+    nonBillableList.innerHTML = "";
+    summary.nonBillableTasks.forEach(task => nonBillableList.appendChild(createProjectCostTaskRow(task, { includeReason: true })));
+    nonBillableEmpty.classList.toggle("hidden", summary.nonBillableTasks.length > 0);
+  }
+
+  document.querySelectorAll("#projectIncludedCostList [data-task-detail-id], #projectNonBillableList [data-task-detail-id]").forEach(item => {
     item.addEventListener("click", () => openTaskDetailModal(item.dataset.taskDetailId));
   });
 }
@@ -571,6 +761,7 @@ function refreshTaskProjectUi(projectId) {
   if (client) renderProjects(client);
   if (typeof renderDashboard === "function") renderDashboard();
   if (typeof renderTeamView === "function") renderTeamView();
+  if (typeof renderBillingView === "function") renderBillingView();
 }
 
 function openTaskDetailModal(taskId) {
@@ -622,6 +813,16 @@ function renderTaskDetailModal(task) {
     getTeamMemberNameById(task.assignedToUserId || task.assignedTo, task.assignedTo || "-");
   setTextIfExists("taskDetailAssignedTo", `Dodeljeno: ${assignedLabel}`);
   setTextIfExists("taskDetailDescription", `Opis: ${task.description || task.title || "-"}`);
+  setTextIfExists("taskDetailTimeSpent", `Vreme: ${Number(task.timeSpentMinutes || 0)} min`);
+  setTextIfExists("taskDetailLaborCost", `Trosak rada: ${formatTaskCostRsd(task.laborCost || 0)}`);
+  setTextIfExists("taskDetailMaterialCost", `Materijal: ${formatTaskCostRsd(task.materialCost || 0)}`);
+  setTextIfExists("taskDetailMaterialDescription", `Opis materijala: ${task.materialDescription || "-"}`);
+  setTextIfExists("taskDetailNonBillableReason", `Razlog: ${task.nonBillableReason || "-"}`);
+  setTextIfExists("taskDetailCostState", taskBillableStatusLabel(task.billableStatus));
+  document.getElementById("taskDetailMaterialDescription")?.classList.toggle("hidden", !task.materialDescription);
+  document.getElementById("taskDetailNonBillableReason")?.classList.toggle("hidden", !task.nonBillableReason);
+  document.getElementById("taskDetailCostState")?.classList.toggle("hidden", !taskBillableStatusLabel(task.billableStatus));
+  renderTaskReviewInputs(task);
   renderTaskDetailActionsV2(task);
 }
 
@@ -684,11 +885,7 @@ function renderTaskDetailActionsV2(task) {
   const status = String(task?.status || "").trim();
   const reviewStatus = getEffectiveTaskReviewStatus(task);
 
-  const isAdminOrCreator = Boolean(
-    currentUser.role === "admin" ||
-    (currentUserId && String(task?.createdByUserId || "").trim() === currentUserId) ||
-    (currentUserId && String(task?.delegatedByUserId || "").trim() === currentUserId)
-  );
+  const isAdminOperator = currentUser.role === "admin";
 
   const isAssignedWorker = Boolean(
     currentUserId && (
@@ -702,28 +899,52 @@ function renderTaskDetailActionsV2(task) {
     buttons.push(`<button type="button" class="${className}" data-task-detail-action="${action}">${label}</button>`);
   };
 
-  if (status === "zavrsen") {
-    if (currentUser.isAdmin && reviewStatus === "pending_review") {
-      addButton("Kreiraj naplatni nalog", "mark_billing_ready", "btn btn-primary");
-      addButton("Arhiviraj bez naplate", "archive_no_billing", "btn btn-secondary");
-      addButton("Vrati na doradu", "return_for_rework", "btn btn-secondary");
+  if (currentUser.role === "finance") {
+    buttons.push('<div class="muted small">Task je read-only za finansije.</div>');
+  } else if (status === "zavrsen") {
+      if (currentUser.isAdmin && reviewStatus === "pending_review") {
+      addButton("Dodaj u trosak projekta", "add_project_cost", "btn btn-primary");
+        addButton("Arhiviraj bez naplate", "archive_no_billing", "btn btn-secondary");
+        addButton("Vrati na doradu", "return_for_rework", "btn btn-secondary");
+        buttons.push(`
+          <div id="taskArchiveReasonPanel" class="task-detail-box hidden" style="margin-top:12px;">
+            <div class="field">
+              <label for="taskNonBillableReason">Razlog (non-billable)</label>
+              <select id="taskNonBillableReason" class="input">
+                <option value="">Izaberi razlog</option>
+                <option value="Follow-up / komunikacija">Follow-up / komunikacija</option>
+                <option value="Priprema / interna aktivnost">Priprema / interna aktivnost</option>
+                <option value="Greska / rework">Greska / rework</option>
+                <option value="Goodwill prema klijentu">Goodwill prema klijentu</option>
+                <option value="Cekanje / blokada">Cekanje / blokada</option>
+                <option value="Ostalo">Ostalo</option>
+              </select>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" data-task-detail-action="confirm_archive_no_billing">Potvrdi arhiviranje</button>
+              <button type="button" class="btn btn-secondary" data-task-detail-action="cancel_archive_no_billing">Otkazi</button>
+            </div>
+          </div>
+        `);
     } else {
       const reviewLabel = reviewStatus
         ? taskReviewStatusLabel(reviewStatus)
         : "Task zavrsen, ceka pregled admina";
       buttons.push(`<div class="muted small">${escapeHtml(reviewLabel)}</div>`);
     }
-  } else if (isAdminOrCreator) {
+  } else if (isAdminOperator) {
     addButton("Promeni zaduzenog", "change_assignee", "btn btn-secondary");
     addButton("Promeni rok", "change_due", "btn btn-secondary");
     addButton("Otkazi task", "cancel_task", "btn btn-danger");
   } else if (isAssignedWorker) {
     if (status === "dodeljen") {
       addButton("Preuzmi", "take_over", "btn btn-primary");
-      addButton("Vrati", "return_task", "btn btn-secondary");
+      addButton("Na cekanju", "set_waiting", "btn btn-secondary");
     } else if (status === "u_radu") {
       addButton("Zavrsi", "complete_task", "btn btn-primary");
-      addButton("Vrati", "return_task", "btn btn-secondary");
+      addButton("Na cekanju", "set_waiting", "btn btn-secondary");
+    } else if (status === "na_cekanju") {
+      addButton("Vrati u rad", "resume_task", "btn btn-primary");
     }
   }
 
@@ -747,11 +968,7 @@ async function handleTaskDetailAction(action) {
   const currentUser = getCurrentTaskUserMetadata();
   const currentUserId = String(currentUser.userId || "").trim();
 
-  const isAdminOrCreator = Boolean(
-    currentUser.role === "admin" ||
-    (currentUserId && String(task?.createdByUserId || "").trim() === currentUserId) ||
-    (currentUserId && String(task?.delegatedByUserId || "").trim() === currentUserId)
-  );
+  const isAdminOperator = currentUser.role === "admin";
 
   const isAssignedWorker = Boolean(
     currentUserId && (
@@ -762,19 +979,60 @@ async function handleTaskDetailAction(action) {
 
   const now = nowISO();
 
-  if (action === "mark_billing_ready") {
+  if (currentUser.role === "finance") {
+    showToast("Task je read-only za finansije.");
+    return;
+  }
+
+  if (action === "add_project_cost") {
     if (!currentUser.isAdmin) return;
     if (String(task.status) !== "zavrsen" || getEffectiveTaskReviewStatus(task) !== "pending_review") return;
-    openTaskBillingModal(task.id);
+    const payload = collectTaskReviewCostPayload(task);
+    if (!payload) return;
+    const saved = saveTask({
+      ...task,
+      ...payload,
+      billableStatus: "billable",
+      reviewStatus: "cost_added",
+      includedInCost: true
+    });
+    if (!saved) return;
+    await persistTasks({ immediate: true });
+    refreshTaskProjectUi(saved.projectId);
+    renderTaskDetailModal(saved);
+    showToast("Task je ukljucen u trosak projekta.");
     return;
   }
 
   if (action === "archive_no_billing") {
     if (!currentUser.isAdmin) return;
     if (String(task.status) !== "zavrsen" || getEffectiveTaskReviewStatus(task) !== "pending_review") return;
+    document.getElementById("taskArchiveReasonPanel")?.classList.remove("hidden");
+    return;
+  }
+
+  if (action === "cancel_archive_no_billing") {
+    document.getElementById("taskArchiveReasonPanel")?.classList.add("hidden");
+    return;
+  }
+
+  if (action === "confirm_archive_no_billing") {
+    if (!currentUser.isAdmin) return;
+    if (String(task.status) !== "zavrsen" || getEffectiveTaskReviewStatus(task) !== "pending_review") return;
+    const payload = collectTaskReviewCostPayload(task);
+    if (!payload) return;
+    const nonBillableReason = String(getValue("taskNonBillableReason") || "").trim();
+    if (!nonBillableReason) {
+      showToast("Izaberite razlog.");
+      return;
+    }
     const saved = saveTask({
       ...task,
+      ...payload,
+      nonBillableReason,
+      billableStatus: "non_billable",
       reviewStatus: "archived_no_billing",
+      includedInCost: false,
       archived: true,
       archivedAt: now
     });
@@ -818,10 +1076,29 @@ async function handleTaskDetailAction(action) {
     return;
   }
 
+  if (action === "set_waiting") {
+    if (!isAssignedWorker || !["dodeljen", "u_radu"].includes(String(task.status))) return;
+    const saved = await saveAndRefresh({ ...task, status: "na_cekanju" });
+    if (saved) showToast("Task je prebacen na cekanje.");
+    return;
+  }
+
+  if (action === "resume_task") {
+    if (!isAssignedWorker || String(task.status) !== "na_cekanju") return;
+    const saved = await saveAndRefresh({ ...task, status: "u_radu" });
+    if (saved) showToast("Task je vracen u rad.");
+    return;
+  }
+
   if (action === "complete_task") {
     if (!isAssignedWorker || String(task.status) !== "u_radu") return;
+    const payload = collectTaskReviewCostPayload(task, {
+      errorMessage: "Unesite utroseno vreme pre zavrsetka taska."
+    });
+    if (!payload) return;
     const saved = await saveAndRefresh({
       ...task,
+      ...payload,
       status: "zavrsen",
       reviewStatus: "pending_review",
       completedAt: now
@@ -839,7 +1116,7 @@ async function handleTaskDetailAction(action) {
 
   if (action === "cancel_task") {
     if (String(task.status) === "zavrsen") return;
-    if (!isAdminOrCreator) return;
+    if (!isAdminOperator) return;
     const saved = await saveAndRefresh({ ...task, status: "otkazan", canceledAt: now });
     if (saved) showToast("Task je otkazan.");
     return;
@@ -847,7 +1124,7 @@ async function handleTaskDetailAction(action) {
 
   if (action === "change_due") {
     if (String(task.status) === "zavrsen") return;
-    if (!isAdminOrCreator) return;
+    if (!isAdminOperator) return;
     const nextDue = window.prompt("Novi rok (YYYY-MM-DD)", String(task.dueDate || "")) || "";
     const normalized = nextDue.trim();
     const saved = await saveAndRefresh({ ...task, dueDate: normalized || null });
@@ -857,7 +1134,7 @@ async function handleTaskDetailAction(action) {
 
   if (action === "change_assignee") {
     if (String(task.status) === "zavrsen") return;
-    if (!isAdminOrCreator) return;
+    if (!isAdminOperator) return;
     const members = typeof getAssignableWorkspaceMembers === "function" ? getAssignableWorkspaceMembers() : [];
     const hint = members.length
       ? `\n\nDostupni korisnici:\n${members.map(m => `- ${m.id}: ${m.name}${m.email ? ` (${m.email})` : ""}`).join("\n")}`
@@ -876,118 +1153,6 @@ async function handleTaskDetailAction(action) {
     });
     if (saved) showToast("Zaduženje je ažurirano.");
   }
-}
-
-function openTaskBillingModal(taskId) {
-  const task = getTaskById(taskId);
-  if (!task) {
-    showToast("Task nije pronadjen.");
-    return;
-  }
-
-  if (task.billingId || getBillingByTaskId(task.id)) {
-    showToast("Naplatni nalog vec postoji");
-    return;
-  }
-
-  currentTaskBillingTaskId = String(task.id);
-  setValueIfExists("taskBillingTaskId", task.id);
-  setValueIfExists("taskBillingDescription", buildTaskBillingDefaultDescription(task));
-  setValueIfExists("taskBillingAmount", "");
-  setValueIfExists("taskBillingCurrency", "RSD");
-  setValueIfExists("taskBillingDueDate", dateOnlyValue(task.dueDate || ""));
-  setValueIfExists("taskBillingInvoiceNumber", "");
-  setTextIfExists("taskBillingModalTitle", "Kreiraj naplatni nalog");
-  setTextIfExists("taskBillingModalSubtitle", `Task #${task.sequenceNumber || "-"} - ${taskActionTypeLabel(task.actionType)}`);
-
-  const modal = document.getElementById("taskBillingModal");
-  if (!modal) return;
-  modal.classList.remove("hidden");
-  modal.setAttribute("aria-hidden", "false");
-}
-
-function closeTaskBillingModal() {
-  const modal = document.getElementById("taskBillingModal");
-  if (!modal) return;
-  if (modal.contains(document.activeElement)) document.activeElement.blur();
-  modal.classList.add("hidden");
-  modal.setAttribute("aria-hidden", "true");
-  currentTaskBillingTaskId = null;
-}
-
-async function handleTaskBillingSubmit(e) {
-  e.preventDefault();
-
-  const taskId = getValue("taskBillingTaskId") || currentTaskBillingTaskId;
-  const task = getTaskById(taskId);
-  if (!task) {
-    showToast("Task nije pronadjen.");
-    return;
-  }
-
-  const currentUser = getCurrentTaskUserMetadata();
-  if (!currentUser.isAdmin) {
-    showToast("Samo admin moze da kreira naplatni nalog.");
-    return;
-  }
-
-  if (task.billingId || getBillingByTaskId(task.id)) {
-    showToast("Naplatni nalog vec postoji");
-    closeTaskBillingModal();
-    return;
-  }
-
-  const description = String(getValue("taskBillingDescription") || "").trim();
-  const amountRaw = String(getValue("taskBillingAmount") || "").trim();
-  const amount = Number(amountRaw);
-  const currency = String(getValue("taskBillingCurrency") || "RSD").trim().toUpperCase() || "RSD";
-  const dueDate = normalizeDateInputValue(getValue("taskBillingDueDate")) || null;
-  const invoiceNumber = String(getValue("taskBillingInvoiceNumber") || "").trim();
-
-  if (!description) {
-    showToast("Opis je obavezan.");
-    return;
-  }
-
-  if (!amountRaw || !Number.isFinite(amount) || amount < 0) {
-    showToast("Unesi ispravan iznos.");
-    return;
-  }
-
-  const created = createBillingFromTask(task.id, {
-    description,
-    amount,
-    currency,
-    dueDate,
-    invoiceNumber
-  });
-
-  if (!created) {
-    showToast("Naplatni nalog nije kreiran.");
-    return;
-  }
-
-  if (created.duplicate) {
-    showToast("Naplatni nalog vec postoji");
-    closeTaskBillingModal();
-    return;
-  }
-
-  const savedTask = saveTask({
-    ...task,
-    reviewStatus: "billing_ready",
-    billingId: created.record.id
-  });
-  if (!savedTask) {
-    showToast("Task nije azuriran.");
-    return;
-  }
-
-  await persistTasks({ immediate: true });
-  refreshTaskProjectUi(savedTask.projectId);
-  closeTaskBillingModal();
-  renderTaskDetailModal(savedTask);
-  showToast("Naplatni nalog je kreiran.");
 }
 
 function openTaskDelegateModal(taskId) {

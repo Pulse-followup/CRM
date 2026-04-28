@@ -8,6 +8,9 @@ let workspaceProjectSyncTimer = null;
 let taskDataSource = "unresolved";
 let taskHydrationPromise = null;
 let workspaceTaskSyncTimer = null;
+let billingDataSource = "unresolved";
+let billingHydrationPromise = null;
+let workspaceBillingSyncTimer = null;
 
 function readBillingCache() {
   try {
@@ -26,6 +29,16 @@ function loadBilling() {
 }
 
 function saveBilling() {
+  const savedLocal = saveBillingLocalOnly();
+
+  if (typeof canUseWorkspaceBillingStore === "function" && canUseWorkspaceBillingStore()) {
+    queueWorkspaceBillingSync();
+  }
+
+  return savedLocal;
+}
+
+function saveBillingLocalOnly() {
   try {
     localStorage.setItem(BILLING_STORAGE_KEY, JSON.stringify(billing));
     return true;
@@ -35,15 +48,30 @@ function saveBilling() {
   }
 }
 
+function queueWorkspaceBillingSync() {
+  if (!(typeof canUseWorkspaceBillingStore === "function" && canUseWorkspaceBillingStore())) return;
+  cloudSyncState = "idle";
+  syncCloudStatusUI();
+  clearTimeout(workspaceBillingSyncTimer);
+  workspaceBillingSyncTimer = setTimeout(() => {
+    void pushBillingToWorkspace();
+  }, 500);
+}
+
 function normalizeBillingRecord(record = {}) {
   const now = nowISO();
   const amountRaw = record.amount ?? record.value ?? null;
   const amountNumber = amountRaw === "" || amountRaw === null || typeof amountRaw === "undefined"
     ? null
     : Number(amountRaw);
+  const totalLaborRaw = Number(record.totalLaborCost ?? record.total_labor_cost ?? 0);
+  const totalMaterialRaw = Number(record.totalMaterialCost ?? record.total_material_cost ?? 0);
+  const totalCostRaw = Number(record.totalCost ?? record.total_cost ?? 0);
+  const workspaceId = String(record.workspaceId ?? record.workspace_id ?? currentWorkspace?.id ?? "").trim();
 
   return {
     id: String(record.id || createLocalEntityId("billing")),
+    workspaceId,
     clientId: String(record.clientId ?? record.client_id ?? "").trim(),
     projectId: String(record.projectId ?? record.project_id ?? "").trim(),
     taskId: String(record.taskId ?? record.task_id ?? "").trim(),
@@ -51,8 +79,13 @@ function normalizeBillingRecord(record = {}) {
     amount: Number.isFinite(amountNumber) ? amountNumber : null,
     currency: String(record.currency || "RSD").trim() || "RSD",
     dueDate: record.dueDate || record.due_date || null,
-    status: String(record.status || "draft").trim() || "draft",
+    status: typeof normalizeBillingStatus === "function"
+      ? normalizeBillingStatus(record.status || "draft")
+      : (String(record.status || "draft").trim() || "draft"),
     invoiceNumber: String(record.invoiceNumber ?? record.invoice_number ?? "").trim(),
+    totalLaborCost: Number.isFinite(totalLaborRaw) ? totalLaborRaw : 0,
+    totalMaterialCost: Number.isFinite(totalMaterialRaw) ? totalMaterialRaw : 0,
+    totalCost: Number.isFinite(totalCostRaw) ? totalCostRaw : 0,
     createdAt: record.createdAt || record.created_at || now,
     updatedAt: record.updatedAt || record.updated_at || record.createdAt || record.created_at || now,
     invoicedAt: record.invoicedAt || record.invoiced_at || null,
@@ -63,12 +96,21 @@ function normalizeBillingRecord(record = {}) {
 function getAllBilling() {
   return (Array.isArray(billing) ? billing : [])
     .map(normalizeBillingRecord)
-    .filter(Boolean);
+    .filter(record => {
+      if (!record) return false;
+      if (!currentWorkspace?.id) return true;
+      return !record.workspaceId || String(record.workspaceId) === String(currentWorkspace.id);
+    });
 }
 
 function getBillingByTaskId(taskId) {
   if (!taskId) return null;
   return getAllBilling().find(record => String(record.taskId) === String(taskId)) || null;
+}
+
+function getBillingById(billingId) {
+  if (!billingId) return null;
+  return getAllBilling().find(record => String(record.id) === String(billingId)) || null;
 }
 
 function getBillingByClientId(clientId) {
@@ -81,43 +123,230 @@ function getBillingByProjectId(projectId) {
   return getAllBilling().filter(record => String(record.projectId) === String(projectId));
 }
 
-function createBillingFromTask(taskId, payload = {}) {
-  const task = typeof getTaskById === "function" ? getTaskById(taskId) : null;
-  if (!task) return null;
+function getActiveBillingByProjectId(projectId) {
+  if (!projectId) return null;
+  return getBillingByProjectId(projectId).find(record => normalizeBillingStatus(record.status) !== "cancelled") || null;
+}
 
-  if (task.billingId) {
-    return { duplicate: true, record: getAllBilling().find(item => String(item.id) === String(task.billingId)) || null };
-  }
+function saveBillingRecord(record = {}) {
+  const normalizedRecord = normalizeBillingRecord(record);
+  if (!normalizedRecord) return null;
+  if (!Array.isArray(billing)) billing = [];
+  billing = [
+    normalizedRecord,
+    ...billing
+      .map(normalizeBillingRecord)
+      .filter(item => item && String(item.id) !== String(normalizedRecord.id))
+  ];
+  saveBilling();
+  return normalizedRecord;
+}
 
-  const existing = getBillingByTaskId(task.id);
+function createBillingForProject(projectId, payload = {}) {
+  const project = typeof getProjectById === "function" ? getProjectById(projectId) : null;
+  if (!project) return null;
+
+  const existing = getActiveBillingByProjectId(project.id);
   if (existing) {
     return { duplicate: true, record: existing };
   }
 
-  const project = typeof getProjectById === "function" ? getProjectById(task.projectId) : null;
-  const description = String(payload.description || "").trim();
-  const record = normalizeBillingRecord({
+  const description = String(payload.description || project.name || "").trim();
+  const record = saveBillingRecord({
     id: createLocalEntityId("billing"),
-    clientId: task.clientId,
-    projectId: task.projectId,
-    taskId: task.id,
+    workspaceId: currentWorkspace?.id || "",
+    clientId: project.clientId,
+    projectId: project.id,
     description,
     amount: payload.amount,
     currency: payload.currency || "RSD",
     dueDate: payload.dueDate || null,
     status: "draft",
     invoiceNumber: payload.invoiceNumber || "",
+    totalLaborCost: payload.totalLaborCost || 0,
+    totalMaterialCost: payload.totalMaterialCost || 0,
+    totalCost: payload.totalCost || 0,
     createdAt: nowISO(),
     updatedAt: nowISO(),
     invoicedAt: null,
-    paidAt: null,
-    projectName: project?.name || ""
+    paidAt: null
   });
 
-  if (!Array.isArray(billing)) billing = [];
-  billing = [record, ...billing.filter(item => String(item.id) !== String(record.id))];
-  saveBilling();
   return { duplicate: false, record };
+}
+
+function resetBillingSourceResolution() {
+  billingHydrationPromise = null;
+  billingDataSource = "unresolved";
+}
+
+async function resolveBillingSource(options = {}) {
+  const { silent = false } = options;
+  if (billingHydrationPromise) return billingHydrationPromise;
+
+  billingHydrationPromise = (async () => {
+    if (typeof canUseWorkspaceBillingStore === "function" && canUseWorkspaceBillingStore()) {
+      const hydrated = await hydrateBillingFromWorkspace({ silent: true });
+      if (hydrated) {
+        billingDataSource = "workspace";
+        console.info("[Pulse Billing] Source resolved: workspace billing table.", {
+          workspaceId: currentWorkspace?.id || null,
+          count: billing.length
+        });
+        return billingDataSource;
+      }
+
+      if (!silent) {
+        console.warn("[Pulse Billing] Workspace billing nije ucitan, koristim lokalni cache.");
+      }
+    }
+
+    loadBilling();
+    billingDataSource = "local";
+    if (!silent) {
+      console.info("[Pulse Billing] Source resolved: local cache.", {
+        workspaceId: currentWorkspace?.id || null,
+        count: billing.length
+      });
+    }
+    return billingDataSource;
+  })();
+
+  try {
+    return await billingHydrationPromise;
+  } finally {
+    billingHydrationPromise = null;
+  }
+}
+
+function mapBillingRowToLocal(row = {}) {
+  return normalizeBillingRecord({
+    id: row.id,
+    workspace_id: row.workspace_id,
+    client_id: row.client_id,
+    project_id: row.project_id,
+    description: row.description,
+    amount: row.amount,
+    currency: row.currency,
+    due_date: row.due_date,
+    status: row.status,
+    invoice_number: row.invoice_number,
+    total_labor_cost: row.total_labor_cost,
+    total_material_cost: row.total_material_cost,
+    total_cost: row.total_cost,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    invoiced_at: row.invoiced_at,
+    paid_at: row.paid_at
+  });
+}
+
+function mapBillingToWorkspaceRow(record = {}) {
+  const normalized = normalizeBillingRecord(record);
+  if (!normalized) return null;
+
+  return {
+    id: normalized.id,
+    workspace_id: currentWorkspace.id,
+    client_id: Number(normalized.clientId),
+    project_id: normalized.projectId,
+    description: normalized.description || "",
+    amount: normalized.amount ?? 0,
+    currency: normalized.currency || "RSD",
+    due_date: normalized.dueDate || null,
+    status: normalized.status || "draft",
+    invoice_number: normalized.invoiceNumber || "",
+    total_labor_cost: normalized.totalLaborCost || 0,
+    total_material_cost: normalized.totalMaterialCost || 0,
+    total_cost: normalized.totalCost || 0,
+    created_at: normalized.createdAt || nowISO(),
+    updated_at: normalized.updatedAt || nowISO(),
+    invoiced_at: normalized.invoicedAt || null,
+    paid_at: normalized.paidAt || null
+  };
+}
+
+function mergeBillingById(localItems = [], remoteItems = []) {
+  const merged = new Map();
+
+  (Array.isArray(localItems) ? localItems : [])
+    .map(normalizeBillingRecord)
+    .filter(Boolean)
+    .forEach(record => merged.set(String(record.id), record));
+
+  (Array.isArray(remoteItems) ? remoteItems : [])
+    .map(normalizeBillingRecord)
+    .filter(Boolean)
+    .forEach(record => merged.set(String(record.id), record));
+
+  return [...merged.values()];
+}
+
+async function hydrateBillingFromWorkspace(options = {}) {
+  if (!(typeof canUseWorkspaceBillingStore === "function" && canUseWorkspaceBillingStore())) return false;
+  const { silent = false } = options;
+  const localBeforeHydrate = readBillingCache() || (Array.isArray(billing) ? billing : []);
+
+  const { data, error } = await supabaseClient
+    .from("billing")
+    .select("*")
+    .eq("workspace_id", currentWorkspace.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (!silent) console.warn("[Pulse Billing] Workspace billing nije ucitan.", error);
+    return false;
+  }
+
+  const remoteRecords = (Array.isArray(data) ? data.map(mapBillingRowToLocal) : []).filter(Boolean);
+  const localRecords = (Array.isArray(localBeforeHydrate) ? localBeforeHydrate : []).map(normalizeBillingRecord).filter(Boolean);
+  billing = mergeBillingById(localRecords, remoteRecords);
+  saveBillingLocalOnly();
+  return true;
+}
+
+async function pushBillingToWorkspace() {
+  if (!(typeof canUseWorkspaceBillingStore === "function" && canUseWorkspaceBillingStore())) return false;
+  if (!supabaseClient || !currentWorkspace?.id) return false;
+
+  const { data: existingRows, error: existingError } = await supabaseClient
+    .from("billing")
+    .select("id")
+    .eq("workspace_id", currentWorkspace.id);
+
+  if (existingError) {
+    console.error("[Pulse Billing] pushBillingToWorkspace existing rows failed", existingError);
+    return false;
+  }
+
+  const existingById = new Set((Array.isArray(existingRows) ? existingRows : []).map(row => String(row.id)));
+  const payload = getAllBilling().map(mapBillingToWorkspaceRow).filter(Boolean);
+  const rowsToInsert = payload.filter(row => !existingById.has(String(row.id)));
+  const rowsToUpdate = payload.filter(row => existingById.has(String(row.id)));
+
+  if (rowsToInsert.length) {
+    const { error } = await supabaseClient.from("billing").insert(rowsToInsert);
+    if (error) {
+      console.error("[Pulse Billing] insert failed", error);
+      return false;
+    }
+  }
+
+  for (const row of rowsToUpdate) {
+    const { error } = await supabaseClient
+      .from("billing")
+      .update(row)
+      .eq("id", row.id)
+      .eq("workspace_id", currentWorkspace.id);
+    if (error) {
+      console.error("[Pulse Billing] update failed", { rowId: row.id, error });
+      return false;
+    }
+  }
+
+  cloudSyncState = "synced";
+  syncCloudStatusUI();
+  return true;
 }
 
 function getClientCacheKey() {
@@ -217,6 +446,8 @@ function normalizeProject(project = {}) {
   const now = nowISO();
   const archived = project.archived === true;
   const createdAt = project.createdAt || project.created_at || now;
+  const billingId = project.billingId ?? project.billing_id ?? null;
+  const billingStatus = project.billingStatus ?? project.billing_status ?? "";
 
   return {
     id: String(project.id || createLocalEntityId("project")),
@@ -231,11 +462,13 @@ function normalizeProject(project = {}) {
       Number.isNaN(estimatedValue)
         ? null
         : estimatedValue,
-    status: String(project.status || "").trim(),
-    archived,
-    archivedAt: archived ? (project.archivedAt || project.archived_at || now) : null,
-    createdAt,
-    updatedAt: project.updatedAt || project.updated_at || createdAt
+      status: String(project.status || "").trim(),
+      billingId: billingId ? String(billingId).trim() : null,
+      billingStatus: String(billingStatus || "").trim(),
+      archived,
+      archivedAt: archived ? (project.archivedAt || project.archived_at || now) : null,
+      createdAt,
+      updatedAt: project.updatedAt || project.updated_at || createdAt
   };
 }
 
@@ -390,6 +623,12 @@ function normalizeTaskEntity(task = {}) {
       : "";
     const status = String(task.status || "dodeljen").trim() || "dodeljen";
     const reviewStatus = rawReviewStatus || (status === "zavrsen" ? "pending_review" : "");
+    const rawTimeSpentMinutes = Number(task.timeSpentMinutes ?? task.time_spent_minutes ?? 0);
+    const rawLaborCost = Number(task.laborCost ?? task.labor_cost ?? 0);
+    const rawMaterialCost = Number(task.materialCost ?? task.material_cost ?? 0);
+    const billableStatus = String(task.billableStatus ?? task.billable_status ?? "pending_review").trim() || "pending_review";
+    const includedInCost = task.includedInCost === true || task.included_in_cost === true || task.included_in_cost === "true";
+    const nonBillableReason = String(task.nonBillableReason ?? task.non_billable_reason ?? "").trim();
     const archived = task.archived === true || task.archived === "true";
     const archivedAt = task.archivedAt || task.archived_at || null;
     const billingId = task.billingId ?? task.billing_id ?? null;
@@ -412,6 +651,13 @@ function normalizeTaskEntity(task = {}) {
       dueDate: task.dueDate || task.due_date || null,
       status,
       reviewStatus,
+      timeSpentMinutes: Number.isFinite(rawTimeSpentMinutes) ? rawTimeSpentMinutes : 0,
+      laborCost: Number.isFinite(rawLaborCost) ? rawLaborCost : 0,
+      materialCost: Number.isFinite(rawMaterialCost) ? rawMaterialCost : 0,
+      materialDescription: String(task.materialDescription ?? task.material_description ?? "").trim(),
+      billableStatus,
+      includedInCost,
+      nonBillableReason,
       billingId: billingId ? String(billingId).trim() : null,
       archived,
       archivedAt,
@@ -616,11 +862,13 @@ function mapProjectRowToLocal(row = {}) {
     name: row.name,
     type: row.type,
     frequency: row.frequency,
-    estimated_value: row.estimated_value,
-    status: row.status,
-    archived: row.archived,
-    archived_at: row.archived_at,
-    created_at: row.created_at,
+      estimated_value: row.estimated_value,
+      status: row.status,
+      billing_id: row.billing_id,
+      billing_status: row.billing_status,
+      archived: row.archived,
+      archived_at: row.archived_at,
+      created_at: row.created_at,
     updated_at: row.updated_at
   });
 }
@@ -634,9 +882,11 @@ function mapProjectToWorkspaceRow(project = {}) {
     name: normalizedProject.name,
     type: normalizedProject.type || "",
     frequency: normalizedProject.frequency || "",
-    estimated_value: normalizedProject.estimatedValue,
-    status: normalizedProject.status || "",
-    archived: normalizedProject.archived === true,
+      estimated_value: normalizedProject.estimatedValue,
+      status: normalizedProject.status || "",
+      billing_id: normalizedProject.billingId || null,
+      billing_status: normalizedProject.billingStatus || null,
+      archived: normalizedProject.archived === true,
     archived_at: normalizedProject.archived ? (normalizedProject.archivedAt || normalizedProject.updatedAt || nowISO()) : null,
     created_at: normalizedProject.createdAt || nowISO(),
     updated_at: normalizedProject.updatedAt || nowISO()
@@ -843,13 +1093,20 @@ function mapTaskRowToLocal(row = {}) {
     created_by_user_id: row.created_by_user_id,
     created_by_label: row.created_by_label || "",
     delegated_by_user_id: row.delegated_by_user_id,
-    delegated_by_label: row.delegated_by_label,
-    due_date: row.due_date,
-    status: row.status,
-    review_status: row.review_status,
-    billing_id: row.billing_id,
-    archived: row.archived,
-    archived_at: row.archived_at,
+      delegated_by_label: row.delegated_by_label,
+      due_date: row.due_date,
+      status: row.status,
+      review_status: row.review_status,
+      time_spent_minutes: row.time_spent_minutes,
+      labor_cost: row.labor_cost,
+      material_cost: row.material_cost,
+      material_description: row.material_description,
+      billable_status: row.billable_status,
+      included_in_cost: row.included_in_cost,
+      non_billable_reason: row.non_billable_reason,
+      billing_id: row.billing_id,
+      archived: row.archived,
+      archived_at: row.archived_at,
     created_at: row.created_at,
     updated_at: row.updated_at
   });
@@ -873,12 +1130,19 @@ function mapTaskToWorkspaceRow(task = {}) {
     created_by_user_id: normalizedTask.createdByUserId || null,
     created_by_label: normalizedTask.createdByLabel || "",
     delegated_by_user_id: normalizedTask.delegatedByUserId || null,
-    delegated_by_label: normalizedTask.delegatedByLabel || null,
-    due_date: normalizedTask.dueDate || null,
-    status: normalizedTask.status || "dodeljen",
-    review_status: normalizedTask.reviewStatus || null,
-    billing_id: normalizedTask.billingId || null,
-    archived: normalizedTask.archived === true,
+      delegated_by_label: normalizedTask.delegatedByLabel || null,
+      due_date: normalizedTask.dueDate || null,
+      status: normalizedTask.status || "dodeljen",
+      review_status: normalizedTask.reviewStatus || null,
+      time_spent_minutes: normalizedTask.timeSpentMinutes || 0,
+      labor_cost: normalizedTask.laborCost || 0,
+      material_cost: normalizedTask.materialCost || 0,
+      material_description: normalizedTask.materialDescription || "",
+      billable_status: normalizedTask.billableStatus || "pending_review",
+      included_in_cost: normalizedTask.includedInCost === true,
+      non_billable_reason: normalizedTask.nonBillableReason || null,
+      billing_id: normalizedTask.billingId || null,
+      archived: normalizedTask.archived === true,
     archived_at: normalizedTask.archivedAt || null,
     created_at: normalizedTask.createdAt || nowISO(),
     updated_at: normalizedTask.updatedAt || nowISO()

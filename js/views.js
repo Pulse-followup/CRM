@@ -3,6 +3,53 @@ let currentTaskListFilter = "all";
 let currentTeamTaskFilter = "all";
 let currentTeamClientFilter = "all";
 let currentBillingClientFilter = "all";
+let currentProjectBillingFilter = "all";
+
+function applyRoleBasedViewMode() {
+  const role = typeof getCurrentAppRole === "function" ? getCurrentAppRole() : "admin";
+  const dashboardNav = document.querySelector('.nav-btn[data-view="dashboardView"]');
+  const clientsNav = document.querySelector('.nav-btn[data-view="clientsView"]');
+  const actionsNav = document.querySelector('.nav-btn[data-view="actionsView"]');
+  const billingNav = document.querySelector('.nav-btn[data-view="billingView"]');
+  const dashboardView = document.getElementById("dashboardView");
+  const clientsView = document.getElementById("clientsView");
+  const actionsView = document.getElementById("actionsView");
+  const billingView = document.getElementById("billingView");
+
+  const setVisible = (node, visible) => {
+    if (node) node.classList.toggle("hidden", !visible);
+  };
+
+  const showDashboard = role !== "finance";
+  const showClients = role === "admin";
+  const showActions = role === "admin";
+  const showBilling = role === "admin" || role === "finance";
+
+  setVisible(dashboardNav, showDashboard);
+  setVisible(clientsNav, showClients);
+  setVisible(actionsNav, showActions);
+  setVisible(billingNav, showBilling);
+
+  setVisible(dashboardView, showDashboard);
+  setVisible(clientsView, showClients);
+  setVisible(actionsView, showActions);
+  setVisible(billingView, showBilling);
+
+  if (role === "user") {
+    currentTaskListFilter = "mine";
+    const activeViewId = document.querySelector(".view.active")?.id;
+    if (activeViewId !== "dashboardView") {
+      switchView("dashboardView");
+    }
+  }
+
+  if (role === "finance") {
+    const activeViewId = document.querySelector(".view.active")?.id;
+    if (activeViewId !== "billingView") {
+      switchView("billingView");
+    }
+  }
+}
 
 function handleStageAction(actionKey) {
   const client = getClientById(currentClientId);
@@ -92,9 +139,116 @@ function renderAll() {
   renderDashboard();
   renderClientsList();
   renderTeamView();
+  renderBillingNavVisibility();
+  renderBillingView();
+  applyRoleBasedViewMode();
   if (typeof syncClientCreateAvailability === "function") {
     syncClientCreateAvailability();
   }
+}
+
+function canAccessBillingView() {
+  return Boolean(
+    (typeof isCurrentUserAdminRole === "function" && isCurrentUserAdminRole()) ||
+    (typeof isCurrentUserFinanceRole === "function" && isCurrentUserFinanceRole())
+  );
+}
+
+function setProjectBillingFilter(filter = "all") {
+  currentProjectBillingFilter = ["all", "draft", "invoiced", "overdue", "paid"].includes(filter) ? filter : "all";
+  renderBillingView();
+}
+
+function renderBillingNavVisibility() {
+  const navBtn = document.getElementById("billingNavBtn");
+  const billingView = document.getElementById("billingView");
+  const canAccess = canAccessBillingView();
+
+  if (navBtn) navBtn.classList.toggle("hidden", !canAccess);
+  if (billingView) billingView.classList.toggle("hidden", !canAccess);
+
+  if (!canAccess && billingView?.classList.contains("active")) {
+    switchView("dashboardView");
+  }
+}
+
+function billingStatusBadgeClass(status) {
+  switch (normalizeBillingStatus(status)) {
+    case "paid": return "badge success";
+    case "overdue": return "badge danger";
+    case "invoiced": return "badge info";
+    case "cancelled": return "badge neutral";
+    case "draft":
+    default: return "badge warning";
+  }
+}
+
+function getBillingDisplayId(record) {
+  const raw = String(record?.id || "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (digits) return `#${digits.slice(-6)}`;
+  return `#${raw.slice(-6) || "----"}`;
+}
+
+function getVisibleProjectBillingEntries() {
+  const entries = getAllBilling()
+    .filter(record => currentProjectBillingFilter === "all" || normalizeBillingStatus(record.status) === currentProjectBillingFilter)
+    .map(record => ({
+      record,
+      client: getClientById(record.clientId),
+      project: getProjectById(record.projectId)
+    }))
+    .sort((a, b) => {
+      const aDue = a.record.dueDate || "9999-12-31";
+      const bDue = b.record.dueDate || "9999-12-31";
+      if (aDue !== bDue) return aDue.localeCompare(bDue);
+      return String(b.record.createdAt || "").localeCompare(String(a.record.createdAt || ""));
+    });
+
+  return entries;
+}
+
+function createProjectBillingListRow(entry) {
+  const row = document.createElement("button");
+  const amountLabel = `${formatMoney(entry.record.amount || 0)} ${entry.record.currency || "RSD"}`;
+  const dueLabel = entry.record.dueDate ? formatDate(entry.record.dueDate) : "Bez roka";
+
+  row.type = "button";
+  row.className = "global-task-row key-value-row";
+  row.innerHTML = `
+    <div>
+      <strong>${escapeHtml(getBillingDisplayId(entry.record))} • ${escapeHtml(entry.client?.name || "Klijent")} • ${escapeHtml(entry.project?.name || "Projekat")}</strong><br />
+      <span>${escapeHtml(amountLabel)} • ${escapeHtml(dueLabel)}</span>
+    </div>
+    <strong><span class="${billingStatusBadgeClass(entry.record.status)}">${escapeHtml(billingStatusLabel(entry.record.status))}</span></strong>
+  `;
+  row.addEventListener("click", () => openBillingModal(entry.record.id));
+  return row;
+}
+
+function renderBillingView() {
+  const list = document.getElementById("billingList");
+  const empty = document.getElementById("billingEmpty");
+  const title = document.getElementById("billingViewTitle");
+  const canAccess = canAccessBillingView();
+  const role = typeof getCurrentAppRole === "function" ? getCurrentAppRole() : "admin";
+
+  if (title) title.textContent = role === "finance" ? "Finance / Naplata" : "Naplata";
+  document.querySelectorAll("[data-project-billing-filter]").forEach(button => {
+    button.classList.toggle("is-active", button.dataset.projectBillingFilter === currentProjectBillingFilter);
+  });
+
+  if (!list || !empty) return;
+  if (!canAccess) {
+    list.innerHTML = "";
+    empty.classList.add("hidden");
+    return;
+  }
+
+  const entries = getVisibleProjectBillingEntries();
+  list.innerHTML = "";
+  entries.forEach(entry => list.appendChild(createProjectBillingListRow(entry)));
+  empty.classList.toggle("hidden", entries.length > 0);
 }
 
 function switchToClientsMode(mode = "all") {
@@ -286,11 +440,28 @@ function getGlobalTaskEntries() {
 
 function getVisibleGlobalTaskEntries() {
   const currentUserId = String(supabaseUser?.id || "");
+  const currentUserLabel = typeof getCurrentUserDisplayName === "function"
+    ? normalizeIdentityLabel(getCurrentUserDisplayName())
+    : "";
+  const role = typeof getCurrentAppRole === "function" ? getCurrentAppRole() : "admin";
   return getGlobalTaskEntries()
     .filter(entry => {
+      if (role === "user") {
+        const assignedUserId = String(entry.task.assignedToUserId || entry.task.assignedTo || "");
+        const assignedLabel = normalizeIdentityLabel(entry.task.assignedToLabel || entry.task.assignedTo || "");
+        return Boolean(
+          (currentUserId && assignedUserId === currentUserId) ||
+          (currentUserLabel && assignedLabel === currentUserLabel)
+        );
+      }
       if (currentTaskListFilter === "active") return entry.task.status !== "zavrsen";
       if (currentTaskListFilter === "mine") {
-        return currentUserId && String(entry.task.assignedToUserId || entry.task.assignedTo || "") === currentUserId;
+        const assignedUserId = String(entry.task.assignedToUserId || entry.task.assignedTo || "");
+        const assignedLabel = normalizeIdentityLabel(entry.task.assignedToLabel || entry.task.assignedTo || "");
+        return Boolean(
+          (currentUserId && assignedUserId === currentUserId) ||
+          (currentUserLabel && assignedLabel === currentUserLabel)
+        );
       }
       return true;
     })
@@ -309,6 +480,25 @@ function getVisibleGlobalTaskEntries() {
 }
 
 function renderDashboard() {
+  const role = typeof getCurrentAppRole === "function" ? getCurrentAppRole() : "admin";
+  const filterRow = document.getElementById("taskListFilterRow");
+  const roleTitle = document.getElementById("dashboardRoleTitle");
+  const listTitle = document.getElementById("dashboardTaskListTitle");
+  const listSubtitle = document.getElementById("dashboardTaskListSubtitle");
+  const workspaceSubtitle = document.getElementById("dashboardWorkspaceTitle");
+
+  if (filterRow) filterRow.classList.toggle("hidden", role === "user");
+  if (roleTitle) roleTitle.textContent = "Zadaci";
+  if (listTitle) listTitle.textContent = role === "user" ? "Moji zadaci" : "Svi zadaci";
+  if (listSubtitle) {
+    listSubtitle.textContent = role === "user"
+      ? "Aktivni taskovi dodeljeni tebi."
+      : "Pregled taskova iz svih projekata.";
+  }
+  if (workspaceSubtitle && role === "user") {
+    workspaceSubtitle.textContent = "Moji zadaci";
+  }
+
   document.querySelectorAll("[data-task-list-filter]").forEach(button => {
     button.classList.toggle("is-active", button.dataset.taskListFilter === currentTaskListFilter);
   });
@@ -869,10 +1059,15 @@ function createTeamActivityCard(entry) {
 function renderTeamView() {
   const list = document.getElementById("teamActivityList");
   const empty = document.getElementById("teamActivityEmpty");
+  const role = typeof getCurrentAppRole === "function" ? getCurrentAppRole() : "admin";
+  const filterRow = document.getElementById("teamTaskFilterRow");
+  const clientFilterWrap = document.querySelector(".team-client-filter");
   renderTeamClientFilter();
   const items = getVisibleTeamTaskEntries();
 
   setTextIfExists("actionsViewTitle", "Tim");
+  if (filterRow) filterRow.classList.toggle("hidden", role !== "admin");
+  if (clientFilterWrap) clientFilterWrap.classList.toggle("hidden", role !== "admin");
 
   document.querySelectorAll("[data-team-task-filter]").forEach(button => {
     button.classList.toggle("is-active", button.dataset.teamTaskFilter === currentTeamTaskFilter);
@@ -947,10 +1142,15 @@ function createTeamActivityCard(entry) {
 function renderTeamView() {
   const list = document.getElementById("teamActivityList");
   const empty = document.getElementById("teamActivityEmpty");
+  const role = typeof getCurrentAppRole === "function" ? getCurrentAppRole() : "admin";
+  const filterRow = document.getElementById("teamTaskFilterRow");
+  const clientFilterWrap = document.querySelector(".team-client-filter");
   renderTeamClientFilter();
   const items = getVisibleTeamTaskEntries();
 
   setTextIfExists("actionsViewTitle", "Tim");
+  if (filterRow) filterRow.classList.toggle("hidden", role !== "admin");
+  if (clientFilterWrap) clientFilterWrap.classList.toggle("hidden", role !== "admin");
 
   document.querySelectorAll("[data-team-task-filter]").forEach(button => {
     button.classList.toggle("is-active", button.dataset.teamTaskFilter === currentTeamTaskFilter);

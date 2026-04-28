@@ -57,6 +57,7 @@ function renderOnboardingStep() {
   );
 
   setValueIfExists("onboardingFullName", currentProfile?.full_name || "");
+  setValueIfExists("onboardingHourlyRate", currentProfile?.hourlyRate ?? currentProfile?.hourly_rate ?? 1500);
   renderPendingInviteState();
 }
 
@@ -77,12 +78,20 @@ function renderPendingInviteState() {
 
 async function handleOnboardingProfileContinue() {
   const fullName = getValue("onboardingFullName").trim();
+  const hourlyRateRaw = Number(getValue("onboardingHourlyRate") || 0);
   if (!fullName) {
     showToast("Unesi ime i prezime.");
     return;
   }
+  if (!Number.isFinite(hourlyRateRaw) || hourlyRateRaw <= 0) {
+    showToast("Unesi cenu radnog sata.");
+    return;
+  }
 
-  const saved = await updateProfileName(fullName);
+  const saved = await updateProfileSettings({
+    fullName,
+    hourlyRate: hourlyRateRaw
+  });
   if (!saved) return;
 
   onboardingStep = "choice";

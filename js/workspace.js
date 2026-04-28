@@ -10,6 +10,7 @@ let isEditingWorkspaceName = false;
 let workspaceClientsReady = false;
 let workspaceProjectsReady = false;
 let workspaceTasksReady = false;
+let workspaceBillingReady = false;
 let workspaceActivitiesReady = false;
 let workspaceClientsProbe = {
   ok: false,
@@ -126,7 +127,8 @@ function rememberMemberProfile(userId, profile = {}) {
   const existing = directory[userId] || {};
   const next = {
     full_name: profile.full_name || existing.full_name || "",
-    email: profile.email || existing.email || ""
+    email: profile.email || existing.email || "",
+    hourly_rate: Number(profile.hourlyRate ?? profile.hourly_rate ?? existing.hourly_rate ?? existing.hourlyRate ?? 1500)
   };
 
   directory[userId] = next;
@@ -261,6 +263,7 @@ function resetWorkspaceContext() {
   workspaceClientsReady = false;
   workspaceProjectsReady = false;
   workspaceTasksReady = false;
+  workspaceBillingReady = false;
   workspaceActivitiesReady = false;
 }
 
@@ -278,6 +281,10 @@ function canUseWorkspaceProjectStore() {
 
 function canUseWorkspaceTaskStore() {
   return Boolean(canUseTeamFeatures() && currentWorkspace?.id && workspaceTasksReady);
+}
+
+function canUseWorkspaceBillingStore() {
+  return Boolean(canUseTeamFeatures() && currentWorkspace?.id && workspaceBillingReady);
 }
 
 function canUseWorkspaceActivityStore() {
@@ -464,6 +471,30 @@ async function detectWorkspaceTasksStore() {
   return workspaceTasksReady;
 }
 
+async function detectWorkspaceBillingStore() {
+  if (!canUseTeamFeatures() || !currentWorkspace?.id) {
+    workspaceBillingReady = false;
+    return false;
+  }
+
+  const { error } = await supabaseClient
+    .from("billing")
+    .select("id")
+    .eq("workspace_id", currentWorkspace.id)
+    .limit(1);
+
+  if (error) {
+    console.warn("[Pulse Billing] Workspace billing store unavailable.", {
+      workspaceId: currentWorkspace.id,
+      code: error.code || null,
+      message: error.message || "Nepoznata greska"
+    });
+  }
+
+  workspaceBillingReady = !error;
+  return workspaceBillingReady;
+}
+
 async function createProfileIfMissing(defaultFullName = "") {
   if (!canUseTeamFeatures()) return null;
 
@@ -478,9 +509,10 @@ async function createProfileIfMissing(defaultFullName = "") {
     .upsert({
       id: supabaseUser.id,
       email,
-      full_name: defaultFullName || null
+      full_name: defaultFullName || null,
+      hourly_rate: 1500
     }, { onConflict: "id" })
-    .select("id, full_name, email, created_at, updated_at")
+    .select("id, full_name, email, hourly_rate, created_at, updated_at")
     .single();
 
   if (error) {
@@ -505,7 +537,7 @@ async function loadProfile() {
 
   const { data, error } = await supabaseClient
     .from("profiles")
-    .select("id, full_name, email, created_at, updated_at")
+    .select("id, full_name, email, hourly_rate, created_at, updated_at")
     .eq("id", supabaseUser.id)
     .maybeSingle();
 
@@ -663,7 +695,7 @@ async function loadWorkspaceMembers() {
   if (userIds.length) {
     const { data: profiles, error: profilesError } = await supabaseClient
       .from("profiles")
-      .select("id, full_name, email")
+      .select("id, full_name, email, hourly_rate")
       .in("id", userIds);
 
     if (profilesError) {
@@ -680,6 +712,41 @@ async function loadWorkspaceMembers() {
     profile: profilesById.get(member.user_id) || getRememberedMemberProfile(member.user_id) || null
   }));
   return currentWorkspaceMembers;
+}
+
+async function updateWorkspaceMemberHourlyRate(userId, hourlyRate) {
+  if (!canUseTeamFeatures() || !currentWorkspace?.id || normalizeWorkspaceRole(currentMembership?.role || "") !== "admin") {
+    showToast("Samo admin moze da menja cenu radnog sata.");
+    return false;
+  }
+
+  const normalizedUserId = String(userId || "").trim();
+  const rateRaw = Number(hourlyRate);
+  const rate = Number.isFinite(rateRaw) && rateRaw > 0 ? Math.round(rateRaw) : 0;
+  if (!normalizedUserId || !rate) {
+    showToast("Unesi ispravnu cenu radnog sata.");
+    return false;
+  }
+
+  const { error } = await supabaseClient
+    .from("profiles")
+    .update({
+      hourly_rate: rate,
+      updated_at: nowISO()
+    })
+    .eq("id", normalizedUserId);
+
+  if (error) {
+    showToast("Cena radnog sata nije sacuvana.");
+    return false;
+  }
+
+  await loadWorkspaceMembers();
+  if (normalizedUserId === String(supabaseUser?.id || "")) {
+    await loadProfile();
+  }
+  renderSessionUI();
+  return true;
 }
 
 async function loadWorkspaceInvites() {
@@ -755,6 +822,7 @@ async function initWorkspaceContext() {
   await detectWorkspaceClientsStore();
   await detectWorkspaceProjectsStore();
   await detectWorkspaceTasksStore();
+  await detectWorkspaceBillingStore();
   await detectWorkspaceActivitiesStore();
   renderSessionUI();
 }
@@ -766,13 +834,17 @@ function userNeedsOnboarding() {
   return false;
 }
 
-async function updateProfileName(fullName) {
+async function updateProfileSettings(payload = {}) {
   if (!canUseTeamFeatures()) return false;
+  const fullName = String(payload.fullName || "").trim();
+  const hourlyRateRaw = Number(payload.hourlyRate ?? 1500);
+  const hourlyRate = Number.isFinite(hourlyRateRaw) && hourlyRateRaw > 0 ? Math.round(hourlyRateRaw) : 1500;
 
   const { error } = await supabaseClient
     .from("profiles")
     .update({
       full_name: fullName,
+      hourly_rate: hourlyRate,
       updated_at: nowISO()
     })
     .eq("id", supabaseUser.id);
@@ -785,6 +857,13 @@ async function updateProfileName(fullName) {
   await loadProfile();
   renderSessionUI();
   return true;
+}
+
+async function updateProfileName(fullName) {
+  return updateProfileSettings({
+    fullName,
+    hourlyRate: currentProfile?.hourlyRate ?? currentProfile?.hourly_rate ?? 1500
+  });
 }
 
 async function createWorkspace(workspaceName) {
@@ -853,6 +932,7 @@ async function createWorkspace(workspaceName) {
   await detectWorkspaceClientsStore();
   await detectWorkspaceProjectsStore();
   await detectWorkspaceTasksStore();
+  await detectWorkspaceBillingStore();
   await detectWorkspaceActivitiesStore();
   if (typeof resetClientSourceResolution === "function") {
     resetClientSourceResolution();
@@ -867,6 +947,10 @@ async function createWorkspace(workspaceName) {
       resetTaskSourceResolution();
       await resolveTaskSource();
       migrateTasks();
+    }
+    if (typeof resetBillingSourceResolution === "function") {
+      resetBillingSourceResolution();
+      await resolveBillingSource();
     }
     renderAll();
   }
@@ -964,6 +1048,7 @@ async function acceptPendingInvite() {
   await detectWorkspaceClientsStore();
   await detectWorkspaceProjectsStore();
   await detectWorkspaceTasksStore();
+  await detectWorkspaceBillingStore();
   await detectWorkspaceActivitiesStore();
   if (typeof resetClientSourceResolution === "function") {
     resetClientSourceResolution();
@@ -978,6 +1063,10 @@ async function acceptPendingInvite() {
       resetTaskSourceResolution();
       await resolveTaskSource();
       migrateTasks();
+    }
+    if (typeof resetBillingSourceResolution === "function") {
+      resetBillingSourceResolution();
+      await resolveBillingSource();
     }
     renderAll();
   }
@@ -1013,12 +1102,14 @@ function renderSessionUI() {
 
   setTextIfExists("settingsUserName", userName);
   setTextIfExists("settingsUserEmail", userEmail);
+  setTextIfExists("settingsUserHourlyRate", `${Number(currentProfile?.hourlyRate ?? currentProfile?.hourly_rate ?? 1500)} RSD/h`);
   setTextIfExists("settingsWorkspaceName", workspaceName);
   setTextIfExists("settingsWorkspaceRole", roleName);
   setTextIfExists("settingsPlanName", getCurrentPlanName());
   setTextIfExists("settingsCloudState", isCloudEnabled() ? "Povezan" : "Offline");
   setTextIfExists("accountSheetUserName", userName);
   setTextIfExists("accountSheetUserEmail", userEmail);
+  setTextIfExists("accountSheetHourlyRate", `${Number(currentProfile?.hourlyRate ?? currentProfile?.hourly_rate ?? 1500)} RSD/h`);
   setTextIfExists("accountSheetWorkspaceName", workspaceName);
   setTextIfExists("accountSheetWorkspaceRole", roleName);
   setTextIfExists("accountSheetPlanName", getCurrentPlanName());
@@ -1085,6 +1176,8 @@ function renderSessionUI() {
     workspaceNameInput.value = currentWorkspace?.name || "";
   }
 
+  setValueIfExists("settingsHourlyRateInput", currentProfile?.hourlyRate ?? currentProfile?.hourly_rate ?? 1500);
+
   if (workspaceSaveBtn) {
     const canEdit = Boolean(currentWorkspace && currentMembership?.role === "admin" && isEditingWorkspaceName);
     workspaceSaveBtn.classList.toggle("hidden", !canEdit);
@@ -1103,17 +1196,40 @@ function renderSessionUI() {
           const name = member.profile?.full_name || member.profile?.email || "Clan tima";
           const email = member.profile?.email || "-";
           const role = workspaceRoleLabel(member.role);
+          const hourlyRate = Number(member.profile?.hourlyRate ?? member.profile?.hourly_rate ?? 1500);
+          const canEditHourlyRate = normalizeWorkspaceRole(currentMembership?.role || "") === "admin";
           return `
             <div class="key-value-row">
               <div>
                 <strong>${escapeHtml(name)}</strong><br />
-                <span>${escapeHtml(email)}</span>
+                <span>${escapeHtml(email)}</span><br />
+                <span>Cena sata: ${escapeHtml(String(hourlyRate))} RSD/h</span>
+                ${canEditHourlyRate ? `
+                  <div class="field" style="margin-top:8px;">
+                    <input class="input" type="number" min="1" step="1" value="${escapeHtml(String(hourlyRate))}" data-member-hourly-rate-input="${escapeHtml(member.user_id)}" />
+                  </div>
+                ` : ""}
               </div>
-              <strong>${role}</strong>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+                <strong>${role}</strong>
+                ${canEditHourlyRate ? `<button class="btn btn-secondary btn-sm" type="button" data-member-hourly-rate-save="${escapeHtml(member.user_id)}">Sacuvaj cenu</button>` : ""}
+              </div>
             </div>
           `;
         }).join("")
       : "";
+
+    membersList.querySelectorAll("[data-member-hourly-rate-save]").forEach(button => {
+      button.addEventListener("click", async () => {
+        const userId = button.dataset.memberHourlyRateSave;
+        const input = membersList.querySelector(`[data-member-hourly-rate-input="${userId}"]`);
+        const rateValue = input ? Number(input.value || 0) : 0;
+        const saved = await updateWorkspaceMemberHourlyRate(userId, rateValue);
+        if (saved) {
+          showToast("Cena radnog sata je sacuvana.");
+        }
+      });
+    });
   }
 
   if (invitesList && invitesEmpty) {

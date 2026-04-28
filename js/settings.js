@@ -50,6 +50,29 @@ function renderSettingsUI() {
   }
 }
 
+async function handleProfileSettingsSave() {
+  if (!isCloudEnabled()) {
+    showToast("Prvo povezi cloud nalog.");
+    return;
+  }
+
+  const fullName = String(currentProfile?.full_name || getCurrentUserDisplayName()).trim();
+  const hourlyRateRaw = Number(getValue("settingsHourlyRateInput") || 0);
+  if (!Number.isFinite(hourlyRateRaw) || hourlyRateRaw <= 0) {
+    showToast("Unesi ispravnu cenu radnog sata.");
+    return;
+  }
+
+  const saved = await updateProfileSettings({
+    fullName,
+    hourlyRate: hourlyRateRaw
+  });
+  if (!saved) return;
+
+  renderSettingsUI();
+  showToast("Profil je sacuvan.");
+}
+
 function handleSettingsWorkspaceSetup() {
   if (!isCloudEnabled()) {
     closeSettingsModal();

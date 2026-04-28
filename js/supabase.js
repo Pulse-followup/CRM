@@ -105,6 +105,9 @@ async function handleCloudSignIn(e) {
     await resolveTaskSource();
     migrateTasks();
   }
+  if (typeof resolveBillingSource === "function") {
+    await resolveBillingSource();
+  }
   renderLicenseUI();
   renderSettingsUI();
   renderAll();
@@ -161,12 +164,16 @@ async function handleCloudLogout() {
     await resolveProjectSource({ silent: true });
     migrateProjects();
   }
-  if (typeof resetTaskSourceResolution === "function") {
-    resetTaskSourceResolution();
-    await resolveTaskSource({ silent: true });
-    migrateTasks();
-  }
-  renderAll();
+    if (typeof resetTaskSourceResolution === "function") {
+      resetTaskSourceResolution();
+      await resolveTaskSource({ silent: true });
+      migrateTasks();
+    }
+    if (typeof resetBillingSourceResolution === "function") {
+      resetBillingSourceResolution();
+      await resolveBillingSource({ silent: true });
+    }
+    renderAll();
   renderSettingsUI();
   syncCloudStatusUI();
   showToast("Cloud nalog je odjavljen.");
@@ -188,9 +195,12 @@ async function handleManualCloudSync() {
     if (typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore()) {
       await hydrateProjectsFromWorkspace({ silent: true });
     }
-    if (typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore()) {
-      await hydrateTasksFromWorkspace({ silent: true });
-    }
+      if (typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore()) {
+        await hydrateTasksFromWorkspace({ silent: true });
+      }
+      if (typeof canUseWorkspaceBillingStore === "function" && canUseWorkspaceBillingStore()) {
+        await hydrateBillingFromWorkspace({ silent: true });
+      }
     if (typeof loadWorkspaceMembers === "function") {
       await loadWorkspaceMembers();
     }
@@ -218,6 +228,9 @@ async function handleManualCloudSync() {
   if (typeof resolveTaskSource === "function") {
     await resolveTaskSource();
     migrateTasks();
+  }
+  if (typeof resolveBillingSource === "function") {
+    await resolveBillingSource();
   }
   renderAll();
   cloudSyncState = "synced";

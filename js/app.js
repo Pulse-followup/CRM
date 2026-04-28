@@ -2,7 +2,6 @@ const STORAGE_KEY = "pulse_mvp_clients_v031";
 const PROJECTS_STORAGE_KEY = "pulse_mvp_projects_v001";
 const TASKS_STORAGE_KEY = "pulse_mvp_tasks_v001";
 const BILLING_STORAGE_KEY = "PULSE_BILLING";
-
 const STAGES = {
   new: "Novi",
   meeting_done: "Održan sastanak",
@@ -26,6 +25,7 @@ const FRAGMENTS = {
   dashboardRoot: "./fragments/dashboard.html",
   clientsRoot: "./fragments/clients.html",
   actionsRoot: "./fragments/actions.html",
+  billingRoot: "./fragments/billing.html",
   drawerRoot: "./fragments/customer-drawer.html"
 };
 
@@ -37,8 +37,8 @@ const MODAL_FRAGMENTS = [
   "./fragments/task-modal.html",
   "./fragments/project-tasks-modal.html",
   "./fragments/task-detail-modal.html",
-  "./fragments/task-billing-modal.html",
   "./fragments/task-delegate-modal.html",
+  "./fragments/billing-modal.html",
   "./fragments/payment-modal.html",
   "./fragments/weekly-actions-modal.html",
   "./fragments/license-modal.html",
@@ -59,7 +59,8 @@ let currentActivityClientId = null;
 let currentPaymentClientId = null;
 let currentTaskListProjectId = null;
 let currentTaskDetailId = null;
-let currentTaskBillingTaskId = null;
+let currentBillingModalId = null;
+let currentBillingModalProjectId = null;
 let reopenTaskListAfterCreate = false;
 let currentClientsMode = "all";
 
@@ -76,7 +77,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   migrateProjects();
   await resolveTaskSource();
   migrateTasks();
-  loadBilling();
+  await resolveBillingSource();
   renderLicenseUI();
   renderSettingsUI();
   renderAll();
@@ -187,6 +188,7 @@ function bindStaticEvents() {
   bindClickIfExists("settingsOpenLicenseBtn", handleSettingsPlanAndTrial);
   bindClickIfExists("settingsConnectCloudBtn", handleSettingsCloudConnect);
   bindClickIfExists("settingsLogoutBtn", handleSettingsLogout);
+  bindClickIfExists("saveProfileHourlyRateBtn", handleProfileSettingsSave);
   bindClickIfExists("openOnboardingFromSettingsBtn", handleSettingsWorkspaceSetup);
   bindClickIfExists("saveWorkspaceNameBtn", handleWorkspaceNameSave);
   bindClickIfExists("sendWorkspaceInviteBtn", handleWorkspaceInviteSend);
@@ -293,19 +295,10 @@ function bindStaticEvents() {
   bindClickIfExists("projectTasksModalBackdrop", closeProjectTasksModal);
   bindClickIfExists("closeProjectTasksBtn", closeProjectTasksModal);
   bindClickIfExists("newTaskFromProjectTasksBtn", openNewTaskFromProjectTasksModal);
+  bindClickIfExists("createProjectBillingBtn", handleOpenProjectBillingFromModal);
   bindClickIfExists("closeTaskDetailModalBtn", closeTaskDetailModal);
   bindClickIfExists("taskDetailModalBackdrop", closeTaskDetailModal);
   bindClickIfExists("closeTaskDetailBtn", closeTaskDetailModal);
-  bindClickIfExists("closeTaskBillingModalBtn", closeTaskBillingModal);
-  bindClickIfExists("taskBillingModalBackdrop", closeTaskBillingModal);
-  bindClickIfExists("cancelTaskBillingBtn", closeTaskBillingModal);
-  bindDatePickerIfExists("taskBillingDueDate");
-
-  const taskBillingForm = document.getElementById("taskBillingForm");
-  if (taskBillingForm) {
-    taskBillingForm.addEventListener("submit", handleTaskBillingSubmit);
-  }
-
   bindClickIfExists("closeTaskDelegateModalBtn", closeTaskDelegateModal);
   bindClickIfExists("taskDelegateModalBackdrop", closeTaskDelegateModal);
   bindClickIfExists("cancelTaskDelegateBtn", closeTaskDelegateModal);
@@ -314,6 +307,19 @@ function bindStaticEvents() {
   if (taskDelegateForm) {
     taskDelegateForm.addEventListener("submit", handleTaskDelegateSubmit);
   }
+
+  document.querySelectorAll("[data-project-billing-filter]").forEach(button => {
+    button.addEventListener("click", () => setProjectBillingFilter(button.dataset.projectBillingFilter || "all"));
+  });
+
+  bindClickIfExists("closeBillingModalBtn", closeBillingModal);
+  bindClickIfExists("billingModalBackdrop", closeBillingModal);
+  bindClickIfExists("closeBillingModalActionBtn", closeBillingModal);
+  bindClickIfExists("saveProjectBillingBtn", handleCreateProjectBillingSubmit);
+  bindClickIfExists("billingMarkInvoicedBtn", handleBillingMarkInvoiced);
+  bindClickIfExists("billingMarkPaidBtn", handleBillingMarkPaid);
+  bindClickIfExists("billingMarkOverdueBtn", handleBillingMarkOverdue);
+  bindDatePickerIfExists("billingProjectDueDate");
 
   document.querySelectorAll(".stage-action-btn").forEach(btn => {
     btn.addEventListener("click", () => handleStageAction(btn.dataset.stageAction));

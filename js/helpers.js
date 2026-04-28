@@ -211,11 +211,24 @@ function isTaskOverdue(task) {
 }
 
 function isCurrentUserFinanceRole() {
-  return normalizeWorkspaceRole(currentMembership?.role || "") === "finance";
+  return getCurrentAppRole() === "finance";
 }
 
 function isCurrentUserAdminRole() {
-  return normalizeWorkspaceRole(currentMembership?.role || "") === "admin";
+  return getCurrentAppRole() === "admin";
+}
+
+function getCurrentAppRole() {
+  const rawRole =
+    currentMembership?.role ||
+    currentProfile?.role ||
+    currentProfile?.workspace_role ||
+    "admin";
+
+  const normalized = normalizeWorkspaceRole(rawRole);
+  if (normalized === "finance") return "finance";
+  if (normalized === "admin") return "admin";
+  return "user";
 }
 
 function getCurrentUserDisplayName() {
@@ -248,23 +261,25 @@ function getAssignableWorkspaceMembers() {
         profile.email ||
         (member.user_id === supabaseUser?.id ? getCurrentUserDisplayName() : `Korisnik ${String(member.user_id || "").slice(0, 8)}`);
 
-      return {
-        id: member.user_id,
-        name,
-        email: profile.email || "",
-        role: member.role || "member"
-      };
-    });
-  }
+        return {
+          id: member.user_id,
+          name,
+          email: profile.email || "",
+          role: member.role || "member",
+          hourlyRate: profile.hourlyRate ?? profile.hourly_rate ?? remembered?.hourlyRate ?? remembered?.hourly_rate ?? null
+        };
+      });
+    }
 
   if (supabaseUser?.id) {
-    return [{
-      id: supabaseUser.id,
-      name: getCurrentUserDisplayName(),
-      email: supabaseUser.email || "",
-      role: currentMembership?.role || "admin"
-    }];
-  }
+      return [{
+        id: supabaseUser.id,
+        name: getCurrentUserDisplayName(),
+        email: supabaseUser.email || "",
+        role: currentMembership?.role || "admin",
+        hourlyRate: currentProfile?.hourlyRate ?? currentProfile?.hourly_rate ?? null
+      }];
+    }
 
   return [];
 }
@@ -753,10 +768,11 @@ function getBillingRecordBySourceTask(client, taskId) {
 
 function normalizeBillingStatus(status) {
   switch (status) {
+    case "draft":
     case "to_invoice":
     case "requested":
     case "request":
-      return "to_invoice";
+      return "draft";
     case "invoiced":
     case "invoice_sent":
     case "waiting_payment":
@@ -765,11 +781,12 @@ function normalizeBillingStatus(status) {
       return "paid";
     case "late":
     case "overdue":
-      return "late";
+      return "overdue";
+    case "cancelled":
     case "canceled":
-      return "canceled";
+      return "cancelled";
     default:
-      return "to_invoice";
+      return "draft";
   }
 }
 
@@ -785,11 +802,11 @@ function refreshBillingRecordStatus(record) {
 
 function billingStatusLabel(status) {
   switch (normalizeBillingStatus(status)) {
-    case "to_invoice": return "Za fakturisanje";
+    case "draft": return "Za fakturisanje";
     case "invoiced": return "Fakturisano";
     case "paid": return "Placeno";
-    case "late": return "Kasni";
-    case "canceled": return "Otkazano";
+    case "overdue": return "Kasni";
+    case "cancelled": return "Otkazano";
     default: return "Za fakturisanje";
   }
 }
