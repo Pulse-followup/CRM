@@ -97,6 +97,14 @@ async function handleCloudSignIn(e) {
   await initWorkspaceContext();
   await resolveClientSource();
   migrateClients();
+  if (typeof resolveProjectSource === "function") {
+    await resolveProjectSource();
+    migrateProjects();
+  }
+  if (typeof resolveTaskSource === "function") {
+    await resolveTaskSource();
+    migrateTasks();
+  }
   renderLicenseUI();
   renderSettingsUI();
   renderAll();
@@ -148,6 +156,16 @@ async function handleCloudLogout() {
     await resolveClientSource({ silent: true });
     migrateClients();
   }
+  if (typeof resetProjectSourceResolution === "function") {
+    resetProjectSourceResolution();
+    await resolveProjectSource({ silent: true });
+    migrateProjects();
+  }
+  if (typeof resetTaskSourceResolution === "function") {
+    resetTaskSourceResolution();
+    await resolveTaskSource({ silent: true });
+    migrateTasks();
+  }
   renderAll();
   renderSettingsUI();
   syncCloudStatusUI();
@@ -167,6 +185,12 @@ async function handleManualCloudSync() {
 
   if (typeof canUseWorkspaceClientStore === "function" && canUseWorkspaceClientStore()) {
     await hydrateClientsFromWorkspace({ pushIfEmpty: false });
+    if (typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore()) {
+      await hydrateProjectsFromWorkspace({ silent: true });
+    }
+    if (typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore()) {
+      await hydrateTasksFromWorkspace({ silent: true });
+    }
     if (typeof loadWorkspaceMembers === "function") {
       await loadWorkspaceMembers();
     }
@@ -187,10 +211,18 @@ async function handleManualCloudSync() {
 
   await resolveClientSource();
   migrateClients();
+  if (typeof resolveProjectSource === "function") {
+    await resolveProjectSource();
+    migrateProjects();
+  }
+  if (typeof resolveTaskSource === "function") {
+    await resolveTaskSource();
+    migrateTasks();
+  }
   renderAll();
   cloudSyncState = "synced";
   syncCloudStatusUI("Lokalni fallback osvezen");
-  showToast("Klijenti su osvezeni iz aktivnog izvora.");
+  showToast("Podaci su osvezeni iz aktivnog izvora.");
 }
 
 function syncCloudStatusUI(overrideText = "") {

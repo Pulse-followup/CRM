@@ -413,7 +413,7 @@ function renderActivityProjectOptions(client) {
   const projectSelect = document.getElementById("activityProjectSelect");
   if (!projectSelect) return;
 
-  const projects = getClientOpenProjects(client);
+  const projects = getProjectsByClientId(client.id).filter(project => project.archived !== true);
   projectSelect.innerHTML = `<option value="">Izaberi projekat</option>`;
   projects.forEach(project => {
     const option = document.createElement("option");
@@ -672,7 +672,7 @@ function openActivityModal(clientId, options = {}) {
     : getClientDashboardTask(client) || getClientActiveTask(client);
   const lockedProject = options.projectId ? getClientProjectById(client, options.projectId) : null;
   const defaultOwnerId = activeTask?.ownerId || supabaseUser?.id || "";
-  const openProjects = getClientOpenProjects(client);
+  const openProjects = getProjectsByClientId(client.id).filter(project => project.archived !== true);
 
   setTextIfExists("activityModalTitle", `Nova aktivnost - ${client.name}`);
   setTextIfExists(
@@ -798,6 +798,16 @@ async function handleActivitySubmit(e) {
 
     if (projectFields) {
       project = createClientProject(client, projectFields);
+      if (!project) {
+        showToast("Projekat nije kreiran.");
+        return;
+      }
+      const projectSynced = typeof persistProjects === "function"
+        ? await persistProjects({ immediate: true })
+        : true;
+      if (!projectSynced) {
+        showToast("Projekat je sacuvan lokalno, ali sync nije uspeo.");
+      }
     }
 
     client.stage = getAutoStageFromActivity(client, activityType);
@@ -843,8 +853,6 @@ async function handleActivitySubmit(e) {
         ? currentActivityContext.taskId || ""
         : "";
 
-      ensureClientWorkflow(client);
-
       const task = {
         id: taskId,
         title: taskTitle,
@@ -863,7 +871,45 @@ async function handleActivitySubmit(e) {
         createdAt: nowISO()
       };
 
-      addTaskToProject(client, project, task);
+      const mapWorkflowStatusToGlobal = value => {
+        switch (normalizeTaskStatus(value)) {
+          case "assigned": return "dodeljen";
+          case "waiting": return "na_cekanju";
+          case "done": return "zavrsen";
+          case "returned": return "vracen";
+          case "sent_to_billing": return "poslat_na_naplatu";
+          default: return "dodeljen";
+        }
+      };
+
+      const globalTaskPayload = {
+        id: task.id,
+        projectId: String(task.projectId || "").trim(),
+        clientId: String(client.id || "").trim(),
+        actionType: String(activityType || "").trim(),
+        title: task.title,
+        description: task.note || "",
+        assignedTo: String(task.ownerId || "").trim(),
+        assignedToUserId: String(task.ownerId || "").trim(),
+        assignedToLabel: task.ownerName || task.ownerEmail || String(task.ownerId || "").trim(),
+        createdByUserId: supabaseUser?.id ? String(supabaseUser.id) : null,
+        createdByLabel: actorName,
+        delegatedByUserId: task.delegatedById ? String(task.delegatedById) : null,
+        delegatedByLabel: task.delegatedByName || "",
+        dueDate: task.dueDate || null,
+        status: mapWorkflowStatusToGlobal(task.status),
+        createdAt: task.createdAt
+      };
+
+      console.log("CREATE TASK payload:", globalTaskPayload);
+      const savedTask = saveTask(globalTaskPayload);
+      console.log("Saved task:", savedTask);
+      if (savedTask && typeof persistTasks === "function") {
+        const taskSynced = await persistTasks({ immediate: true });
+        if (!taskSynced) {
+          showToast("Task je sacuvan lokalno, ali sync nije uspeo.");
+        }
+      }
 
       client.nextStepText = taskTitle;
       client.nextStepType = "task";

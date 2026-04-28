@@ -262,11 +262,24 @@ function getGlobalTaskDueSortValue(task) {
   return dueDay ? dueDay.getTime() : Number.MAX_SAFE_INTEGER;
 }
 
+function resolveProjectForTask(task) {
+  const clientId = String(task?.clientId || "").trim();
+  const projectId = String(task?.projectId || "").trim();
+  if (clientId && projectId) {
+    const client = clients.find(item => String(item.id) === clientId);
+    if (client && typeof getClientProjectById === "function") {
+      const workflowProject = getClientProjectById(client, projectId);
+      if (workflowProject) return workflowProject;
+    }
+  }
+  return typeof getProjectById === "function" ? getProjectById(projectId) : null;
+}
+
 function getGlobalTaskEntries() {
   return getAllTasks().map(task => ({
     task,
-    project: getProjectById(task.projectId),
-    client: clients.find(client => String(client.id) === String(task.clientId)),
+    client: clients.find(client => String(client.id) === String(task.clientId)) || null,
+    project: resolveProjectForTask(task),
     overdue: isGlobalTaskOverdue(task)
   }));
 }
@@ -310,16 +323,16 @@ function createGlobalTaskListRow(entry) {
   const taskText = entry.task.description || entry.task.title || "-";
 
   row.type = "button";
-  row.className = "global-task-row";
+  row.className = "global-task-row key-value-row";
   row.innerHTML = `
-    <span class="global-task-main">
-      <strong>#${escapeHtml(entry.task.sequenceNumber || "-")}</strong>
-      <span class="global-task-project">${escapeHtml(projectName)}</span>
+    <div>
+      <strong>#${escapeHtml(entry.task.sequenceNumber || "-")} • ${escapeHtml(projectName)}</strong><br />
+      <span>${escapeHtml(clientName)} • ${escapeHtml(taskText)}</span>
+    </div>
+    <strong>
       <span class="${taskEntityStatusBadgeClass(entry.task.status)}">${escapeHtml(taskEntityStatusLabel(entry.task.status))}</span>
       ${entry.overdue ? '<span class="badge danger">Kasni</span>' : ""}
-    </span>
-    <span class="global-task-client">${escapeHtml(clientName)}</span>
-    <span class="global-task-title">${escapeHtml(taskText)}</span>
+    </strong>
   `;
   row.addEventListener("click", () => openTaskDetailModal(entry.task.id));
   return row;
@@ -645,7 +658,7 @@ function renderClientsList() {
 
   filtered.forEach(client => {
     const statusText = STAGES[client.stage] || "Novi";
-    const projectsCount = getClientOpenProjects(client).length;
+    const projectsCount = getProjectsByClientId(client.id).length;
     const pulseScore = computePulseScore(client);
     const potential = computeCommercialPotential(client);
     const priority = computePriorityBase(client);
@@ -772,8 +785,8 @@ function getClientFilterKey(client) {
 function getTeamTaskEntries() {
   return getAllTasks().map(task => ({
     task,
-    project: getProjectById(task.projectId),
     client: clients.find(client => String(client.id) === String(task.clientId)) || null,
+    project: resolveProjectForTask(task),
     overdue: isGlobalTaskOverdue(task)
   }));
 }
@@ -837,16 +850,17 @@ function createTeamActivityCard(entry) {
   const status = getTeamTaskDisplayStatus(entry.task, entry.overdue);
 
   row.type = "button";
-  row.className = "team-task-row";
+  row.className = "team-task-row key-value-row";
   row.innerHTML = `
-    <span class="team-task-line-top">
-      <span class="team-task-flow">${escapeHtml(getTeamTaskFlowLabel(entry.task))}</span>
-      <span class="badge neutral team-client-badge">${escapeHtml(entry.client?.name || "Klijent")}</span>
-    </span>
-    <span class="team-task-line-bottom">
-      <span class="team-task-meta">#${escapeHtml(entry.task.sequenceNumber || "-")} &bull; ${escapeHtml(entry.project?.name || "Bez projekta")} &bull; ${escapeHtml(taskTopic)} &bull; ${escapeHtml(dueLabel)}</span>
+    <div>
+      <strong>#${escapeHtml(entry.task.sequenceNumber || "-")} • ${escapeHtml(entry.project?.name || "Bez projekta")}</strong><br />
+      <span>${escapeHtml(entry.client?.name || "Klijent")} • ${escapeHtml(taskTopic)} • ${escapeHtml(dueLabel)}</span><br />
+      <span>${escapeHtml(getTeamTaskFlowLabel(entry.task))}</span>
+    </div>
+    <strong>
       <span class="${status.className}">${escapeHtml(status.label)}</span>
-    </span>
+      ${entry.overdue ? '<span class="badge danger">Kasni</span>' : ""}
+    </strong>
   `;
   row.addEventListener("click", () => openTaskDetailModal(entry.task.id));
   return row;
@@ -909,29 +923,22 @@ function getTeamTaskFlowLabel(task) {
 
 function createTeamActivityCard(entry) {
   const row = document.createElement("button");
-  const taskTypeLabel = taskActionTypeLabel(entry.task.actionType) || "Task";
-  const projectLabel = String(entry.project?.name || "").trim();
+  const taskTopic = entry.task.title || taskActionTypeLabel(entry.task.actionType) || "Task";
   const dueLabel = taskDueDateShortLabel(entry.task.dueDate);
   const status = getTeamTaskDisplayStatus(entry.task, entry.overdue);
-  const metaParts = [`#${entry.task.sequenceNumber || "-"}`, taskTypeLabel];
-
-  if (projectLabel) {
-    metaParts.push(projectLabel);
-  }
-
-  metaParts.push(dueLabel);
 
   row.type = "button";
-  row.className = "team-task-row";
+  row.className = "team-task-row key-value-row";
   row.innerHTML = `
-    <span class="team-task-line-top">
-      <span class="team-task-flow">${escapeHtml(getTeamTaskFlowLabel(entry.task))}</span>
-      <span class="badge neutral team-client-badge">${escapeHtml(entry.client?.name || "Klijent")}</span>
-    </span>
-    <span class="team-task-line-bottom">
-      <span class="team-task-meta">${metaParts.map(part => escapeHtml(part)).join(" &bull; ")}</span>
+    <div>
+      <strong>#${escapeHtml(entry.task.sequenceNumber || "-")} • ${escapeHtml(entry.project?.name || "Bez projekta")}</strong><br />
+      <span>${escapeHtml(entry.client?.name || "Klijent")} • ${escapeHtml(taskTopic)} • ${escapeHtml(dueLabel)}</span><br />
+      <span>${escapeHtml(getTeamTaskFlowLabel(entry.task))}</span>
+    </div>
+    <strong>
       <span class="${status.className}">${escapeHtml(status.label)}</span>
-    </span>
+      ${entry.overdue ? '<span class="badge danger">Kasni</span>' : ""}
+    </strong>
   `;
   row.addEventListener("click", () => openTaskDetailModal(entry.task.id));
   return row;

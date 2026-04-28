@@ -8,6 +8,8 @@ let currentWorkspaceMembers = [];
 let currentWorkspaceInvites = [];
 let isEditingWorkspaceName = false;
 let workspaceClientsReady = false;
+let workspaceProjectsReady = false;
+let workspaceTasksReady = false;
 let workspaceActivitiesReady = false;
 let workspaceClientsProbe = {
   ok: false,
@@ -257,6 +259,8 @@ function resetWorkspaceContext() {
   currentWorkspaceInvites = [];
   isEditingWorkspaceName = false;
   workspaceClientsReady = false;
+  workspaceProjectsReady = false;
+  workspaceTasksReady = false;
   workspaceActivitiesReady = false;
 }
 
@@ -266,6 +270,14 @@ function canUseTeamFeatures() {
 
 function canUseWorkspaceClientStore() {
   return Boolean(canUseTeamFeatures() && currentWorkspace?.id && workspaceClientsReady);
+}
+
+function canUseWorkspaceProjectStore() {
+  return Boolean(canUseTeamFeatures() && currentWorkspace?.id && workspaceProjectsReady);
+}
+
+function canUseWorkspaceTaskStore() {
+  return Boolean(canUseTeamFeatures() && currentWorkspace?.id && workspaceTasksReady);
 }
 
 function canUseWorkspaceActivityStore() {
@@ -402,6 +414,54 @@ async function detectWorkspaceActivitiesStore() {
 
   workspaceActivitiesReady = !error;
   return workspaceActivitiesReady;
+}
+
+async function detectWorkspaceProjectsStore() {
+  if (!canUseTeamFeatures() || !currentWorkspace?.id) {
+    workspaceProjectsReady = false;
+    return false;
+  }
+
+  const { error } = await supabaseClient
+    .from("projects")
+    .select("id")
+    .eq("workspace_id", currentWorkspace.id)
+    .limit(1);
+
+  if (error) {
+    console.warn("[Pulse Projects] Workspace projects store unavailable.", {
+      workspaceId: currentWorkspace.id,
+      code: error.code || null,
+      message: error.message || "Nepoznata greska"
+    });
+  }
+
+  workspaceProjectsReady = !error;
+  return workspaceProjectsReady;
+}
+
+async function detectWorkspaceTasksStore() {
+  if (!canUseTeamFeatures() || !currentWorkspace?.id) {
+    workspaceTasksReady = false;
+    return false;
+  }
+
+  const { error } = await supabaseClient
+    .from("tasks")
+    .select("id")
+    .eq("workspace_id", currentWorkspace.id)
+    .limit(1);
+
+  if (error) {
+    console.warn("[Pulse Tasks] Workspace tasks store unavailable.", {
+      workspaceId: currentWorkspace.id,
+      code: error.code || null,
+      message: error.message || "Nepoznata greska"
+    });
+  }
+
+  workspaceTasksReady = !error;
+  return workspaceTasksReady;
 }
 
 async function createProfileIfMissing(defaultFullName = "") {
@@ -693,6 +753,8 @@ async function initWorkspaceContext() {
   await loadWorkspaceMembers();
   await loadWorkspaceInvites();
   await detectWorkspaceClientsStore();
+  await detectWorkspaceProjectsStore();
+  await detectWorkspaceTasksStore();
   await detectWorkspaceActivitiesStore();
   renderSessionUI();
 }
@@ -789,11 +851,23 @@ async function createWorkspace(workspaceName) {
   await loadWorkspaceMembers();
   await loadWorkspaceInvites();
   await detectWorkspaceClientsStore();
+  await detectWorkspaceProjectsStore();
+  await detectWorkspaceTasksStore();
   await detectWorkspaceActivitiesStore();
   if (typeof resetClientSourceResolution === "function") {
     resetClientSourceResolution();
     await resolveClientSource();
     migrateClients();
+    if (typeof resetProjectSourceResolution === "function") {
+      resetProjectSourceResolution();
+      await resolveProjectSource();
+      migrateProjects();
+    }
+    if (typeof resetTaskSourceResolution === "function") {
+      resetTaskSourceResolution();
+      await resolveTaskSource();
+      migrateTasks();
+    }
     renderAll();
   }
   renderSessionUI();
@@ -888,11 +962,23 @@ async function acceptPendingInvite() {
   await loadWorkspaceMembers();
   await loadWorkspaceInvites();
   await detectWorkspaceClientsStore();
+  await detectWorkspaceProjectsStore();
+  await detectWorkspaceTasksStore();
   await detectWorkspaceActivitiesStore();
   if (typeof resetClientSourceResolution === "function") {
     resetClientSourceResolution();
     await resolveClientSource();
     migrateClients();
+    if (typeof resetProjectSourceResolution === "function") {
+      resetProjectSourceResolution();
+      await resolveProjectSource();
+      migrateProjects();
+    }
+    if (typeof resetTaskSourceResolution === "function") {
+      resetTaskSourceResolution();
+      await resolveTaskSource();
+      migrateTasks();
+    }
     renderAll();
   }
   renderSessionUI();

@@ -2,6 +2,123 @@
 let clientDataSource = "unresolved";
 let clientHydrationPromise = null;
 let workspaceClientSyncTimer = null;
+let projectDataSource = "unresolved";
+let projectHydrationPromise = null;
+let workspaceProjectSyncTimer = null;
+let taskDataSource = "unresolved";
+let taskHydrationPromise = null;
+let workspaceTaskSyncTimer = null;
+
+function readBillingCache() {
+  try {
+    const raw = localStorage.getItem(BILLING_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadBilling() {
+  billing = readBillingCache() || [];
+  return billing.length > 0;
+}
+
+function saveBilling() {
+  try {
+    localStorage.setItem(BILLING_STORAGE_KEY, JSON.stringify(billing));
+    return true;
+  } catch (error) {
+    console.warn("[Pulse Billing] Local save failed.", error);
+    return false;
+  }
+}
+
+function normalizeBillingRecord(record = {}) {
+  const now = nowISO();
+  const amountRaw = record.amount ?? record.value ?? null;
+  const amountNumber = amountRaw === "" || amountRaw === null || typeof amountRaw === "undefined"
+    ? null
+    : Number(amountRaw);
+
+  return {
+    id: String(record.id || createLocalEntityId("billing")),
+    clientId: String(record.clientId ?? record.client_id ?? "").trim(),
+    projectId: String(record.projectId ?? record.project_id ?? "").trim(),
+    taskId: String(record.taskId ?? record.task_id ?? "").trim(),
+    description: String(record.description || "").trim(),
+    amount: Number.isFinite(amountNumber) ? amountNumber : null,
+    currency: String(record.currency || "RSD").trim() || "RSD",
+    dueDate: record.dueDate || record.due_date || null,
+    status: String(record.status || "draft").trim() || "draft",
+    invoiceNumber: String(record.invoiceNumber ?? record.invoice_number ?? "").trim(),
+    createdAt: record.createdAt || record.created_at || now,
+    updatedAt: record.updatedAt || record.updated_at || record.createdAt || record.created_at || now,
+    invoicedAt: record.invoicedAt || record.invoiced_at || null,
+    paidAt: record.paidAt || record.paid_at || null
+  };
+}
+
+function getAllBilling() {
+  return (Array.isArray(billing) ? billing : [])
+    .map(normalizeBillingRecord)
+    .filter(Boolean);
+}
+
+function getBillingByTaskId(taskId) {
+  if (!taskId) return null;
+  return getAllBilling().find(record => String(record.taskId) === String(taskId)) || null;
+}
+
+function getBillingByClientId(clientId) {
+  if (!clientId) return [];
+  return getAllBilling().filter(record => String(record.clientId) === String(clientId));
+}
+
+function getBillingByProjectId(projectId) {
+  if (!projectId) return [];
+  return getAllBilling().filter(record => String(record.projectId) === String(projectId));
+}
+
+function createBillingFromTask(taskId, payload = {}) {
+  const task = typeof getTaskById === "function" ? getTaskById(taskId) : null;
+  if (!task) return null;
+
+  if (task.billingId) {
+    return { duplicate: true, record: getAllBilling().find(item => String(item.id) === String(task.billingId)) || null };
+  }
+
+  const existing = getBillingByTaskId(task.id);
+  if (existing) {
+    return { duplicate: true, record: existing };
+  }
+
+  const project = typeof getProjectById === "function" ? getProjectById(task.projectId) : null;
+  const description = String(payload.description || "").trim();
+  const record = normalizeBillingRecord({
+    id: createLocalEntityId("billing"),
+    clientId: task.clientId,
+    projectId: task.projectId,
+    taskId: task.id,
+    description,
+    amount: payload.amount,
+    currency: payload.currency || "RSD",
+    dueDate: payload.dueDate || null,
+    status: "draft",
+    invoiceNumber: payload.invoiceNumber || "",
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
+    invoicedAt: null,
+    paidAt: null,
+    projectName: project?.name || ""
+  });
+
+  if (!Array.isArray(billing)) billing = [];
+  billing = [record, ...billing.filter(item => String(item.id) !== String(record.id))];
+  saveBilling();
+  return { duplicate: false, record };
+}
 
 function getClientCacheKey() {
   if (currentWorkspace?.id) return `${STORAGE_KEY}:workspace:${currentWorkspace.id}`;
@@ -63,6 +180,23 @@ function loadProjects() {
 }
 
 function saveProjects() {
+  if (typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore()) {
+    if (projectDataSource !== "workspace") {
+      console.warn("[Pulse Projects] Workspace save blocked before workspace source is resolved.", {
+        projectDataSource,
+        workspaceId: currentWorkspace?.id || null
+      });
+      return saveProjectsLocalOnly();
+    }
+    saveProjectsLocalOnly();
+    queueWorkspaceProjectSync();
+    return true;
+  }
+
+  return saveProjectsLocalOnly();
+}
+
+function saveProjectsLocalOnly() {
   try {
     localStorage.setItem(getProjectCacheKey(), JSON.stringify(projects));
     return true;
@@ -70,6 +204,16 @@ function saveProjects() {
     console.warn("[Pulse Projects] Local cache save failed.", error);
     return false;
   }
+}
+
+function queueWorkspaceProjectSync() {
+  if (!(typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore())) return;
+  cloudSyncState = "idle";
+  syncCloudStatusUI();
+  clearTimeout(workspaceProjectSyncTimer);
+  workspaceProjectSyncTimer = setTimeout(() => {
+    void pushProjectsToWorkspace();
+  }, 500);
 }
 
 function normalizeProject(project = {}) {
@@ -101,9 +245,52 @@ function normalizeProject(project = {}) {
 }
 
 function migrateProjects() {
-  projects = (Array.isArray(projects) ? projects : [])
+  const normalizedProjects = (Array.isArray(projects) ? projects : [])
     .map(normalizeProject)
     .filter(project => project.id && project.clientId);
+
+  const seenProjectKeys = new Set();
+  normalizedProjects.forEach(project => {
+    seenProjectKeys.add(`id:${String(project.id)}`);
+    seenProjectKeys.add(`client-name:${String(project.clientId)}:${String(project.name || "").trim().toLowerCase()}`);
+  });
+
+  (Array.isArray(clients) ? clients : []).forEach(client => {
+    const legacyProjects = Array.isArray(client?.payment?.workflow?.projects)
+      ? client.payment.workflow.projects
+      : [];
+
+    legacyProjects.forEach(legacyProject => {
+      const normalizedLegacyProject = normalizeProject({
+        id: legacyProject.id || createLocalEntityId("project"),
+        clientId: String(client.id),
+        name: legacyProject.name || "Projekat",
+        type: legacyProject.type || "",
+        frequency: legacyProject.frequency || "",
+        estimatedValue: legacyProject.estimatedValue ?? legacyProject.estimated_value ?? null,
+        status:
+          legacyProject.status === "done" || legacyProject.status === "canceled"
+            ? "zavrsen"
+            : (legacyProject.status || "aktivan"),
+        archived: legacyProject.archived === true,
+        archivedAt: legacyProject.archivedAt || legacyProject.archived_at || null,
+        createdAt: legacyProject.createdAt || legacyProject.created_at || client.createdAt || nowISO(),
+        updatedAt: legacyProject.updatedAt || legacyProject.updated_at || legacyProject.createdAt || client.createdAt || nowISO()
+      });
+      const legacyIdKey = `id:${String(normalizedLegacyProject.id)}`;
+      const legacyNameKey = `client-name:${String(normalizedLegacyProject.clientId)}:${String(normalizedLegacyProject.name || "").trim().toLowerCase()}`;
+
+      if (seenProjectKeys.has(legacyIdKey) || seenProjectKeys.has(legacyNameKey)) {
+        return;
+      }
+
+      normalizedProjects.unshift(normalizedLegacyProject);
+      seenProjectKeys.add(legacyIdKey);
+      seenProjectKeys.add(legacyNameKey);
+    });
+  });
+
+  projects = normalizedProjects;
 
   saveProjects();
 }
@@ -146,6 +333,23 @@ function loadTasks() {
 }
 
 function saveTasks() {
+  if (typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore()) {
+    if (taskDataSource !== "workspace") {
+      console.warn("[Pulse Tasks] Workspace save blocked before workspace source is resolved.", {
+        taskDataSource,
+        workspaceId: currentWorkspace?.id || null
+      });
+      return saveTasksLocalOnly();
+    }
+    saveTasksLocalOnly();
+    queueWorkspaceTaskSync();
+    return true;
+  }
+
+  return saveTasksLocalOnly();
+}
+
+function saveTasksLocalOnly() {
   try {
     localStorage.setItem(getTaskCacheKey(), JSON.stringify(tasks));
     return true;
@@ -155,15 +359,26 @@ function saveTasks() {
   }
 }
 
+function queueWorkspaceTaskSync() {
+  if (!(typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore())) return;
+  cloudSyncState = "idle";
+  syncCloudStatusUI();
+  clearTimeout(workspaceTaskSyncTimer);
+  workspaceTaskSyncTimer = setTimeout(() => {
+    void pushTasksToWorkspace();
+  }, 500);
+}
+
 function normalizeTaskEntity(task = {}) {
   const projectId = String(task.projectId ?? task.project_id ?? "").trim();
   if (!projectId) return null;
 
-  const project = getProjectById(projectId);
-  if (!project) return null;
-
-  const clientId = String(task.clientId ?? task.client_id ?? project.clientId ?? "").trim();
-  if (!clientId || clientId !== String(project.clientId)) return null;
+  // NOTE: Tasks are allowed to reference projects that only exist in the
+  // client workflow store (client.projects). The global tasks store uses
+  // localStorage as source of truth in V1, so we should not drop tasks when
+  // a matching entry is missing from the global projects store.
+  const clientId = String(task.clientId ?? task.client_id ?? "").trim();
+  if (!clientId) return null;
 
   const now = nowISO();
   const createdAt = task.createdAt || task.created_at || now;
@@ -178,6 +393,17 @@ function normalizeTaskEntity(task = {}) {
   const delegatedByLabel = hasDelegatedByLabel
     ? (task.delegatedByLabel ?? task.delegated_by_label)
     : "";
+  const hasReviewStatus =
+    Object.prototype.hasOwnProperty.call(task, "reviewStatus") ||
+    Object.prototype.hasOwnProperty.call(task, "review_status");
+    const rawReviewStatus = hasReviewStatus
+      ? String(task.reviewStatus ?? task.review_status ?? "").trim()
+      : "";
+    const status = String(task.status || "dodeljen").trim() || "dodeljen";
+    const reviewStatus = rawReviewStatus || (status === "zavrsen" ? "pending_review" : "");
+    const archived = task.archived === true || task.archived === "true";
+    const archivedAt = task.archivedAt || task.archived_at || null;
+    const billingId = task.billingId ?? task.billing_id ?? null;
 
   return {
     id: String(task.id || createLocalEntityId("task")),
@@ -190,16 +416,20 @@ function normalizeTaskEntity(task = {}) {
     assignedTo: assignedToRaw,
     assignedToUserId: assignedToUserId ? String(assignedToUserId).trim() : null,
     assignedToLabel: String(task.assignedToLabel ?? task.assigned_to_label ?? assignedToRaw ?? "").trim(),
-    createdByUserId: createdByUserId ? String(createdByUserId).trim() : null,
-    createdByLabel: String(task.createdByLabel ?? task.created_by_label ?? "").trim(),
-    delegatedByUserId: delegatedByUserId ? String(delegatedByUserId).trim() : null,
-    delegatedByLabel: delegatedByLabel === null ? null : String(delegatedByLabel || "").trim(),
-    dueDate: task.dueDate || task.due_date || null,
-    status: String(task.status || "dodeljen").trim() || "dodeljen",
-    createdAt,
-    updatedAt: task.updatedAt || task.updated_at || createdAt
-  };
-}
+      createdByUserId: createdByUserId ? String(createdByUserId).trim() : null,
+      createdByLabel: String(task.createdByLabel ?? task.created_by_label ?? "").trim(),
+      delegatedByUserId: delegatedByUserId ? String(delegatedByUserId).trim() : null,
+      delegatedByLabel: delegatedByLabel === null ? null : String(delegatedByLabel || "").trim(),
+      dueDate: task.dueDate || task.due_date || null,
+      status,
+      reviewStatus,
+      billingId: billingId ? String(billingId).trim() : null,
+      archived,
+      archivedAt,
+      createdAt,
+      updatedAt: task.updatedAt || task.updated_at || createdAt
+    };
+  }
 
 function getNextTaskSequenceNumber(projectId, excludedTaskId = "") {
   const maxSequence = (Array.isArray(tasks) ? tasks : []).reduce((max, task) => {
@@ -241,20 +471,20 @@ function getTasksByProjectId(projectId) {
   if (!projectId) return [];
   return (Array.isArray(tasks) ? tasks : [])
     .map(normalizeTaskEntity)
-    .filter(task => task && String(task.projectId) === String(projectId));
+    .filter(task => task && task.archived !== true && String(task.projectId) === String(projectId));
 }
 
 function getTasksByClientId(clientId) {
   if (!clientId) return [];
   return (Array.isArray(tasks) ? tasks : [])
     .map(normalizeTaskEntity)
-    .filter(task => task && String(task.clientId) === String(clientId));
+    .filter(task => task && task.archived !== true && String(task.clientId) === String(clientId));
 }
 
 function getAllTasks() {
   return (Array.isArray(tasks) ? tasks : [])
     .map(normalizeTaskEntity)
-    .filter(Boolean);
+    .filter(task => task && task.archived !== true);
 }
 
 function getTaskById(taskId) {
@@ -327,6 +557,359 @@ function updateTaskStatus(taskId, newStatus) {
   };
 
   return saveTasks() ? updatedTask : null;
+}
+
+function resetProjectSourceResolution() {
+  projectDataSource = "unresolved";
+  projectHydrationPromise = null;
+}
+
+async function persistProjects(options = {}) {
+  const { immediate = false } = options;
+  saveProjectsLocalOnly();
+
+  if (typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore()) {
+    if (immediate) {
+      return await pushProjectsToWorkspace();
+    }
+    queueWorkspaceProjectSync();
+  }
+
+  return true;
+}
+
+async function resolveProjectSource(options = {}) {
+  const { silent = false } = options;
+  if (projectHydrationPromise) return projectHydrationPromise;
+
+  projectHydrationPromise = (async () => {
+    if (typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore()) {
+      const hydrated = await hydrateProjectsFromWorkspace({ silent: true });
+      if (hydrated) {
+        projectDataSource = "workspace";
+        console.info("[Pulse Projects] Source resolved: workspace projects table.", {
+          workspaceId: currentWorkspace?.id || null,
+          count: projects.length
+        });
+        return projectDataSource;
+      }
+
+      if (!silent) {
+        console.warn("[Pulse Projects] Workspace projekti nisu ucitani, koristim lokalni cache.");
+      }
+    }
+
+    const loadedCache = loadProjects();
+    projectDataSource = loadedCache ? "local-cache" : "empty";
+    console.info("[Pulse Projects] Source resolved:", projectDataSource, {
+      cacheKey: getProjectCacheKey(),
+      count: projects.length
+    });
+    return projectDataSource;
+  })().finally(() => {
+    projectHydrationPromise = null;
+  });
+
+  return projectHydrationPromise;
+}
+
+function mapProjectRowToLocal(row = {}) {
+  return normalizeProject({
+    id: row.id,
+    client_id: row.client_id,
+    name: row.name,
+    type: row.type,
+    frequency: row.frequency,
+    estimated_value: row.estimated_value,
+    status: row.status,
+    archived: row.archived,
+    archived_at: row.archived_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  });
+}
+
+function mapProjectToWorkspaceRow(project = {}) {
+  const normalizedProject = normalizeProject(project);
+  return {
+    id: normalizedProject.id,
+    workspace_id: currentWorkspace.id,
+    client_id: Number(normalizedProject.clientId),
+    name: normalizedProject.name,
+    type: normalizedProject.type || "",
+    frequency: normalizedProject.frequency || "",
+    estimated_value: normalizedProject.estimatedValue,
+    status: normalizedProject.status || "",
+    archived: normalizedProject.archived === true,
+    archived_at: normalizedProject.archived ? (normalizedProject.archivedAt || normalizedProject.updatedAt || nowISO()) : null,
+    created_at: normalizedProject.createdAt || nowISO(),
+    updated_at: normalizedProject.updatedAt || nowISO()
+  };
+}
+
+async function hydrateProjectsFromWorkspace(options = {}) {
+  if (!(typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore())) return false;
+  const { silent = false } = options;
+
+  const { data, error } = await supabaseClient
+    .from("projects")
+    .select("*")
+    .eq("workspace_id", currentWorkspace.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (!silent) {
+      console.warn("[Pulse Projects] Workspace projekti nisu ucitani.", error);
+    }
+    return false;
+  }
+
+  projects = Array.isArray(data) ? data.map(mapProjectRowToLocal) : [];
+  projectDataSource = "workspace";
+  saveProjectsLocalOnly();
+  return true;
+}
+
+async function pushProjectsToWorkspace() {
+  if (!(typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore())) return false;
+  if (projectDataSource !== "workspace") {
+    console.warn("[Pulse Projects] Workspace push skipped because workspace source is not active.", {
+      projectDataSource,
+      workspaceId: currentWorkspace?.id || null
+    });
+    return false;
+  }
+
+  const { data: existingRows, error: existingError } = await supabaseClient
+    .from("projects")
+    .select("id")
+    .eq("workspace_id", currentWorkspace.id);
+
+  if (existingError) {
+    console.error("[Pulse Projects] pushProjectsToWorkspace existing rows failed", existingError);
+    return false;
+  }
+
+  const existingById = new Set((Array.isArray(existingRows) ? existingRows : []).map(row => String(row.id)));
+  const payload = projects.map(mapProjectToWorkspaceRow);
+  const rowsToInsert = payload.filter(row => !existingById.has(String(row.id)));
+  const rowsToUpdate = payload.filter(row => existingById.has(String(row.id)));
+
+  if (rowsToInsert.length) {
+    const { error } = await supabaseClient
+      .from("projects")
+      .insert(rowsToInsert);
+
+    if (error) {
+      console.error("[Pulse Projects] pushProjectsToWorkspace insert failed", error, rowsToInsert);
+      return false;
+    }
+  }
+
+  for (const row of rowsToUpdate) {
+    const { error } = await supabaseClient
+      .from("projects")
+      .update(row)
+      .eq("id", row.id)
+      .eq("workspace_id", currentWorkspace.id);
+
+    if (error) {
+      console.error("[Pulse Projects] pushProjectsToWorkspace update failed", error, row);
+      return false;
+    }
+  }
+
+  cloudSyncState = "synced";
+  syncCloudStatusUI("Sinhronizovano");
+  return true;
+}
+
+function resetTaskSourceResolution() {
+  taskDataSource = "unresolved";
+  taskHydrationPromise = null;
+}
+
+async function persistTasks(options = {}) {
+  const { immediate = false } = options;
+  saveTasksLocalOnly();
+
+  if (typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore()) {
+    if (immediate) {
+      return await pushTasksToWorkspace();
+    }
+    queueWorkspaceTaskSync();
+  }
+
+  return true;
+}
+
+async function resolveTaskSource(options = {}) {
+  const { silent = false } = options;
+  if (taskHydrationPromise) return taskHydrationPromise;
+
+  taskHydrationPromise = (async () => {
+    if (typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore()) {
+      const hydrated = await hydrateTasksFromWorkspace({ silent: true });
+      if (hydrated) {
+        taskDataSource = "workspace";
+        console.info("[Pulse Tasks] Source resolved: workspace tasks table.", {
+          workspaceId: currentWorkspace?.id || null,
+          count: tasks.length
+        });
+        return taskDataSource;
+      }
+
+      if (!silent) {
+        console.warn("[Pulse Tasks] Workspace taskovi nisu ucitani, koristim lokalni cache.");
+      }
+    }
+
+    const loadedCache = loadTasks();
+    taskDataSource = loadedCache ? "local-cache" : "empty";
+    console.info("[Pulse Tasks] Source resolved:", taskDataSource, {
+      cacheKey: getTaskCacheKey(),
+      count: tasks.length
+    });
+    return taskDataSource;
+  })().finally(() => {
+    taskHydrationPromise = null;
+  });
+
+  return taskHydrationPromise;
+}
+
+function mapTaskRowToLocal(row = {}) {
+  return normalizeTaskEntity({
+    id: row.id,
+    project_id: row.project_id,
+    client_id: row.client_id,
+    sequence_number: row.sequence_number,
+    action_type: row.action_type,
+    title: row.title,
+    description: row.description,
+    assigned_to: row.assigned_to_user_id || "",
+    assigned_to_user_id: row.assigned_to_user_id,
+    assigned_to_label: row.assigned_to_label || "",
+    created_by_user_id: row.created_by_user_id,
+    created_by_label: row.created_by_label || "",
+    delegated_by_user_id: row.delegated_by_user_id,
+    delegated_by_label: row.delegated_by_label,
+    due_date: row.due_date,
+    status: row.status,
+    review_status: row.review_status,
+    billing_id: row.billing_id,
+    archived: row.archived,
+    archived_at: row.archived_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  });
+}
+
+function mapTaskToWorkspaceRow(task = {}) {
+  const normalizedTask = normalizeTaskEntity(task);
+  if (!normalizedTask) return null;
+
+  return {
+    id: normalizedTask.id,
+    workspace_id: currentWorkspace.id,
+    client_id: Number(normalizedTask.clientId),
+    project_id: normalizedTask.projectId,
+    sequence_number: normalizedTask.sequenceNumber,
+    action_type: normalizedTask.actionType || "",
+    title: normalizedTask.title || "",
+    description: normalizedTask.description || "",
+    assigned_to_user_id: normalizedTask.assignedToUserId || null,
+    assigned_to_label: normalizedTask.assignedToLabel || "",
+    created_by_user_id: normalizedTask.createdByUserId || null,
+    created_by_label: normalizedTask.createdByLabel || "",
+    delegated_by_user_id: normalizedTask.delegatedByUserId || null,
+    delegated_by_label: normalizedTask.delegatedByLabel || null,
+    due_date: normalizedTask.dueDate || null,
+    status: normalizedTask.status || "dodeljen",
+    review_status: normalizedTask.reviewStatus || null,
+    billing_id: normalizedTask.billingId || null,
+    archived: normalizedTask.archived === true,
+    archived_at: normalizedTask.archivedAt || null,
+    created_at: normalizedTask.createdAt || nowISO(),
+    updated_at: normalizedTask.updatedAt || nowISO()
+  };
+}
+
+async function hydrateTasksFromWorkspace(options = {}) {
+  if (!(typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore())) return false;
+  const { silent = false } = options;
+
+  const { data, error } = await supabaseClient
+    .from("tasks")
+    .select("*")
+    .eq("workspace_id", currentWorkspace.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (!silent) {
+      console.warn("[Pulse Tasks] Workspace taskovi nisu ucitani.", error);
+    }
+    return false;
+  }
+
+  tasks = (Array.isArray(data) ? data.map(mapTaskRowToLocal) : []).filter(Boolean);
+  taskDataSource = "workspace";
+  saveTasksLocalOnly();
+  return true;
+}
+
+async function pushTasksToWorkspace() {
+  if (!(typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore())) return false;
+  if (taskDataSource !== "workspace") {
+    console.warn("[Pulse Tasks] Workspace push skipped because workspace source is not active.", {
+      taskDataSource,
+      workspaceId: currentWorkspace?.id || null
+    });
+    return false;
+  }
+
+  const { data: existingRows, error: existingError } = await supabaseClient
+    .from("tasks")
+    .select("id")
+    .eq("workspace_id", currentWorkspace.id);
+
+  if (existingError) {
+    console.error("[Pulse Tasks] pushTasksToWorkspace existing rows failed", existingError);
+    return false;
+  }
+
+  const existingById = new Set((Array.isArray(existingRows) ? existingRows : []).map(row => String(row.id)));
+  const payload = tasks.map(mapTaskToWorkspaceRow).filter(Boolean);
+  const rowsToInsert = payload.filter(row => !existingById.has(String(row.id)));
+  const rowsToUpdate = payload.filter(row => existingById.has(String(row.id)));
+
+  if (rowsToInsert.length) {
+    const { error } = await supabaseClient
+      .from("tasks")
+      .insert(rowsToInsert);
+
+    if (error) {
+      console.error("[Pulse Tasks] pushTasksToWorkspace insert failed", error, rowsToInsert);
+      return false;
+    }
+  }
+
+  for (const row of rowsToUpdate) {
+    const { error } = await supabaseClient
+      .from("tasks")
+      .update(row)
+      .eq("id", row.id)
+      .eq("workspace_id", currentWorkspace.id);
+
+    if (error) {
+      console.error("[Pulse Tasks] pushTasksToWorkspace update failed", error, row);
+      return false;
+    }
+  }
+
+  cloudSyncState = "synced";
+  syncCloudStatusUI("Sinhronizovano");
+  return true;
 }
 
 function saveClients() {

@@ -1,6 +1,7 @@
 const STORAGE_KEY = "pulse_mvp_clients_v031";
 const PROJECTS_STORAGE_KEY = "pulse_mvp_projects_v001";
 const TASKS_STORAGE_KEY = "pulse_mvp_tasks_v001";
+const BILLING_STORAGE_KEY = "PULSE_BILLING";
 
 const STAGES = {
   new: "Novi",
@@ -36,6 +37,7 @@ const MODAL_FRAGMENTS = [
   "./fragments/task-modal.html",
   "./fragments/project-tasks-modal.html",
   "./fragments/task-detail-modal.html",
+  "./fragments/task-billing-modal.html",
   "./fragments/task-delegate-modal.html",
   "./fragments/payment-modal.html",
   "./fragments/weekly-actions-modal.html",
@@ -50,12 +52,14 @@ const MODAL_FRAGMENTS = [
 let clients = [];
 let projects = [];
 let tasks = [];
+let billing = [];
 let currentClientId = null;
 let currentActionClientId = null;
 let currentActivityClientId = null;
 let currentPaymentClientId = null;
 let currentTaskListProjectId = null;
 let currentTaskDetailId = null;
+let currentTaskBillingTaskId = null;
 let reopenTaskListAfterCreate = false;
 let currentClientsMode = "all";
 
@@ -68,10 +72,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   await initWorkspaceContext();
   await resolveClientSource();
   migrateClients();
-  loadProjects();
+  await resolveProjectSource();
   migrateProjects();
-  loadTasks();
+  await resolveTaskSource();
   migrateTasks();
+  loadBilling();
   renderLicenseUI();
   renderSettingsUI();
   renderAll();
@@ -291,6 +296,16 @@ function bindStaticEvents() {
   bindClickIfExists("closeTaskDetailModalBtn", closeTaskDetailModal);
   bindClickIfExists("taskDetailModalBackdrop", closeTaskDetailModal);
   bindClickIfExists("closeTaskDetailBtn", closeTaskDetailModal);
+  bindClickIfExists("closeTaskBillingModalBtn", closeTaskBillingModal);
+  bindClickIfExists("taskBillingModalBackdrop", closeTaskBillingModal);
+  bindClickIfExists("cancelTaskBillingBtn", closeTaskBillingModal);
+  bindDatePickerIfExists("taskBillingDueDate");
+
+  const taskBillingForm = document.getElementById("taskBillingForm");
+  if (taskBillingForm) {
+    taskBillingForm.addEventListener("submit", handleTaskBillingSubmit);
+  }
+
   bindClickIfExists("closeTaskDelegateModalBtn", closeTaskDelegateModal);
   bindClickIfExists("taskDelegateModalBackdrop", closeTaskDelegateModal);
   bindClickIfExists("cancelTaskDelegateBtn", closeTaskDelegateModal);

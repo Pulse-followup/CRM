@@ -105,6 +105,13 @@ function taskActionTypeLabel(value) {
     case "ponuda": return "Ponuda";
     case "prodaja": return "Prodaja";
     case "usluga": return "Usluga";
+    // Activity modal action types
+    case "phone_call": return "Poziv";
+    case "message": return "Poruka";
+    case "meeting_held": return "Sastanak";
+    case "offer_sent": return "Ponuda";
+    case "production": return "Izrada";
+    case "internal_note": return "Interno";
     default: return "-";
   }
 }
@@ -116,6 +123,7 @@ function taskEntityStatusLabel(value) {
     case "na_cekanju": return "Na cekanju";
     case "zavrsen": return "Zavrsen";
     case "vracen": return "Vracen";
+    case "otkazan": return "Otkazan";
     case "poslat_na_naplatu": return "Poslat na naplatu";
     case "naplacen": return "Naplacen";
     default: return "-";
@@ -130,9 +138,33 @@ function taskEntityStatusBadgeClass(value) {
     case "poslat_na_naplatu": return "badge info";
     case "naplacen": return "badge success";
     case "vracen": return "badge neutral";
+    case "otkazan": return "badge neutral";
     case "dodeljen":
     default: return "badge neutral";
   }
+}
+
+function taskReviewStatusLabel(value) {
+  switch (value) {
+    case "pending_review": return "Ceka pregled admina";
+    case "billing_ready": return "Naplatni nalog kreiran";
+    case "archived_no_billing": return "Arhivirano bez naplate";
+    case "returned": return "Vraceno na doradu";
+    default: return "";
+  }
+}
+
+function getEffectiveTaskReviewStatus(task) {
+  const reviewStatus = String(task?.reviewStatus || "").trim();
+  if (reviewStatus) return reviewStatus;
+  return String(task?.status || "").trim() === "zavrsen" ? "pending_review" : "";
+}
+
+function buildTaskBillingDefaultDescription(task) {
+  const project = typeof getProjectById === "function" ? getProjectById(task?.projectId) : null;
+  const description = String(task?.description || task?.title || "").trim();
+  if (project?.name && description) return `${project.name} - ${description}`;
+  return project?.name || description || "Naplatni nalog";
 }
 
 function taskDueDateShortLabel(value) {
@@ -329,7 +361,7 @@ function closeProjectModal() {
   modal.setAttribute("aria-hidden", "true");
 }
 
-function handleProjectSubmit(e) {
+async function handleProjectSubmit(e) {
   e.preventDefault();
 
   const projectId = getValue("projectId");
@@ -379,10 +411,11 @@ function handleProjectSubmit(e) {
       showToast("Projekat nije sacuvan.");
       return;
     }
+    const synced = await persistProjects({ immediate: true });
 
     closeProjectModal();
     renderProjects(client);
-    showToast("Projekat je azuriran.");
+    showToast(synced ? "Projekat je azuriran." : "Projekat je sacuvan lokalno, ali sync nije uspeo.");
     return;
   }
 
@@ -407,13 +440,14 @@ function handleProjectSubmit(e) {
     showToast("Projekat nije sacuvan.");
     return;
   }
+  const synced = await persistProjects({ immediate: true });
 
   closeProjectModal();
   renderProjects(client);
-  showToast("Projekat je dodat.");
+  showToast(synced ? "Projekat je dodat." : "Projekat je sacuvan lokalno, ali sync nije uspeo.");
 }
 
-function updateProjectArchiveState(projectId, archived) {
+async function updateProjectArchiveState(projectId, archived) {
   if (!Array.isArray(projects)) projects = [];
 
   const idx = projects.findIndex(project => String(project.id) === String(projectId));
@@ -445,17 +479,22 @@ function updateProjectArchiveState(projectId, archived) {
     showToast("Projekat nije sacuvan.");
     return;
   }
+  const synced = await persistProjects({ immediate: true });
 
   renderProjects(client);
-  showToast(archived ? "Projekat je arhiviran." : "Projekat je vracen iz arhive.");
+  showToast(
+    synced
+      ? (archived ? "Projekat je arhiviran." : "Projekat je vracen iz arhive.")
+      : "Promena je sacuvana lokalno, ali sync nije uspeo."
+  );
 }
 
 function archiveProject(projectId) {
-  updateProjectArchiveState(projectId, true);
+  void updateProjectArchiveState(projectId, true);
 }
 
 function unarchiveProject(projectId) {
-  updateProjectArchiveState(projectId, false);
+  void updateProjectArchiveState(projectId, false);
 }
 
 function openProjectTasksModal(projectId) {
@@ -560,12 +599,22 @@ function closeTaskDetailModal() {
 }
 
 function renderTaskDetailModal(task) {
-  const project = getProjectById(task.projectId);
-  setTextIfExists("taskDetailModalTitle", `#${task.sequenceNumber || "-"} - ${taskActionTypeLabel(task.actionType)}`);
+  const legacyClose = document.getElementById("closeTaskDetailBtn");
+  if (legacyClose) legacyClose.remove();
+
+  const client = clients.find(item => String(item.id) === String(task.clientId)) || null;
+  const workflowProject = client && typeof getClientProjectById === "function"
+    ? getClientProjectById(client, task.projectId)
+    : null;
+  const project = workflowProject || getProjectById(task.projectId);
+  const typeLabel = taskActionTypeLabel(task.actionType);
+
+  setTextIfExists("taskDetailModalTitle", `#${task.sequenceNumber || "-"} - ${typeLabel}`);
   setTextIfExists("taskDetailModalSubtitle", project?.name || "Projekat");
   const statusEl = document.getElementById("taskDetailStatus");
   if (statusEl) {
-    statusEl.innerHTML = `Status: <span class="${taskEntityStatusBadgeClass(task.status)}">${escapeHtml(taskEntityStatusLabel(task.status))}</span>`;
+    const reviewLabel = taskReviewStatusLabel(getEffectiveTaskReviewStatus(task));
+    statusEl.innerHTML = `Status: <span class="${taskEntityStatusBadgeClass(task.status)}">${escapeHtml(taskEntityStatusLabel(task.status))}</span>${reviewLabel ? `<div class="muted small" style="margin-top:6px;">${escapeHtml(reviewLabel)}</div>` : ""}`;
   }
   setTextIfExists("taskDetailDueDate", `Rok: ${taskDueDateShortLabel(task.dueDate)}`);
   const assignedLabel =
@@ -573,104 +622,372 @@ function renderTaskDetailModal(task) {
     getTeamMemberNameById(task.assignedToUserId || task.assignedTo, task.assignedTo || "-");
   setTextIfExists("taskDetailAssignedTo", `Dodeljeno: ${assignedLabel}`);
   setTextIfExists("taskDetailDescription", `Opis: ${task.description || task.title || "-"}`);
-  renderTaskDetailActions(task);
+  renderTaskDetailActionsV2(task);
 }
 
 function renderTaskDetailActions(task) {
   const actions = document.getElementById("taskDetailActions");
   if (!actions) return;
 
-  const permissions = getTaskPermissionContext(task);
+  const currentUser = getCurrentTaskUserMetadata();
+  const currentUserId = String(currentUser.userId || "").trim();
+  const status = String(task?.status || "").trim();
+
+  const isAdminOrCreator = Boolean(
+    currentUser.role === "admin" ||
+    (currentUserId && String(task?.createdByUserId || "").trim() === currentUserId) ||
+    (currentUserId && String(task?.delegatedByUserId || "").trim() === currentUserId)
+  );
+
+  const isAssignedWorker = Boolean(
+    currentUserId && (
+      String(task?.assignedToUserId || "").trim() === currentUserId ||
+      String(task?.assignedTo || "").trim() === currentUserId
+    )
+  );
+
   const buttons = [];
-  const addAction = (label, status, className = "btn btn-secondary") => {
-    buttons.push(`<button type="button" class="${className}" data-task-next-status="${status}">${label}</button>`);
+  const addButton = (label, action, className = "btn btn-secondary") => {
+    buttons.push(`<button type="button" class="${className}" data-task-detail-action="${action}">${label}</button>`);
   };
 
-  if (permissions.isOwner) {
-    if (task.status === "dodeljen") {
-      addAction("Preuzmi", "u_radu", "btn btn-primary");
-      addAction("Na cekanju", "na_cekanju");
-      buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
-    } else if (task.status === "u_radu") {
-      addAction("Zavrsi", "zavrsen", "btn btn-primary");
-      addAction("Na cekanju", "na_cekanju");
-      buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
-    } else if (task.status === "na_cekanju") {
-      addAction("Vrati u rad", "u_radu", "btn btn-primary");
-      buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
-    } else if (task.status === "zavrsen" && permissions.isAdmin) {
-      addAction("Posalji na naplatu", "poslat_na_naplatu", "btn btn-primary");
+  if (isAdminOrCreator) {
+    addButton("Promeni zaduženog", "change_assignee", "btn btn-secondary");
+    addButton("Promeni rok", "change_due", "btn btn-secondary");
+    addButton("Otkaži task", "cancel_task", "btn btn-danger");
+  } else if (isAssignedWorker) {
+    if (status === "dodeljen") {
+      addButton("Preuzmi", "take_over", "btn btn-primary");
+      addButton("Vrati", "return_task", "btn btn-secondary");
+    } else if (status === "u_radu") {
+      addButton("Završi", "complete_task", "btn btn-primary");
+      addButton("Vrati", "return_task", "btn btn-secondary");
     }
-  } else if (permissions.isAdmin) {
-    if (task.status === "zavrsen") {
-      addAction("Posalji na naplatu", "poslat_na_naplatu", "btn btn-primary");
-    } else {
-      if (permissions.canTakeOver) {
-        addAction("Preuzmi", "u_radu", "btn btn-primary");
-      }
-      buttons.push('<button type="button" class="btn btn-secondary" data-task-delegate="true">Delegiraj</button>');
-    }
-  } else if (permissions.isNonOwner && permissions.canTakeOver) {
-    addAction("Preuzmi", "u_radu", "btn btn-primary");
   }
 
-  actions.innerHTML = buttons.length
-    ? buttons.join("")
-    : '<p class="muted-text">Nema dostupnih akcija.</p>';
+  actions.innerHTML = buttons.length ? buttons.join("") : "";
 
-  actions.querySelectorAll("[data-task-next-status]").forEach(button => {
-    button.addEventListener("click", () => handleTaskStatusChange(button.dataset.taskNextStatus));
-  });
-  actions.querySelectorAll("[data-task-delegate]").forEach(button => {
-    button.addEventListener("click", () => openTaskDelegateModal(currentTaskDetailId));
+  actions.querySelectorAll("[data-task-detail-action]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const action = button.dataset.taskDetailAction;
+      await handleTaskDetailAction(action);
+    });
   });
 }
 
-function handleTaskStatusChange(nextStatus) {
+function renderTaskDetailActionsV2(task) {
+  const actions = document.getElementById("taskDetailActions");
+  if (!actions) return;
+
+  const currentUser = getCurrentTaskUserMetadata();
+  const currentUserId = String(currentUser.userId || "").trim();
+  const status = String(task?.status || "").trim();
+  const reviewStatus = getEffectiveTaskReviewStatus(task);
+
+  const isAdminOrCreator = Boolean(
+    currentUser.role === "admin" ||
+    (currentUserId && String(task?.createdByUserId || "").trim() === currentUserId) ||
+    (currentUserId && String(task?.delegatedByUserId || "").trim() === currentUserId)
+  );
+
+  const isAssignedWorker = Boolean(
+    currentUserId && (
+      String(task?.assignedToUserId || "").trim() === currentUserId ||
+      String(task?.assignedTo || "").trim() === currentUserId
+    )
+  );
+
+  const buttons = [];
+  const addButton = (label, action, className = "btn btn-secondary") => {
+    buttons.push(`<button type="button" class="${className}" data-task-detail-action="${action}">${label}</button>`);
+  };
+
+  if (status === "zavrsen") {
+    if (currentUser.isAdmin && reviewStatus === "pending_review") {
+      addButton("Kreiraj naplatni nalog", "mark_billing_ready", "btn btn-primary");
+      addButton("Arhiviraj bez naplate", "archive_no_billing", "btn btn-secondary");
+      addButton("Vrati na doradu", "return_for_rework", "btn btn-secondary");
+    } else {
+      const reviewLabel = reviewStatus
+        ? taskReviewStatusLabel(reviewStatus)
+        : "Task zavrsen, ceka pregled admina";
+      buttons.push(`<div class="muted small">${escapeHtml(reviewLabel)}</div>`);
+    }
+  } else if (isAdminOrCreator) {
+    addButton("Promeni zaduzenog", "change_assignee", "btn btn-secondary");
+    addButton("Promeni rok", "change_due", "btn btn-secondary");
+    addButton("Otkazi task", "cancel_task", "btn btn-danger");
+  } else if (isAssignedWorker) {
+    if (status === "dodeljen") {
+      addButton("Preuzmi", "take_over", "btn btn-primary");
+      addButton("Vrati", "return_task", "btn btn-secondary");
+    } else if (status === "u_radu") {
+      addButton("Zavrsi", "complete_task", "btn btn-primary");
+      addButton("Vrati", "return_task", "btn btn-secondary");
+    }
+  }
+
+  actions.innerHTML = buttons.length ? buttons.join("") : "";
+
+  actions.querySelectorAll("[data-task-detail-action]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const action = button.dataset.taskDetailAction;
+      await handleTaskDetailAction(action);
+    });
+  });
+}
+
+async function handleTaskDetailAction(action) {
   const task = getTaskById(currentTaskDetailId);
   if (!task) {
     showToast("Task nije pronadjen.");
     return;
   }
 
-  const permissions = getTaskPermissionContext(task);
+  const currentUser = getCurrentTaskUserMetadata();
+  const currentUserId = String(currentUser.userId || "").trim();
 
-  if (nextStatus === "poslat_na_naplatu") {
-    if (!permissions.isAdmin) {
-      showToast("Samo admin moze da posalje task na naplatu.");
-      return;
-    }
-    if (task.status !== "zavrsen") {
-      showToast("Na naplatu se salje tek zavrsen task.");
-      return;
-    }
-  } else if (!permissions.canManageStatus && !(nextStatus === "u_radu" && permissions.canTakeOver)) {
-    showToast("Nemate pravo da menjate status ovog taska.");
-    return;
-  }
-
-  const updatedTask =
-    nextStatus === "u_radu" && permissions.canTakeOver && !permissions.isOwner
-      ? saveTask({
-          ...task,
-          assignedTo: permissions.currentUser.userId || task.assignedTo,
-          assignedToUserId: permissions.currentUser.userId || task.assignedToUserId,
-          assignedToLabel: permissions.currentUser.label || task.assignedToLabel || task.assignedTo || "",
-          status: "u_radu"
-        })
-      : updateTaskStatus(task.id, nextStatus);
-  if (!updatedTask) {
-    showToast("Status taska nije sacuvan.");
-    return;
-  }
-
-  refreshTaskProjectUi(updatedTask.projectId);
-  renderTaskDetailModal(updatedTask);
-  showToast(
-    nextStatus === "u_radu" && permissions.canTakeOver && !permissions.isOwner
-      ? "Task je preuzet."
-      : "Status taska je azuriran."
+  const isAdminOrCreator = Boolean(
+    currentUser.role === "admin" ||
+    (currentUserId && String(task?.createdByUserId || "").trim() === currentUserId) ||
+    (currentUserId && String(task?.delegatedByUserId || "").trim() === currentUserId)
   );
+
+  const isAssignedWorker = Boolean(
+    currentUserId && (
+      String(task?.assignedToUserId || "").trim() === currentUserId ||
+      String(task?.assignedTo || "").trim() === currentUserId
+    )
+  );
+
+  const now = nowISO();
+
+  if (action === "mark_billing_ready") {
+    if (!currentUser.isAdmin) return;
+    if (String(task.status) !== "zavrsen" || getEffectiveTaskReviewStatus(task) !== "pending_review") return;
+    openTaskBillingModal(task.id);
+    return;
+  }
+
+  if (action === "archive_no_billing") {
+    if (!currentUser.isAdmin) return;
+    if (String(task.status) !== "zavrsen" || getEffectiveTaskReviewStatus(task) !== "pending_review") return;
+    const saved = saveTask({
+      ...task,
+      reviewStatus: "archived_no_billing",
+      archived: true,
+      archivedAt: now
+    });
+    if (!saved) return;
+    await persistTasks({ immediate: true });
+    refreshTaskProjectUi(saved.projectId);
+    if (typeof closeTaskDetailModal === "function") closeTaskDetailModal();
+    showToast("Task je arhiviran bez naplate.");
+    return;
+  }
+
+  if (action === "return_for_rework") {
+    if (!currentUser.isAdmin) return;
+    if (String(task.status) !== "zavrsen" || getEffectiveTaskReviewStatus(task) !== "pending_review") return;
+    const saved = saveTask({
+      ...task,
+      status: "u_radu",
+      reviewStatus: "returned"
+    });
+    if (!saved) return;
+    await persistTasks({ immediate: true });
+    refreshTaskProjectUi(saved.projectId);
+    renderTaskDetailModal(saved);
+    showToast("Task je vracen na doradu.");
+    return;
+  }
+
+  const saveAndRefresh = async updated => {
+    const saved = saveTask(updated);
+    if (!saved) return null;
+    await persistTasks({ immediate: true });
+    refreshTaskProjectUi(saved.projectId);
+    renderTaskDetailModal(saved);
+    return saved;
+  };
+
+  if (action === "take_over") {
+    if (!isAssignedWorker || String(task.status) !== "dodeljen") return;
+    const saved = await saveAndRefresh({ ...task, status: "u_radu", startedAt: now });
+    if (saved) showToast("Task je preuzet.");
+    return;
+  }
+
+  if (action === "complete_task") {
+    if (!isAssignedWorker || String(task.status) !== "u_radu") return;
+    const saved = await saveAndRefresh({
+      ...task,
+      status: "zavrsen",
+      reviewStatus: "pending_review",
+      completedAt: now
+    });
+    if (saved) showToast("Task je završen.");
+    return;
+  }
+
+  if (action === "return_task") {
+    if (!isAssignedWorker || !["dodeljen", "u_radu"].includes(String(task.status))) return;
+    const saved = await saveAndRefresh({ ...task, status: "vracen" });
+    if (saved) showToast("Task je vraćen.");
+    return;
+  }
+
+  if (action === "cancel_task") {
+    if (String(task.status) === "zavrsen") return;
+    if (!isAdminOrCreator) return;
+    const saved = await saveAndRefresh({ ...task, status: "otkazan", canceledAt: now });
+    if (saved) showToast("Task je otkazan.");
+    return;
+  }
+
+  if (action === "change_due") {
+    if (String(task.status) === "zavrsen") return;
+    if (!isAdminOrCreator) return;
+    const nextDue = window.prompt("Novi rok (YYYY-MM-DD)", String(task.dueDate || "")) || "";
+    const normalized = nextDue.trim();
+    const saved = await saveAndRefresh({ ...task, dueDate: normalized || null });
+    if (saved) showToast("Rok je ažuriran.");
+    return;
+  }
+
+  if (action === "change_assignee") {
+    if (String(task.status) === "zavrsen") return;
+    if (!isAdminOrCreator) return;
+    const members = typeof getAssignableWorkspaceMembers === "function" ? getAssignableWorkspaceMembers() : [];
+    const hint = members.length
+      ? `\n\nDostupni korisnici:\n${members.map(m => `- ${m.id}: ${m.name}${m.email ? ` (${m.email})` : ""}`).join("\n")}`
+      : "";
+    const nextAssignee = window.prompt(`Novi korisnik ID za zaduženje:${hint}`, String(task.assignedToUserId || task.assignedTo || "")) || "";
+    const nextAssigneeId = String(nextAssignee).trim();
+    if (!nextAssigneeId) return;
+    const member = getAssignableTaskMemberById(nextAssigneeId);
+    const label = taskMemberLabel(member) || nextAssigneeId;
+    const saved = await saveAndRefresh({
+      ...task,
+      assignedToUserId: nextAssigneeId,
+      assignedTo: nextAssigneeId,
+      assignedToLabel: label,
+      status: "dodeljen"
+    });
+    if (saved) showToast("Zaduženje je ažurirano.");
+  }
+}
+
+function openTaskBillingModal(taskId) {
+  const task = getTaskById(taskId);
+  if (!task) {
+    showToast("Task nije pronadjen.");
+    return;
+  }
+
+  if (task.billingId || getBillingByTaskId(task.id)) {
+    showToast("Naplatni nalog vec postoji");
+    return;
+  }
+
+  currentTaskBillingTaskId = String(task.id);
+  setValueIfExists("taskBillingTaskId", task.id);
+  setValueIfExists("taskBillingDescription", buildTaskBillingDefaultDescription(task));
+  setValueIfExists("taskBillingAmount", "");
+  setValueIfExists("taskBillingCurrency", "RSD");
+  setValueIfExists("taskBillingDueDate", dateOnlyValue(task.dueDate || ""));
+  setValueIfExists("taskBillingInvoiceNumber", "");
+  setTextIfExists("taskBillingModalTitle", "Kreiraj naplatni nalog");
+  setTextIfExists("taskBillingModalSubtitle", `Task #${task.sequenceNumber || "-"} - ${taskActionTypeLabel(task.actionType)}`);
+
+  const modal = document.getElementById("taskBillingModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeTaskBillingModal() {
+  const modal = document.getElementById("taskBillingModal");
+  if (!modal) return;
+  if (modal.contains(document.activeElement)) document.activeElement.blur();
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  currentTaskBillingTaskId = null;
+}
+
+async function handleTaskBillingSubmit(e) {
+  e.preventDefault();
+
+  const taskId = getValue("taskBillingTaskId") || currentTaskBillingTaskId;
+  const task = getTaskById(taskId);
+  if (!task) {
+    showToast("Task nije pronadjen.");
+    return;
+  }
+
+  const currentUser = getCurrentTaskUserMetadata();
+  if (!currentUser.isAdmin) {
+    showToast("Samo admin moze da kreira naplatni nalog.");
+    return;
+  }
+
+  if (task.billingId || getBillingByTaskId(task.id)) {
+    showToast("Naplatni nalog vec postoji");
+    closeTaskBillingModal();
+    return;
+  }
+
+  const description = String(getValue("taskBillingDescription") || "").trim();
+  const amountRaw = String(getValue("taskBillingAmount") || "").trim();
+  const amount = Number(amountRaw);
+  const currency = String(getValue("taskBillingCurrency") || "RSD").trim().toUpperCase() || "RSD";
+  const dueDate = normalizeDateInputValue(getValue("taskBillingDueDate")) || null;
+  const invoiceNumber = String(getValue("taskBillingInvoiceNumber") || "").trim();
+
+  if (!description) {
+    showToast("Opis je obavezan.");
+    return;
+  }
+
+  if (!amountRaw || !Number.isFinite(amount) || amount < 0) {
+    showToast("Unesi ispravan iznos.");
+    return;
+  }
+
+  const created = createBillingFromTask(task.id, {
+    description,
+    amount,
+    currency,
+    dueDate,
+    invoiceNumber
+  });
+
+  if (!created) {
+    showToast("Naplatni nalog nije kreiran.");
+    return;
+  }
+
+  if (created.duplicate) {
+    showToast("Naplatni nalog vec postoji");
+    closeTaskBillingModal();
+    return;
+  }
+
+  const savedTask = saveTask({
+    ...task,
+    reviewStatus: "billing_ready",
+    billingId: created.record.id
+  });
+  if (!savedTask) {
+    showToast("Task nije azuriran.");
+    return;
+  }
+
+  await persistTasks({ immediate: true });
+  refreshTaskProjectUi(savedTask.projectId);
+  closeTaskBillingModal();
+  renderTaskDetailModal(savedTask);
+  showToast("Naplatni nalog je kreiran.");
 }
 
 function openTaskDelegateModal(taskId) {
@@ -720,7 +1037,7 @@ function renderDelegateTaskAssigneeOptions(currentAssigneeId = "") {
     : '<option value="">Nema dostupnih korisnika</option>';
 }
 
-function handleTaskDelegateSubmit(e) {
+async function handleTaskDelegateSubmit(e) {
   e.preventDefault();
 
   const task = getTaskById(getValue("delegateTaskId"));
@@ -772,11 +1089,12 @@ function handleTaskDelegateSubmit(e) {
     showToast("Novi delegirani task nije sacuvan.");
     return;
   }
+  const synced = await persistTasks({ immediate: true });
 
   closeTaskDelegateModal();
   closeTaskDetailModal();
   refreshTaskProjectUi(task.projectId);
-  showToast("Task je delegiran.");
+  showToast(synced ? "Task je delegiran." : "Task je delegiran lokalno, ali sync nije uspeo.");
 }
 
 function openNewTaskModal(projectId, options = {}) {
@@ -837,7 +1155,7 @@ function closeTaskModal() {
   reopenTaskListAfterCreate = false;
 }
 
-function handleTaskSubmit(e) {
+async function handleTaskSubmit(e) {
   e.preventDefault();
 
   const projectId = getValue("taskProjectId");
@@ -883,6 +1201,7 @@ function handleTaskSubmit(e) {
     showToast("Task nije sacuvan.");
     return;
   }
+  const synced = await persistTasks({ immediate: true });
 
   const shouldReopenTaskList = reopenTaskListAfterCreate;
   closeTaskModal();
@@ -893,7 +1212,7 @@ function handleTaskSubmit(e) {
   if (shouldReopenTaskList) {
     openProjectTasksModal(project.id);
   }
-  showToast("Task je dodat.");
+  showToast(synced ? "Task je dodat." : "Task je dodat lokalno, ali sync nije uspeo.");
 }
 
 function renderActiveTaskPreview(client, statusText) {

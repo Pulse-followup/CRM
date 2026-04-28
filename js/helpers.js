@@ -336,18 +336,28 @@ function ensureClientWorkflow(client) {
   return client.payment.workflow;
 }
 
-function getClientProjects(client) {
+function getLegacyClientProjects(client) {
   const workflow = ensureClientWorkflow(client);
-  return workflow.projects;
+  return Array.isArray(workflow.projects) ? workflow.projects : [];
+}
+
+function getClientProjects(client) {
+  if (!client) return [];
+  if (typeof getProjectsByClientId === "function") {
+    return getProjectsByClientId(client.id);
+  }
+  return getLegacyClientProjects(client);
 }
 
 function getClientProjectById(client, projectId) {
   if (!projectId) return null;
-  return getClientProjects(client).find(project => project.id === projectId) || null;
+  return getClientProjects(client).find(project => String(project.id) === String(projectId))
+    || getLegacyClientProjects(client).find(project => String(project.id) === String(projectId))
+    || null;
 }
 
 function getClientOpenProjects(client) {
-  return getClientProjects(client).filter(project => !["done", "canceled"].includes(project.status));
+  return getClientProjects(client).filter(project => project.archived !== true && String(project.status || "") !== "zavrsen");
 }
 
 function projectDisplayName(project) {
@@ -356,30 +366,44 @@ function projectDisplayName(project) {
 }
 
 function createClientProject(client, fields = {}) {
-  const projects = getClientProjects(client);
-  const project = {
-    id: fields.id || createLocalEntityId("project"),
-    name: fields.name || "Novi projekat",
-    status: fields.status || "open",
-    urgency: fields.urgency || "medium",
-    budgetStatus: fields.budgetStatus || "unknown",
-    estimatedValue: fields.estimatedValue || "",
-    expectedEndDate: fields.expectedEndDate || "",
-    createdAt: fields.createdAt || nowISO(),
-    createdById: fields.createdById || supabaseUser?.id || "",
-    createdByName: fields.createdByName || getCurrentUserDisplayName(),
-    createdByEmail: fields.createdByEmail || supabaseUser?.email || "",
-    tasks: []
-  };
+  if (!client) return null;
+  if (!Array.isArray(projects)) projects = [];
 
-  projects.unshift(project);
+  const createdAt = fields.createdAt || nowISO();
+  const rawEstimatedValue = fields.estimatedValue ?? fields.estimated_value ?? null;
+  const estimatedValueNumber = Number(rawEstimatedValue);
+  const project = normalizeProject({
+    id: fields.id || createLocalEntityId("project"),
+    clientId: String(client.id),
+    name: fields.name || "Novi projekat",
+    type: fields.type || "",
+    frequency: fields.frequency || "",
+    estimatedValue:
+      rawEstimatedValue === null ||
+      rawEstimatedValue === undefined ||
+      rawEstimatedValue === "" ||
+      Number.isNaN(estimatedValueNumber)
+        ? null
+        : estimatedValueNumber,
+    status: fields.status || "aktivan",
+    archived: false,
+    archivedAt: null,
+    createdAt,
+    updatedAt: fields.updatedAt || createdAt
+  });
+
+  const existingIndex = projects.findIndex(item => String(item.id) === String(project.id));
+  if (existingIndex === -1) {
+    projects.unshift(project);
+  } else {
+    projects[existingIndex] = project;
+  }
+
   return project;
 }
 
 function addTaskToProject(client, project, task) {
-  if (!project) return task;
-  if (!Array.isArray(project.tasks)) project.tasks = [];
-  project.tasks.unshift(task);
+  void project;
   refreshClientActiveTask(client);
   return task;
 }
@@ -424,7 +448,36 @@ function getClientTasks(client, options = {}) {
   const tasks = [];
   const seen = new Set();
 
-  getClientProjects(client).forEach(project => {
+  if (typeof getTasksByClientId === "function" && client?.id) {
+    getTasksByClientId(client.id).forEach(task => {
+      const project = (typeof getProjectById === "function" ? getProjectById(task.projectId) : null) || null;
+      const normalized = normalizeClientTask({
+        id: task.id,
+        type: task.actionType || "task",
+        title: task.title,
+        dueDate: task.dueDate,
+        ownerId: task.assignedToUserId || task.assignedTo || "",
+        ownerEmail: "",
+        ownerName: task.assignedToLabel || "",
+        delegatedById: task.delegatedByUserId || "",
+        delegatedByEmail: "",
+        delegatedByName: task.delegatedByLabel || "",
+        projectId: task.projectId,
+        projectName: projectDisplayName(project),
+        note: task.description || "",
+        status: task.status,
+        createdAt: task.createdAt
+      }, project, { includeClosed: Boolean(options.includeClosed) });
+      if (!normalized) return;
+
+      const key = normalized.id || `${normalized.projectId}:${normalized.title}:${normalized.dueDate}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      tasks.push(normalized);
+    });
+  }
+
+  getLegacyClientProjects(client).forEach(project => {
     (Array.isArray(project.tasks) ? project.tasks : []).forEach(task => {
       const normalized = normalizeClientTask(task, project, { includeClosed: Boolean(options.includeClosed) });
       if (!normalized) return;
@@ -536,13 +589,18 @@ function getClientDashboardTask(client) {
 
 function findClientProjectTask(client, projectId, taskId) {
   if (!client || !taskId) return { project: null, task: null };
+  const globalTask = typeof getTaskById === "function" ? getTaskById(taskId) : null;
+  if (globalTask) {
+    const project = getClientProjectById(client, projectId || globalTask.projectId);
+    return { project, task: globalTask };
+  }
   const project = getClientProjectById(client, projectId);
   if (project?.tasks) {
     const task = project.tasks.find(item => item.id === taskId) || null;
     return { project, task };
   }
 
-  for (const candidateProject of getClientProjects(client)) {
+  for (const candidateProject of getLegacyClientProjects(client)) {
     const task = Array.isArray(candidateProject.tasks)
       ? candidateProject.tasks.find(item => item.id === taskId)
       : null;
@@ -557,6 +615,50 @@ function updateClientTaskStatus(client, projectId, taskId, status, fields = {}) 
   if (!task) return null;
 
   const nextStatus = normalizeTaskStatus(status);
+  if (typeof getTaskById === "function" && getTaskById(taskId)) {
+    const statusMap = {
+      assigned: "dodeljen",
+      waiting: "na_cekanju",
+      done: "zavrsen",
+      returned: "vracen",
+      sent_to_billing: "poslat_na_naplatu"
+    };
+    const updatedTask = saveTask({
+      ...task,
+      ...fields,
+      id: task.id,
+      projectId: task.projectId,
+      clientId: task.clientId,
+      actionType: task.actionType || task.type || "",
+      title: task.title,
+      description: fields.note ?? task.description ?? task.note ?? "",
+      assignedTo: fields.ownerId || task.assignedTo || task.ownerId || "",
+      assignedToUserId: fields.ownerId || task.assignedToUserId || task.ownerId || "",
+      assignedToLabel: fields.ownerName || task.assignedToLabel || task.ownerName || "",
+      delegatedByUserId: fields.delegatedById || task.delegatedByUserId || task.delegatedById || null,
+      delegatedByLabel: fields.delegatedByName || task.delegatedByLabel || task.delegatedByName || "",
+      dueDate: fields.dueDate || task.dueDate || null,
+      status: statusMap[nextStatus] || "dodeljen"
+    });
+    if (!updatedTask) return null;
+    refreshClientActiveTask(client);
+    return normalizeClientTask({
+      id: updatedTask.id,
+      type: updatedTask.actionType,
+      title: updatedTask.title,
+      dueDate: updatedTask.dueDate,
+      ownerId: updatedTask.assignedToUserId || updatedTask.assignedTo || "",
+      ownerName: updatedTask.assignedToLabel || "",
+      delegatedById: updatedTask.delegatedByUserId || "",
+      delegatedByName: updatedTask.delegatedByLabel || "",
+      projectId: updatedTask.projectId,
+      projectName: projectDisplayName(project),
+      note: updatedTask.description || "",
+      status: updatedTask.status,
+      createdAt: updatedTask.createdAt
+    }, project, { includeClosed: true });
+  }
+
   task.status = nextStatus;
   task.updatedAt = nowISO();
   task.updatedById = supabaseUser?.id || "";
@@ -579,7 +681,11 @@ function completeClientTask(client, projectId, taskId) {
 }
 
 function projectHasOpenTasks(project) {
-  if (!project || !Array.isArray(project.tasks)) return false;
+  if (!project) return false;
+  if (typeof getTasksByProjectId === "function") {
+    return getTasksByProjectId(project.id).some(task => !["zavrsen", "poslat_na_naplatu", "naplacen"].includes(String(task.status || "")));
+  }
+  if (!Array.isArray(project.tasks)) return false;
   return project.tasks.some(task => {
     const status = normalizeTaskStatus(task.status);
     return !isTaskClosedStatus(status);
@@ -588,36 +694,39 @@ function projectHasOpenTasks(project) {
 
 function ensureProjectReviewTask(client, project) {
   if (!client || !project || projectHasOpenTasks(project)) return null;
-  if (project.status === "done" || project.status === "canceled") return null;
+  if (["done", "canceled", "zavrsen"].includes(String(project.status || ""))) return null;
 
-  const existing = (project.tasks || []).find(task => task.type === "project_review" && !isTaskClosedStatus(task.status));
+  const existing = typeof getTasksByProjectId === "function"
+    ? getTasksByProjectId(project.id).find(task => String(task.actionType || "") === "project_review" && !["zavrsen", "poslat_na_naplatu", "naplacen"].includes(String(task.status || "")))
+    : (project.tasks || []).find(task => task.type === "project_review" && !isTaskClosedStatus(task.status));
   if (existing) return existing;
 
-  const task = {
+  const task = saveTask({
     id: createLocalEntityId("task"),
-    type: "project_review",
+    projectId: project.id,
+    clientId: String(client.id),
+    actionType: "project_review",
     title: `Proveri projekat: ${projectDisplayName(project)}`,
+    description: "Na projektu nema otvorenih zadataka. Ako je zavrsen, otvori naplatu.",
+    assignedTo: "",
+    assignedToUserId: null,
+    assignedToLabel: "Admin",
+    createdByUserId: supabaseUser?.id || null,
+    createdByLabel: getCurrentUserDisplayName(),
+    delegatedByUserId: null,
+    delegatedByLabel: "Pulse",
     dueDate: todayISODate(),
-    ownerId: "",
-    ownerName: "Admin",
-    ownerEmail: "",
-    ownerRole: "admin",
-    delegatedById: "",
-    delegatedByName: "Pulse",
-    delegatedByEmail: "",
-    projectId: project.id,
-    projectName: projectDisplayName(project),
-    status: "assigned",
-    note: "Na projektu nema otvorenih zadataka. Ako je zavrsen, otvori naplatu.",
+    status: "dodeljen",
     createdAt: nowISO()
-  };
-
+  });
+  if (!task) return null;
+  void (typeof persistTasks === "function" ? persistTasks({ immediate: true }) : Promise.resolve());
   addTaskToProject(client, project, task);
-  addActivity(client, "project_review", "Projekat spreman za proveru", task.note, {
+  addActivity(client, "project_review", "Projekat spreman za proveru", task.description || "", {
     projectId: project.id,
     projectName: projectDisplayName(project),
-    ownerId: task.ownerId,
-    ownerName: task.ownerName,
+    ownerId: task.assignedToUserId || "",
+    ownerName: task.assignedToLabel || "Admin",
     relatedTaskId: task.id
   });
   return task;
