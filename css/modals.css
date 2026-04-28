@@ -246,6 +246,10 @@
   font-size: 0.9rem;
 }
 
+.compact-list .task-modal-item {
+  padding: 10px 0;
+}
+
 .task-detail-box {
   display: grid;
   gap: 8px;
