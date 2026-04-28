@@ -55,8 +55,8 @@ function renderPaymentProjectOptions(client) {
 
 function renderPaymentSummary(client) {
   const records = getBillingRecords(client);
-  const openRecords = records.filter(record => !["paid", "canceled"].includes(normalizeBillingStatus(record.status)));
-  const paidRecords = records.filter(record => normalizeBillingStatus(record.status) === "paid");
+  const openRecords = records.filter(record => !["paid", "canceled"].includes(record.status));
+  const paidRecords = records.filter(record => record.status === "paid");
   const discipline = computePaymentDiscipline(client);
 
   setTextIfExists("paymentSummaryBadge", `Naplata: ${discipline}`);
@@ -72,7 +72,7 @@ function renderPaymentSummary(client) {
 
 function renderPaymentSummaryInline(client) {
   const records = getBillingRecords(client);
-  const openRecords = records.filter(record => !["paid", "canceled"].includes(normalizeBillingStatus(record.status)));
+  const openRecords = records.filter(record => !["paid", "canceled"].includes(record.status));
   const latest = records[0] || null;
   const discipline = computePaymentDiscipline(client);
 
@@ -117,12 +117,12 @@ function renderBillingForm(client) {
   if (requestBtn) requestBtn.disabled = hasRecord;
 
   const paidBtn = document.getElementById("markBillingPaidBtn");
-  if (paidBtn) paidBtn.disabled = !hasRecord || normalizeBillingStatus(record.status) === "paid";
+  if (paidBtn) paidBtn.disabled = !hasRecord || record.status === "paid";
 
   if (!hasRecord) return;
 
-  setValueIfExists("billingStatusSelect", normalizeBillingStatus(record.status));
-  setValueIfExists("billingInvoiceNumber", record.invoiceNumber || record.invoice_number || "");
+  setValueIfExists("billingStatusSelect", record.status || "requested");
+  setValueIfExists("billingInvoiceNumber", record.invoiceNumber || "");
   setValueIfExists("billingAmount", record.amount || "");
   setValueIfExists("billingInvoiceDate", dateOnlyValue(record.invoiceDate || ""));
   setValueIfExists("billingDueDate", dateOnlyValue(record.dueDate || ""));
@@ -191,10 +191,7 @@ async function handleSaveBillingRecord() {
   addActivity(client, "billing_updated", "Azurirana naplata", `${record.projectName} - ${billingStatusLabel(record.status)}`, {
     billingId: record.id,
     projectId: record.projectId,
-    projectName: record.projectName,
-    taskTitle: `Naplata: ${record.projectName}`,
-    taskStatus: "sent_to_billing",
-    taskActionText: record.status === "paid" ? "oznacio kao naplaceno" : "oznacio kao spremno za naplatu"
+    projectName: record.projectName
   });
 
   await persistPaymentClient(client, "Naplata je sacuvana.");
@@ -214,10 +211,7 @@ async function handleMarkBillingPaid() {
   addActivity(client, "billing_paid", "Naplata placena", `${record.projectName} - ${record.amount ? formatMoney(record.amount) : "bez iznosa"}`, {
     billingId: record.id,
     projectId: record.projectId,
-    projectName: record.projectName,
-    taskTitle: `Naplata: ${record.projectName}`,
-    taskStatus: "sent_to_billing",
-    taskActionText: "oznacio kao naplaceno"
+    projectName: record.projectName
   });
 
   await persistPaymentClient(client, "Placanje je evidentirano.");

@@ -1,31 +1,7 @@
 /* ------------------------- CLIENT FORM / CRUD ------------------------- */
 
-function snapshotClientsForRollback() {
-  return clients.map(client => ({
-    ...client,
-    payment: client.payment
-      ? {
-          ...client.payment,
-          workflow: client.payment.workflow ? { ...client.payment.workflow } : {}
-        }
-      : client.payment,
-    activityLog: Array.isArray(client.activityLog)
-      ? client.activityLog.map(item => ({ ...item }))
-      : client.activityLog,
-    contacts: Array.isArray(client.contacts)
-      ? client.contacts.map(contact => ({ ...contact }))
-      : client.contacts
-  }));
-}
-
 function openAddClientModal() {
   currentClientId = null;
-
-  if (!isClientWorkspaceSourceReady()) {
-    syncClientCreateAvailability();
-    showToast("Novi klijent nije dostupan dok se workspace klijenti ne ucitaju.");
-    return;
-  }
 
   if (isFreeClientLimitReached(clients.length + 1)) {
     showToast(getFreePlanLimitText());
@@ -85,7 +61,7 @@ function openEditClientModal(id) {
   renderLicenseUI();
 }
 
-async function handleClientSubmit(e) {
+function handleClientSubmit(e) {
   e.preventDefault();
 
   const id = getValue("clientId");
@@ -117,9 +93,6 @@ async function handleClientSubmit(e) {
     showToast("Unesi naziv klijenta.");
     return;
   }
-
-  const sourceReady = await ensureClientSourceReady({ requireWorkspace: true });
-  if (!sourceReady) return;
   const existingClient = id ? getClientById(Number(id)) : null;
 
   const baseClient = {
@@ -180,8 +153,6 @@ async function handleClientSubmit(e) {
       return;
     }
 
-    const rollbackClients = snapshotClientsForRollback();
-
     clients[idx] = {
       ...existing,
       ...baseClient,
@@ -206,17 +177,7 @@ async function handleClientSubmit(e) {
       clients[idx].lastActionNote || ""
     );
 
-    const persisted = await persistClients({
-      immediate: true,
-      requireWorkspace: true
-    });
-    if (!persisted) {
-      clients = rollbackClients;
-      saveClientsLocalOnly();
-      renderAll();
-      return;
-    }
-
+    saveClients();
     closeClientModal();
     renderAll();
 
@@ -262,26 +223,15 @@ async function handleClientSubmit(e) {
     ]
   };
 
-  const rollbackClients = snapshotClientsForRollback();
   clients.unshift(newClient);
 
-  const persisted = await persistClients({
-    immediate: true,
-    requireWorkspace: true
-  });
-  if (!persisted) {
-    clients = rollbackClients;
-    saveClientsLocalOnly();
-    renderAll();
-    return;
-  }
-
+  saveClients();
   closeClientModal();
   renderAll();
   showToast("Klijent je dodat.");
 }
 
-async function handleDeleteClient() {
+function handleDeleteClient() {
   const rawId = getValue("clientId");
   const id = Number(rawId);
 
@@ -290,29 +240,8 @@ async function handleDeleteClient() {
   const sure = confirm("Da li sigurno zelis da obrises klijenta?");
   if (!sure) return;
 
-  const sourceReady = await ensureClientSourceReady({ requireWorkspace: true });
-  if (!sourceReady) return;
-  const requiresWorkspacePersistence = isClientWorkspaceSourceReady();
-
-  const rollbackClients = snapshotClientsForRollback();
-
-  if (requiresWorkspacePersistence) {
-    const deleted = await deleteClientFromWorkspace(id);
-    if (!deleted) return;
-  }
-
   clients = clients.filter(c => c.id !== id);
-  if (requiresWorkspacePersistence) {
-    saveClientsLocalOnly();
-  } else {
-    const persisted = await persistClients();
-    if (!persisted) {
-      clients = rollbackClients;
-      saveClientsLocalOnly();
-      renderAll();
-      return;
-    }
-  }
+  saveClients();
   closeClientModal();
   closeClientDrawer();
   renderAll();

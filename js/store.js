@@ -180,20 +180,15 @@ function loadProjects() {
 }
 
 function saveProjects() {
+  const savedLocal = saveProjectsLocalOnly();
+
   if (typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore()) {
-    if (projectDataSource !== "workspace") {
-      console.warn("[Pulse Projects] Workspace save blocked before workspace source is resolved.", {
-        projectDataSource,
-        workspaceId: currentWorkspace?.id || null
-      });
-      return saveProjectsLocalOnly();
-    }
-    saveProjectsLocalOnly();
+    // Ne blokiramo cloud sync dok projectDataSource jos nije resolve-ovan.
+    // Projekat mora da ode u Supabase cim je workspace projects store spreman.
     queueWorkspaceProjectSync();
-    return true;
   }
 
-  return saveProjectsLocalOnly();
+  return savedLocal;
 }
 
 function saveProjectsLocalOnly() {
@@ -333,20 +328,14 @@ function loadTasks() {
 }
 
 function saveTasks() {
+  const savedLocal = saveTasksLocalOnly();
+
   if (typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore()) {
-    if (taskDataSource !== "workspace") {
-      console.warn("[Pulse Tasks] Workspace save blocked before workspace source is resolved.", {
-        taskDataSource,
-        workspaceId: currentWorkspace?.id || null
-      });
-      return saveTasksLocalOnly();
-    }
-    saveTasksLocalOnly();
+    // Ne blokiramo cloud sync dok taskDataSource jos nije resolve-ovan.
     queueWorkspaceTaskSync();
-    return true;
   }
 
-  return saveTasksLocalOnly();
+  return savedLocal;
 }
 
 function saveTasksLocalOnly() {
@@ -566,16 +555,23 @@ function resetProjectSourceResolution() {
 
 async function persistProjects(options = {}) {
   const { immediate = false } = options;
-  saveProjectsLocalOnly();
+  const savedLocal = saveProjectsLocalOnly();
 
   if (typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore()) {
     if (immediate) {
-      return await pushProjectsToWorkspace();
+      const pushed = await pushProjectsToWorkspace();
+      if (!pushed) {
+        console.warn("[Pulse Projects] PROJECT CLOUD PUSH FAILED", {
+          workspaceId: currentWorkspace?.id || null,
+          projectDataSource
+        });
+      }
+      return pushed;
     }
     queueWorkspaceProjectSync();
   }
 
-  return true;
+  return savedLocal;
 }
 
 async function resolveProjectSource(options = {}) {
@@ -647,9 +643,31 @@ function mapProjectToWorkspaceRow(project = {}) {
   };
 }
 
+function mergeProjectsById(localItems = [], remoteItems = []) {
+  const merged = new Map();
+
+  (Array.isArray(localItems) ? localItems : [])
+    .map(normalizeProject)
+    .filter(Boolean)
+    .forEach(project => merged.set(String(project.id), project));
+
+  // Remote ima prednost za isti id, ali lokalni projekti koji jos nisu u cloudu ostaju.
+  (Array.isArray(remoteItems) ? remoteItems : [])
+    .map(normalizeProject)
+    .filter(Boolean)
+    .forEach(project => merged.set(String(project.id), project));
+
+  return Array.from(merged.values()).sort((a, b) => {
+    const aTime = new Date(a.createdAt || 0).getTime();
+    const bTime = new Date(b.createdAt || 0).getTime();
+    return bTime - aTime;
+  });
+}
+
 async function hydrateProjectsFromWorkspace(options = {}) {
   if (!(typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore())) return false;
   const { silent = false } = options;
+  const localBeforeHydrate = readProjectCache() || (Array.isArray(projects) ? projects : []);
 
   const { data, error } = await supabaseClient
     .from("projects")
@@ -664,21 +682,29 @@ async function hydrateProjectsFromWorkspace(options = {}) {
     return false;
   }
 
-  projects = Array.isArray(data) ? data.map(mapProjectRowToLocal) : [];
+  const remoteProjects = (Array.isArray(data) ? data.map(mapProjectRowToLocal) : []).filter(Boolean);
+  const localProjects = (Array.isArray(localBeforeHydrate) ? localBeforeHydrate : []).map(normalizeProject).filter(Boolean);
+  const remoteIds = new Set(remoteProjects.map(project => String(project.id)));
+  const localOnlyProjects = localProjects.filter(project => !remoteIds.has(String(project.id)));
+
+  projects = mergeProjectsById(localProjects, remoteProjects);
   projectDataSource = "workspace";
   saveProjectsLocalOnly();
+
+  if (localOnlyProjects.length) {
+    console.warn("[Pulse Projects] Lokalni projekti nisu bili u cloudu; pokusavam push.", {
+      count: localOnlyProjects.length,
+      ids: localOnlyProjects.map(project => project.id)
+    });
+    await pushProjectsToWorkspace();
+  }
+
   return true;
 }
 
 async function pushProjectsToWorkspace() {
   if (!(typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore())) return false;
-  if (projectDataSource !== "workspace") {
-    console.warn("[Pulse Projects] Workspace push skipped because workspace source is not active.", {
-      projectDataSource,
-      workspaceId: currentWorkspace?.id || null
-    });
-    return false;
-  }
+  if (!supabaseClient || !currentWorkspace?.id) return false;
 
   const { data: existingRows, error: existingError } = await supabaseClient
     .from("projects")
@@ -719,6 +745,7 @@ async function pushProjectsToWorkspace() {
     }
   }
 
+  projectDataSource = "workspace";
   cloudSyncState = "synced";
   syncCloudStatusUI("Sinhronizovano");
   return true;
@@ -731,16 +758,39 @@ function resetTaskSourceResolution() {
 
 async function persistTasks(options = {}) {
   const { immediate = false } = options;
-  saveTasksLocalOnly();
+  const savedLocal = saveTasksLocalOnly();
+  if (savedLocal) {
+    console.info("[Pulse Tasks] TASK LOCAL SAVE OK", {
+      cacheKey: getTaskCacheKey(),
+      count: Array.isArray(tasks) ? tasks.length : 0
+    });
+  }
+
+  // Pre taskova prvo guramo projekte, jer tasks.project_id ima FK na projects.id u Supabase.
+  if (typeof pushProjectsToWorkspace === "function" && typeof canUseWorkspaceProjectStore === "function" && canUseWorkspaceProjectStore()) {
+    await pushProjectsToWorkspace();
+  }
 
   if (typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore()) {
     if (immediate) {
-      return await pushTasksToWorkspace();
+      const pushed = await pushTasksToWorkspace();
+      if (pushed) {
+        console.info("[Pulse Tasks] TASK CLOUD PUSH OK", {
+          workspaceId: currentWorkspace?.id || null,
+          count: Array.isArray(tasks) ? tasks.length : 0
+        });
+      } else {
+        console.warn("[Pulse Tasks] TASK CLOUD PUSH FAILED", {
+          workspaceId: currentWorkspace?.id || null,
+          taskDataSource
+        });
+      }
+      return pushed;
     }
     queueWorkspaceTaskSync();
   }
 
-  return true;
+  return savedLocal;
 }
 
 async function resolveTaskSource(options = {}) {
@@ -835,9 +885,31 @@ function mapTaskToWorkspaceRow(task = {}) {
   };
 }
 
+function mergeTasksById(localItems = [], remoteItems = []) {
+  const merged = new Map();
+
+  (Array.isArray(localItems) ? localItems : [])
+    .map(normalizeTaskEntity)
+    .filter(Boolean)
+    .forEach(task => merged.set(String(task.id), task));
+
+  // Remote ima prednost za isti id, ali lokalni taskovi koji jos nisu u cloudu ostaju.
+  (Array.isArray(remoteItems) ? remoteItems : [])
+    .map(normalizeTaskEntity)
+    .filter(Boolean)
+    .forEach(task => merged.set(String(task.id), task));
+
+  return Array.from(merged.values()).sort((a, b) => {
+    const aTime = new Date(a.createdAt || 0).getTime();
+    const bTime = new Date(b.createdAt || 0).getTime();
+    return bTime - aTime;
+  });
+}
+
 async function hydrateTasksFromWorkspace(options = {}) {
   if (!(typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore())) return false;
   const { silent = false } = options;
+  const localBeforeHydrate = readTaskCache() || (Array.isArray(tasks) ? tasks : []);
 
   const { data, error } = await supabaseClient
     .from("tasks")
@@ -852,21 +924,29 @@ async function hydrateTasksFromWorkspace(options = {}) {
     return false;
   }
 
-  tasks = (Array.isArray(data) ? data.map(mapTaskRowToLocal) : []).filter(Boolean);
+  const remoteTasks = (Array.isArray(data) ? data.map(mapTaskRowToLocal) : []).filter(Boolean);
+  const localTasks = (Array.isArray(localBeforeHydrate) ? localBeforeHydrate : []).map(normalizeTaskEntity).filter(Boolean);
+  const remoteIds = new Set(remoteTasks.map(task => String(task.id)));
+  const localOnlyTasks = localTasks.filter(task => !remoteIds.has(String(task.id)));
+
+  tasks = mergeTasksById(localTasks, remoteTasks);
   taskDataSource = "workspace";
   saveTasksLocalOnly();
+
+  if (localOnlyTasks.length) {
+    console.warn("[Pulse Tasks] Lokalni taskovi nisu bili u cloudu; pokusavam push.", {
+      count: localOnlyTasks.length,
+      ids: localOnlyTasks.map(task => task.id)
+    });
+    await pushTasksToWorkspace();
+  }
+
   return true;
 }
 
 async function pushTasksToWorkspace() {
   if (!(typeof canUseWorkspaceTaskStore === "function" && canUseWorkspaceTaskStore())) return false;
-  if (taskDataSource !== "workspace") {
-    console.warn("[Pulse Tasks] Workspace push skipped because workspace source is not active.", {
-      taskDataSource,
-      workspaceId: currentWorkspace?.id || null
-    });
-    return false;
-  }
+  if (!supabaseClient || !currentWorkspace?.id) return false;
 
   const { data: existingRows, error: existingError } = await supabaseClient
     .from("tasks")
@@ -907,6 +987,7 @@ async function pushTasksToWorkspace() {
     }
   }
 
+  taskDataSource = "workspace";
   cloudSyncState = "synced";
   syncCloudStatusUI("Sinhronizovano");
   return true;
