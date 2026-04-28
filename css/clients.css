@@ -165,10 +165,93 @@
 
 /* ------------------------- CLIENTS LIST ------------------------- */
 
+.clients-view-header {
+  margin-bottom: 12px;
+}
+
+.clients-list-shell {
+  position: relative;
+  overflow: visible;
+}
+
+.clients-control-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  min-width: 0;
+}
+
+.clients-control-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.clients-control-search .search-input {
+  width: 100%;
+  min-width: 0;
+}
+
 .clients-toolbar-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.clients-header-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.clients-header-menu-toggle {
+  min-width: 42px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 12px;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.clients-header-menu-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 168px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(18, 29, 48, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 40px rgba(8, 16, 29, 0.28);
+  z-index: 40;
+}
+
+.clients-header-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+.clients-header-menu-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.clients-empty-action {
+  margin-top: 14px;
 }
 
 .clients-mode-bar {
