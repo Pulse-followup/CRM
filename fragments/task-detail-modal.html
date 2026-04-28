@@ -17,6 +17,29 @@
         <p id="taskDetailDueDate">Rok: -</p>
         <p id="taskDetailAssignedTo">Dodeljeno: -</p>
         <p id="taskDetailDescription">Opis: -</p>
+        <p id="taskDetailTimeSpent">Vreme: 0 min</p>
+        <p id="taskDetailLaborCost">Trosak rada: 0 RSD</p>
+        <p id="taskDetailMaterialCost">Materijal: 0 RSD</p>
+        <p id="taskDetailMaterialDescription" class="hidden">Opis materijala: -</p>
+        <p id="taskDetailNonBillableReason" class="hidden">Razlog: -</p>
+        <p id="taskDetailCostState" class="hidden">Ukljuceno u trosak projekta</p>
+      </div>
+
+      <div id="taskDetailReviewInputs" class="task-detail-box hidden">
+        <div class="field">
+          <label for="taskReviewTimeSpent">Utroseno vreme (min)</label>
+          <input id="taskReviewTimeSpent" class="input" type="number" min="0" step="1" />
+        </div>
+
+        <div class="field">
+          <label for="taskReviewMaterialCost">Trosak materijala (RSD)</label>
+          <input id="taskReviewMaterialCost" class="input" type="number" min="0" step="1" />
+        </div>
+
+        <div class="field">
+          <label for="taskReviewMaterialDescription">Opis materijala</label>
+          <input id="taskReviewMaterialDescription" class="input" type="text" />
+        </div>
       </div>
 
       <div id="taskDetailActions" class="task-detail-actions"></div>

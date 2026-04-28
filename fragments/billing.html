@@ -1,0 +1,24 @@
+<section id="billingView" class="view">
+  <div class="workspace-view-title workspace-view-title-compact team-view-header">
+    <h2 id="billingViewTitle">Naplata</h2>
+  </div>
+
+  <section class="panel team-view-shell">
+    <div class="team-view-controls">
+      <div class="task-filter-row" id="billingStatusFilterRow">
+        <button class="btn btn-secondary btn-sm is-active" type="button" data-project-billing-filter="all">Svi</button>
+        <button class="btn btn-secondary btn-sm" type="button" data-project-billing-filter="draft">Za fakturisanje</button>
+        <button class="btn btn-secondary btn-sm" type="button" data-project-billing-filter="invoiced">Fakturisano</button>
+        <button class="btn btn-secondary btn-sm" type="button" data-project-billing-filter="overdue">Kasni</button>
+        <button class="btn btn-secondary btn-sm" type="button" data-project-billing-filter="paid">Placeno</button>
+      </div>
+    </div>
+
+    <div id="billingList" class="team-task-list"></div>
+
+    <div id="billingEmpty" class="empty-state hidden">
+      <h4>Nema naloga za naplatu</h4>
+      <p>Nalozi ce se ovde pojaviti kada admin kreira naplatu iz projekta.</p>
+    </div>
+  </section>
+</section>

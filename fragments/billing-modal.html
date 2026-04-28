@@ -1,0 +1,64 @@
+<div id="billingModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="billingModalBackdrop"></div>
+
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div>
+        <h3 id="billingModalTitle">Nalog za naplatu</h3>
+        <p id="billingModalSubtitle">Projekat i status naloga.</p>
+      </div>
+
+      <button id="closeBillingModalBtn" class="icon-btn" aria-label="Zatvori">x</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="task-detail-box">
+        <p id="billingModalClient">Klijent: -</p>
+        <p id="billingModalProject">Projekat: -</p>
+        <p id="billingModalStatus">Status: -</p>
+        <p id="billingModalLaborCost">Trosak rada: 0 RSD</p>
+        <p id="billingModalMaterialCost">Trosak materijala: 0 RSD</p>
+        <p id="billingModalTotalCost">Ukupan trosak: 0 RSD</p>
+      </div>
+
+      <div class="field">
+        <label for="billingProjectDescription">Opis</label>
+        <textarea id="billingProjectDescription" class="input textarea" placeholder="Opis naloga"></textarea>
+      </div>
+
+      <div class="project-form-grid">
+        <div class="field">
+          <label for="billingProjectAmount">Iznos za naplatu</label>
+          <input id="billingProjectAmount" class="input" type="number" min="0" step="0.01" />
+        </div>
+
+        <div class="field">
+          <label for="billingProjectCurrency">Valuta</label>
+          <input id="billingProjectCurrency" class="input" type="text" value="RSD" />
+        </div>
+
+        <div class="field">
+          <label for="billingProjectDueDate">Rok placanja</label>
+          <input id="billingProjectDueDate" class="input" type="date" />
+        </div>
+
+        <div class="field">
+          <label for="billingProjectInvoiceNumber">Broj fakture</label>
+          <input id="billingProjectInvoiceNumber" class="input" type="text" placeholder="Opcionalno" />
+        </div>
+      </div>
+
+      <div id="billingModalActions" class="task-detail-actions"></div>
+
+      <div class="form-actions">
+        <div class="form-actions-right">
+          <button type="button" id="closeBillingModalActionBtn" class="btn btn-secondary">Zatvori</button>
+          <button type="button" id="saveProjectBillingBtn" class="btn btn-primary">Sacuvaj nalog</button>
+          <button type="button" id="billingMarkInvoicedBtn" class="btn btn-primary hidden">Oznaci kao fakturisano</button>
+          <button type="button" id="billingMarkPaidBtn" class="btn btn-primary hidden">Oznaci kao placeno</button>
+          <button type="button" id="billingMarkOverdueBtn" class="btn btn-secondary hidden">Oznaci kao kasni</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

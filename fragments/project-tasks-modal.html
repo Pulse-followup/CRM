@@ -12,6 +12,39 @@
     </div>
 
     <div class="modal-body">
+      <div class="task-detail-box">
+        <p id="projectBillingStatus">Nalog za naplatu: -</p>
+      </div>
+
+      <div class="modal-subsection">
+        <div class="section-head section-head-row">
+          <h4>Obracun projekta</h4>
+        </div>
+
+        <div id="projectCostSummary" class="task-detail-box">
+          <p id="projectCostTime">Ukupno vreme: 0 min</p>
+          <p id="projectCostLabor">Trosak rada: 0 RSD</p>
+          <p id="projectCostMaterial">Trosak materijala: 0 RSD</p>
+          <p id="projectCostTotal">Ukupan trosak: 0 RSD</p>
+        </div>
+
+        <div>
+          <h4>Taskovi ukljuceni u trosak</h4>
+          <div id="projectIncludedCostList" class="task-modal-list compact-list"></div>
+          <div id="projectIncludedCostEmpty" class="empty-state compact hidden">
+            <p>Nema taskova ukljucenih u trosak.</p>
+          </div>
+        </div>
+
+        <div>
+          <h4>Non-billable taskovi</h4>
+          <div id="projectNonBillableList" class="task-modal-list compact-list"></div>
+          <div id="projectNonBillableEmpty" class="empty-state compact hidden">
+            <p>Nema non-billable taskova.</p>
+          </div>
+        </div>
+      </div>
+
       <div id="projectTasksList" class="task-modal-list"></div>
 
       <div id="projectTasksEmpty" class="empty-state compact hidden">
@@ -20,6 +53,7 @@
 
       <div class="form-actions">
         <div class="form-actions-right">
+          <button type="button" id="createProjectBillingBtn" class="btn btn-secondary hidden">Kreiraj nalog za naplatu</button>
           <button type="button" id="newTaskFromProjectTasksBtn" class="btn btn-secondary">Novi task</button>
           <button type="button" id="closeProjectTasksBtn" class="btn btn-primary">Zatvori</button>
         </div>
