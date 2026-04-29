@@ -32,6 +32,12 @@ function ClientContactsSection({ contacts }: ClientContactsSectionProps) {
                   <dt>Telefon</dt>
                   <dd>{contact.phone || '-'}</dd>
                 </div>
+                {contact.note ? (
+                  <div>
+                    <dt>Napomena</dt>
+                    <dd>{contact.note}</dd>
+                  </div>
+                ) : null}
               </dl>
             </article>
           ))}

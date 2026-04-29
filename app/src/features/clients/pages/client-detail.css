@@ -298,6 +298,17 @@
   padding: 10px 12px;
 }
 
+.customer-task-form-field textarea {
+  min-height: 88px;
+  resize: vertical;
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 10px 12px;
+}
+
 .customer-task-form-error {
   color: #fca5a5;
   font-size: 0.75rem;

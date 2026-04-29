@@ -3,6 +3,7 @@ export interface ClientContact {
   role: string
   email: string
   phone: string
+  note?: string
 }
 
 export interface CommercialInputs {

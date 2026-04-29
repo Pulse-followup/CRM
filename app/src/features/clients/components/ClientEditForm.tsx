@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react'
 import type { Client, ClientContact, CommercialInputs } from '../types'
 
+export interface ClientEditFormPatch {
+  name: string
+  city: string
+  address: string
+  contacts: ClientContact[]
+  commercial: CommercialInputs
+}
+
 export interface ClientEditFormProps {
   client: Client
   onCancel: () => void
-  onSubmit: (client: Client) => void
+  onSubmit: (patch: ClientEditFormPatch) => void
 }
 
 interface ClientEditValues {
@@ -13,6 +21,34 @@ interface ClientEditValues {
   address: string
   contacts: ClientContact[]
   commercial: CommercialInputs
+}
+
+type ContactError = {
+  name?: string
+  role?: string
+}
+
+type FormErrors = {
+  contacts: ContactError[]
+}
+
+const CONTACT_ROLE_OPTIONS = [
+  { value: 'vlasnik/direktor', label: 'Vlasnik/direktor' },
+  { value: 'prodaja', label: 'Prodaja' },
+  { value: 'marketing', label: 'Marketing' },
+  { value: 'logistika', label: 'Logistika' },
+  { value: 'finansije', label: 'Finansije' },
+  { value: 'drugo', label: 'Drugo' },
+]
+
+function createEmptyContact(): ClientContact {
+  return {
+    name: '',
+    role: '',
+    email: '',
+    phone: '',
+    note: '',
+  }
 }
 
 function toInputValue(value: number | null) {
@@ -27,6 +63,7 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
     contacts: client.contacts,
     commercial: client.commercial,
   })
+  const [errors, setErrors] = useState<FormErrors>({ contacts: [] })
 
   useEffect(() => {
     setValues({
@@ -36,6 +73,7 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
       contacts: client.contacts,
       commercial: client.commercial,
     })
+    setErrors({ contacts: [] })
   }, [client])
 
   const handleBasicChange =
@@ -49,14 +87,49 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
 
   const handleContactChange =
     (index: number, field: keyof ClientContact) =>
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+    (
+      event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+    ) => {
       setValues((current) => ({
         ...current,
         contacts: current.contacts.map((contact, contactIndex) =>
           contactIndex === index ? { ...contact, [field]: event.target.value } : contact,
         ),
       }))
+      setErrors((current) => ({
+        ...current,
+        contacts: current.contacts.map((contactError, contactIndex) =>
+          contactIndex === index ? { ...contactError, [field]: undefined } : contactError,
+        ),
+      }))
     }
+
+  const handleAddContact = () => {
+    setValues((current) => ({
+      ...current,
+      contacts: [...current.contacts, createEmptyContact()],
+    }))
+    setErrors((current) => ({
+      ...current,
+      contacts: [...current.contacts, {}],
+    }))
+  }
+
+  const handleRemoveContact = (index: number) => {
+    if (values.contacts.length <= 1) {
+      window.alert('Klijent mora imati najmanje jedan kontakt.')
+      return
+    }
+
+    setValues((current) => ({
+      ...current,
+      contacts: current.contacts.filter((_, contactIndex) => contactIndex !== index),
+    }))
+    setErrors((current) => ({
+      ...current,
+      contacts: current.contacts.filter((_, contactIndex) => contactIndex !== index),
+    }))
+  }
 
   const handleCommercialChange =
     (field: keyof CommercialInputs) =>
@@ -80,17 +153,30 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
+    const nextContactErrors = values.contacts.map((contact) => ({
+      name: contact.name.trim() ? undefined : 'Ime kontakta je obavezno.',
+      role: contact.role.trim() ? undefined : 'Funkcija/pozicija je obavezna.',
+    }))
+
+    const hasContactErrors = nextContactErrors.some(
+      (contactError) => contactError.name || contactError.role,
+    )
+
+    if (hasContactErrors) {
+      setErrors({ contacts: nextContactErrors })
+      return
+    }
+
     onSubmit({
-      ...client,
       name: values.name.trim(),
       city: values.city.trim(),
       address: values.address.trim(),
       contacts: values.contacts.map((contact) => ({
-        ...contact,
         name: contact.name.trim(),
         role: contact.role.trim(),
         email: contact.email.trim(),
         phone: contact.phone.trim(),
+        note: contact.note?.trim() || '',
       })),
       commercial: values.commercial,
     })
@@ -118,26 +204,53 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
       <div className="customer-card-group">
         <div className="customer-card-section-head">
           <h3>Kontakti</h3>
+          <button type="button" className="customer-project-toggle" onClick={handleAddContact}>
+            Dodaj kontakt
+          </button>
         </div>
         <div className="customer-card-stack">
           {values.contacts.map((contact, index) => (
             <div key={`${contact.email}-${index}`} className="customer-card-group">
+              <div className="customer-card-section-head">
+                <h3>Kontakt {index + 1}</h3>
+                <button
+                  type="button"
+                  className="customer-project-toggle"
+                  onClick={() => handleRemoveContact(index)}
+                >
+                  Obrisi kontakt
+                </button>
+              </div>
+
               <div className="customer-client-edit-grid">
                 <label className="customer-task-form-field">
-                  <span>Ime</span>
+                  <span>Ime i prezime</span>
                   <input
                     type="text"
                     value={contact.name}
                     onChange={handleContactChange(index, 'name')}
                   />
+                  {errors.contacts[index]?.name ? (
+                    <small className="customer-task-form-error">
+                      {errors.contacts[index]?.name}
+                    </small>
+                  ) : null}
                 </label>
                 <label className="customer-task-form-field">
-                  <span>Funkcija</span>
-                  <input
-                    type="text"
-                    value={contact.role}
-                    onChange={handleContactChange(index, 'role')}
-                  />
+                  <span>Funkcija/pozicija</span>
+                  <select value={contact.role} onChange={handleContactChange(index, 'role')}>
+                    <option value="">Izaberi funkciju</option>
+                    {CONTACT_ROLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.contacts[index]?.role ? (
+                    <small className="customer-task-form-error">
+                      {errors.contacts[index]?.role}
+                    </small>
+                  ) : null}
                 </label>
                 <label className="customer-task-form-field">
                   <span>Email</span>
@@ -153,6 +266,13 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
                     type="text"
                     value={contact.phone}
                     onChange={handleContactChange(index, 'phone')}
+                  />
+                </label>
+                <label className="customer-task-form-field customer-client-edit-field-full">
+                  <span>Napomena</span>
+                  <textarea
+                    value={contact.note ?? ''}
+                    onChange={handleContactChange(index, 'note')}
                   />
                 </label>
               </div>

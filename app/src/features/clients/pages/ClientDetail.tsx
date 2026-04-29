@@ -4,7 +4,7 @@ import { useClientStore } from '../clientStore'
 import ClientActionsBar from '../components/ClientActionsBar'
 import ClientCommercialSection from '../components/ClientCommercialSection'
 import ClientContactsSection from '../components/ClientContactsSection'
-import ClientEditForm from '../components/ClientEditForm'
+import ClientEditForm, { type ClientEditFormPatch } from '../components/ClientEditForm'
 import ClientHeader from '../components/ClientHeader'
 import ClientInfoSection from '../components/ClientInfoSection'
 import ClientProjectsSection from '../components/ClientProjectsSection'
@@ -68,10 +68,8 @@ function ClientDetail() {
     setIsCreatingProject(false)
   }
 
-  const handleUpdateClient = (nextClient: typeof client) => {
-    if (!nextClient) return
-
-    updateClient(nextClient)
+  const handleUpdateClient = (patch: ClientEditFormPatch) => {
+    updateClient(clientId, patch)
     setIsEditingClient(false)
   }
 

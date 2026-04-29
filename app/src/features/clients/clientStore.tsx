@@ -9,7 +9,7 @@ interface ClientStoreValue {
   clients: Client[]
   getAllClients: () => Client[]
   getClientById: (clientId: string) => Client | null
-  updateClient: (client: Client) => void
+  updateClient: (clientId: string, patch: Partial<Omit<Client, 'id'>>) => void
 }
 
 const ClientStoreContext = createContext<ClientStoreValue | null>(null)
@@ -33,9 +33,11 @@ export function ClientProvider({ children }: ClientProviderProps) {
       getAllClients: () => clients,
       getClientById: (clientId: string) =>
         clients.find((client) => String(client.id) === clientId) ?? null,
-      updateClient: (client: Client) => {
+      updateClient: (clientId: string, patch: Partial<Omit<Client, 'id'>>) => {
         setClients((current) =>
-          current.map((currentClient) => (currentClient.id === client.id ? client : currentClient)),
+          current.map((currentClient) =>
+            String(currentClient.id) === clientId ? { ...currentClient, ...patch } : currentClient,
+          ),
         )
       },
     }),
