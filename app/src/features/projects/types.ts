@@ -1,3 +1,5 @@
+import type { BillingStatus } from '../billing/types'
+
 export type ProjectStatus = 'aktivan' | 'arhiviran' | 'zavrsen'
 
 export type ProjectType = 'kampanja' | 'usluga' | 'postavka' | 'odrzavanje' | 'drugo'
@@ -17,5 +19,6 @@ export interface Project {
   type?: ProjectType
   frequency?: ProjectFrequency
   value?: number
-  billingStatus?: string
+  billingId?: string
+  billingStatus?: BillingStatus
 }

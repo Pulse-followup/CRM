@@ -1,17 +1,15 @@
 import { useState } from 'react'
 import {
   PROJECT_FREQUENCY_LABELS,
-  PROJECT_STATUS_LABELS,
   PROJECT_TYPE_LABELS,
 } from '../projectLabels'
-import type { ProjectFrequency, ProjectStatus, ProjectType } from '../types'
+import type { ProjectFrequency, ProjectType } from '../types'
 
 export interface ProjectFormValues {
   title: string
   type: ProjectType | ''
   frequency: ProjectFrequency | ''
   value: string
-  status: ProjectStatus | ''
 }
 
 export interface ProjectFormProps {
@@ -24,7 +22,6 @@ const initialValues: ProjectFormValues = {
   type: '',
   frequency: '',
   value: '',
-  status: 'aktivan',
 }
 
 type FormErrors = Partial<Record<'title' | 'type' | 'frequency' | 'value', string>>
@@ -116,17 +113,6 @@ function ProjectForm({ onCancel, onSubmit }: ProjectFormProps) {
         <span>Procenjena vrednost</span>
         <input type="number" min="0" step="1" value={values.value} onChange={handleChange('value')} />
         {errors.value ? <small className="customer-task-form-error">{errors.value}</small> : null}
-      </label>
-
-      <label className="customer-task-form-field">
-        <span>Status</span>
-        <select value={values.status} onChange={handleChange('status')}>
-          {Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
       </label>
 
       <div className="customer-task-actions">

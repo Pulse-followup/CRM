@@ -134,6 +134,26 @@
   color: #94a3b8;
 }
 
+.settings-user-switcher {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-user-switcher span {
+  color: #cbd5e1;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.settings-user-switcher select {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px 14px;
+}
+
 .settings-danger-button {
   width: fit-content;
   max-width: 100%;
@@ -247,12 +267,43 @@
   background: #111c33;
 }
 
+.client-list-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.client-list-card-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .client-list-card strong {
   font-size: 17px;
 }
 
 .client-list-card span {
   color: #94a3b8;
+}
+
+.client-list-score {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.client-list-score-value {
+  color: #e2e8f0 !important;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.client-list-priority {
+  min-width: 74px;
+  justify-content: center;
 }
 
 .clients-empty-state {
@@ -380,6 +431,14 @@
   .clients-control-bar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .client-list-card-head {
+    flex-direction: column;
+  }
+
+  .client-list-score {
+    justify-items: start;
   }
 
   .clients-primary-action {

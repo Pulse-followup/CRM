@@ -1,9 +1,16 @@
 import { useRef } from 'react'
+import { useAuthStore } from '../features/auth/authStore'
 
 const CLIENTS_STORAGE_KEY = 'pulse.clients.v1'
 const PROJECTS_STORAGE_KEY = 'pulse.projects.v1'
 const TASKS_STORAGE_KEY = 'pulse.tasks.v1'
-const STORAGE_KEYS = [CLIENTS_STORAGE_KEY, PROJECTS_STORAGE_KEY, TASKS_STORAGE_KEY]
+const BILLING_STORAGE_KEY = 'pulse.billing.v1'
+const STORAGE_KEYS = [
+  CLIENTS_STORAGE_KEY,
+  PROJECTS_STORAGE_KEY,
+  TASKS_STORAGE_KEY,
+  BILLING_STORAGE_KEY,
+]
 
 interface BackupPayload {
   version: number
@@ -11,10 +18,12 @@ interface BackupPayload {
   clients: unknown[]
   projects: unknown[]
   tasks: unknown[]
+  billing: unknown[]
 }
 
 function SettingsPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null)
+  const { users, currentUser, setCurrentUser } = useAuthStore()
 
   const readStoredArray = (key: string) => {
     try {
@@ -53,6 +62,7 @@ function SettingsPage() {
       clients: readStoredArray(CLIENTS_STORAGE_KEY),
       projects: readStoredArray(PROJECTS_STORAGE_KEY),
       tasks: readStoredArray(TASKS_STORAGE_KEY),
+      billing: readStoredArray(BILLING_STORAGE_KEY),
     }
 
     const json = JSON.stringify(payload, null, 2)
@@ -89,7 +99,8 @@ function SettingsPage() {
         typeof parsedValue !== 'object' ||
         !Array.isArray((parsedValue as BackupPayload).clients) ||
         !Array.isArray((parsedValue as BackupPayload).projects) ||
-        !Array.isArray((parsedValue as BackupPayload).tasks)
+        !Array.isArray((parsedValue as BackupPayload).tasks) ||
+        !Array.isArray((parsedValue as BackupPayload).billing)
       ) {
         window.alert('Backup fajl nije validan.')
         event.target.value = ''
@@ -117,6 +128,10 @@ function SettingsPage() {
         TASKS_STORAGE_KEY,
         JSON.stringify((parsedValue as BackupPayload).tasks),
       )
+      window.localStorage.setItem(
+        BILLING_STORAGE_KEY,
+        JSON.stringify((parsedValue as BackupPayload).billing),
+      )
 
       event.target.value = ''
       window.location.assign('/CRM/')
@@ -129,6 +144,27 @@ function SettingsPage() {
   return (
     <section className="page-card settings-page-shell">
       <h2>Podesavanja</h2>
+
+      <section className="settings-dev-tools">
+        <div className="settings-dev-tools-head">
+          <h3>Trenutni korisnik</h3>
+          <p>Mock user/role switcher za React fazu, bez auth-a.</p>
+        </div>
+
+        <label className="settings-user-switcher">
+          <span>Aktivan korisnik</span>
+          <select
+            value={currentUser.id}
+            onChange={(event) => setCurrentUser(event.target.value)}
+          >
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name} • {user.role}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
 
       <section className="settings-dev-tools">
         <div className="settings-dev-tools-head">

@@ -21,13 +21,13 @@ export const mockClients: Record<string, Client> = {
       },
     ],
     commercial: {
-      businessType: 'Apoteka',
-      revenueBand: 'Srednji',
+      businessType: 'apoteka',
+      revenueBand: 'medium',
       employeeCount: 24,
       locationCount: 3,
-      decisionLevel: 'Vlasnik',
-      relationshipLevel: 'Imamo komunikaciju',
-      innovationReady: 'Da',
+      decisionLevel: 'owner',
+      relationshipLevel: 'communication',
+      innovationReady: 'yes',
     },
   },
 }

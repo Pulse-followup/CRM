@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   BUSINESS_TYPE_OPTIONS,
   DECISION_LEVEL_OPTIONS,
@@ -6,9 +6,9 @@ import {
   RELATIONSHIP_LEVEL_OPTIONS,
   REVENUE_BAND_OPTIONS,
 } from '../clientCommercialOptions'
-import type { Client, ClientContact, CommercialInputs } from '../types'
+import type { ClientContact, CommercialInputs } from '../types'
 
-export interface ClientEditFormPatch {
+export interface ClientCreateFormValues {
   name: string
   city: string
   address: string
@@ -16,18 +16,9 @@ export interface ClientEditFormPatch {
   commercial: CommercialInputs
 }
 
-export interface ClientEditFormProps {
-  client: Client
+export interface ClientCreateFormProps {
   onCancel: () => void
-  onSubmit: (patch: ClientEditFormPatch) => void
-}
-
-interface ClientEditValues {
-  name: string
-  city: string
-  address: string
-  contacts: ClientContact[]
-  commercial: CommercialInputs
+  onSubmit: (values: ClientCreateFormValues) => void
 }
 
 type ContactError = {
@@ -36,6 +27,7 @@ type ContactError = {
 }
 
 type FormErrors = {
+  name?: string
   contacts: ContactError[]
 }
 
@@ -47,6 +39,16 @@ const CONTACT_ROLE_OPTIONS = [
   { value: 'finansije', label: 'Finansije' },
   { value: 'drugo', label: 'Drugo' },
 ]
+
+const EMPTY_COMMERCIAL: CommercialInputs = {
+  businessType: '',
+  revenueBand: '',
+  employeeCount: null,
+  locationCount: null,
+  decisionLevel: '',
+  relationshipLevel: '',
+  innovationReady: '',
+}
 
 function createEmptyContact(): ClientContact {
   return {
@@ -62,26 +64,15 @@ function toInputValue(value: number | null) {
   return value ?? ''
 }
 
-function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
-  const [values, setValues] = useState<ClientEditValues>({
-    name: client.name,
-    city: client.city,
-    address: client.address,
-    contacts: client.contacts,
-    commercial: client.commercial,
+function ClientCreateForm({ onCancel, onSubmit }: ClientCreateFormProps) {
+  const [values, setValues] = useState<ClientCreateFormValues>({
+    name: '',
+    city: '',
+    address: '',
+    contacts: [createEmptyContact()],
+    commercial: EMPTY_COMMERCIAL,
   })
-  const [errors, setErrors] = useState<FormErrors>({ contacts: [] })
-
-  useEffect(() => {
-    setValues({
-      name: client.name,
-      city: client.city,
-      address: client.address,
-      contacts: client.contacts,
-      commercial: client.commercial,
-    })
-    setErrors({ contacts: [] })
-  }, [client])
+  const [errors, setErrors] = useState<FormErrors>({ contacts: [{}] })
 
   const handleBasicChange =
     (field: 'name' | 'city' | 'address') =>
@@ -89,6 +80,10 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
       setValues((current) => ({
         ...current,
         [field]: event.target.value,
+      }))
+      setErrors((current) => ({
+        ...current,
+        [field]: undefined,
       }))
     }
 
@@ -169,8 +164,13 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
       (contactError) => contactError.name || contactError.role,
     )
 
-    if (hasContactErrors) {
-      setErrors({ contacts: nextContactErrors })
+    const nextErrors: FormErrors = {
+      name: values.name.trim() ? undefined : 'Naziv klijenta je obavezan.',
+      contacts: nextContactErrors,
+    }
+
+    if (nextErrors.name || hasContactErrors) {
+      setErrors(nextErrors)
       return
     }
 
@@ -196,6 +196,7 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
           <label className="customer-task-form-field">
             <span>Naziv</span>
             <input type="text" value={values.name} onChange={handleBasicChange('name')} />
+            {errors.name ? <small className="customer-task-form-error">{errors.name}</small> : null}
           </label>
           <label className="customer-task-form-field">
             <span>Grad</span>
@@ -386,7 +387,7 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
 
       <div className="customer-task-actions">
         <button type="submit" className="customer-project-toggle">
-          Sacuvaj
+          Sacuvaj klijenta
         </button>
         <button type="button" className="customer-project-toggle" onClick={onCancel}>
           Otkazi
@@ -396,4 +397,4 @@ function ClientEditForm({ client, onCancel, onSubmit }: ClientEditFormProps) {
   )
 }
 
-export default ClientEditForm
+export default ClientCreateForm

@@ -8,6 +8,8 @@ import ClientEditForm, { type ClientEditFormPatch } from '../components/ClientEd
 import ClientHeader from '../components/ClientHeader'
 import ClientInfoSection from '../components/ClientInfoSection'
 import ClientProjectsSection from '../components/ClientProjectsSection'
+import { useBillingStore } from '../../billing/billingStore'
+import { getClientScore } from '../../scoring/scoringSelectors'
 import CreateTaskForm, {
   type CreateTaskFormValues,
 } from '../../tasks/components/CreateTaskForm'
@@ -18,18 +20,33 @@ import { useTaskStore } from '../../tasks/taskStore'
 import type { Project } from '../../projects/types'
 import './client-detail.css'
 
+const PRIORITY_LABELS = {
+  low: 'Nizak prioritet',
+  medium: 'Srednji prioritet',
+  high: 'Visok prioritet',
+} as const
+
 function ClientDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
   const clientId = id ?? ''
-  const { getClientById, updateClient } = useClientStore()
-  const { addTask } = useTaskStore()
-  const { getProjectsByClientId, addProject } = useProjectStore()
+  const { clients, getClientById, updateClient } = useClientStore()
+  const { tasks, addTask } = useTaskStore()
+  const { projects: allProjects, getProjectsByClientId, addProject } = useProjectStore()
+  const { billing } = useBillingStore()
   const [isEditingClient, setIsEditingClient] = useState(false)
   const [isCreatingActivity, setIsCreatingActivity] = useState(false)
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const client = getClientById(clientId)
   const projects = getProjectsByClientId(clientId)
+  const score = client
+    ? getClientScore(String(client.id), {
+        clients,
+        projects: allProjects,
+        tasks,
+        billing,
+      })
+    : null
 
   const handleCreateActivity = (values: CreateTaskFormValues) => {
     if (!client) return
@@ -61,7 +78,7 @@ function ClientDetail() {
       type: values.type || undefined,
       frequency: values.frequency || undefined,
       value: values.value.trim() ? Number(values.value) : undefined,
-      status: values.status || 'aktivan',
+      status: 'aktivan',
     }
 
     addProject(nextProject)
@@ -102,7 +119,20 @@ function ClientDetail() {
         Nazad na klijente
       </button>
 
-      <ClientHeader name={client.name} city={client.city} />
+      <ClientHeader
+        name={client.name}
+        city={client.city}
+        pulseScore={score?.total}
+        priorityLabel={score ? PRIORITY_LABELS[score.priority] : undefined}
+        priorityTone={
+          score?.priority === 'high'
+            ? 'success'
+            : score?.priority === 'medium'
+              ? 'warning'
+              : 'muted'
+        }
+        risks={score?.signals.risks ?? []}
+      />
       <ClientActionsBar
         clientId={clientId}
         onEditClient={() => setIsEditingClient((current) => !current)}

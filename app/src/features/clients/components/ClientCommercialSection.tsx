@@ -1,3 +1,10 @@
+import {
+  BUSINESS_TYPE_LABELS,
+  DECISION_LEVEL_LABELS,
+  INNOVATION_READY_LABELS,
+  RELATIONSHIP_LEVEL_LABELS,
+  REVENUE_BAND_LABELS,
+} from '../clientCommercialOptions'
 import type { CommercialInputs } from '../types'
 
 export interface ClientCommercialSectionProps extends CommercialInputs {}
@@ -11,6 +18,14 @@ function ClientCommercialSection({
   relationshipLevel,
   innovationReady,
 }: ClientCommercialSectionProps) {
+  const businessTypeLabel = BUSINESS_TYPE_LABELS[businessType as keyof typeof BUSINESS_TYPE_LABELS] ?? businessType
+  const revenueBandLabel = REVENUE_BAND_LABELS[revenueBand as keyof typeof REVENUE_BAND_LABELS] ?? revenueBand
+  const decisionLevelLabel = DECISION_LEVEL_LABELS[decisionLevel as keyof typeof DECISION_LEVEL_LABELS] ?? decisionLevel
+  const relationshipLevelLabel =
+    RELATIONSHIP_LEVEL_LABELS[relationshipLevel as keyof typeof RELATIONSHIP_LEVEL_LABELS] ?? relationshipLevel
+  const innovationReadyLabel =
+    INNOVATION_READY_LABELS[innovationReady as keyof typeof INNOVATION_READY_LABELS] ?? innovationReady
+
   return (
     <section className="customer-card-section">
       <div className="customer-card-section-head">
@@ -21,11 +36,11 @@ function ClientCommercialSection({
         <dl className="customer-card-detail-list">
           <div>
             <dt>Tip delatnosti</dt>
-            <dd>{businessType || '-'}</dd>
+            <dd>{businessTypeLabel || '-'}</dd>
           </div>
           <div>
             <dt>Promet</dt>
-            <dd>{revenueBand || '-'}</dd>
+            <dd>{revenueBandLabel || '-'}</dd>
           </div>
           <div>
             <dt>Broj zaposlenih</dt>
@@ -36,16 +51,16 @@ function ClientCommercialSection({
             <dd>{locationCount ?? '-'}</dd>
           </div>
           <div>
-            <dt>Nivo odlučivanja</dt>
-            <dd>{decisionLevel || '-'}</dd>
+            <dt>Nivo odlucivanja</dt>
+            <dd>{decisionLevelLabel || '-'}</dd>
           </div>
           <div>
             <dt>Odnos</dt>
-            <dd>{relationshipLevel || '-'}</dd>
+            <dd>{relationshipLevelLabel || '-'}</dd>
           </div>
           <div>
             <dt>Spremnost za inovacije</dt>
-            <dd>{innovationReady || '-'}</dd>
+            <dd>{innovationReadyLabel || '-'}</dd>
           </div>
         </dl>
       </div>

@@ -5,6 +5,7 @@ import {
   PROJECT_STATUS_LABELS,
   PROJECT_TYPE_LABELS,
 } from '../../projects/projectLabels'
+import { getProjectHealth } from '../../projects/projectHealth'
 import { useProjectStore } from '../../projects/projectStore'
 import type { Project } from '../../projects/types'
 import TaskList from '../../tasks/components/TaskList'
@@ -33,6 +34,86 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
     )
   }
 
+  const renderProjectCard = (project: Project, archived = false) => {
+    const projectTasks = getTasksByProjectId(project.id)
+    const projectHealth = getProjectHealth(project.id, projectTasks)
+    const activeTaskCount = projectTasks.filter((task) =>
+      activeTaskStatuses.includes(task.status),
+    ).length
+    const completedTaskCount = projectTasks.filter((task) =>
+      completedTaskStatuses.includes(task.status),
+    ).length
+    const isExpanded = expandedProjectIds.includes(project.id)
+
+    return (
+      <article
+        key={project.id}
+        className={`customer-project-card${archived ? ' is-archived' : ''}`}
+      >
+        <div className="customer-project-head">
+          <div className="customer-project-heading">
+            <strong>{project.title}</strong>
+            <p className="customer-project-meta">
+              {project.type ? PROJECT_TYPE_LABELS[project.type] : '-'}{' '}
+              <span aria-hidden="true">-</span>{' '}
+              {project.frequency ? PROJECT_FREQUENCY_LABELS[project.frequency] : '-'}
+            </p>
+          </div>
+          <div className="customer-project-badges">
+            <span className={`customer-status-badge${archived ? ' is-muted' : ''}`}>
+              {PROJECT_STATUS_LABELS[project.status]}
+            </span>
+            <span className={`customer-status-badge is-${projectHealth.tone}`}>
+              {projectHealth.label}
+            </span>
+          </div>
+        </div>
+
+        <div className="customer-project-summary-grid">
+          <div className="customer-project-summary-item">
+            <span>Procenjena vrednost</span>
+            <strong>{project.value ? `${project.value} RSD` : '-'}</strong>
+          </div>
+          <div className="customer-project-summary-item">
+            <span>Task summary</span>
+            <strong>
+              Ukupno: {projectTasks.length} - Aktivni: {activeTaskCount} - Zavrseni:{' '}
+              {completedTaskCount}
+            </strong>
+          </div>
+        </div>
+
+        <div className="customer-project-actions">
+          <button
+            type="button"
+            className="customer-project-action-button"
+            onClick={() => navigate(`/projects/${project.id}`)}
+          >
+            Otvori projekat
+          </button>
+          <button
+            type="button"
+            className="customer-project-action-button customer-project-action-button-secondary"
+            onClick={() => toggleProjectTasks(project.id)}
+          >
+            {isExpanded ? 'Sakrij taskove' : 'Prikazi taskove'}
+          </button>
+          <button
+            type="button"
+            className="customer-project-action-button customer-project-action-button-secondary"
+            onClick={() =>
+              archived ? restoreProject(project.id) : archiveProject(project.id)
+            }
+          >
+            {archived ? 'Vrati iz arhive' : 'Arhiviraj'}
+          </button>
+        </div>
+
+        {isExpanded ? <TaskList tasks={projectTasks} /> : null}
+      </article>
+    )
+  }
+
   return (
     <section className="customer-card-section">
       <div className="customer-card-section-head">
@@ -41,62 +122,7 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
 
       {activeProjects.length ? (
         <div className="customer-card-stack">
-          {activeProjects.map((project) => {
-            const projectTasks = getTasksByProjectId(project.id)
-            const activeTaskCount = projectTasks.filter((task) =>
-              activeTaskStatuses.includes(task.status),
-            ).length
-            const completedTaskCount = projectTasks.filter((task) =>
-              completedTaskStatuses.includes(task.status),
-            ).length
-            const isExpanded = expandedProjectIds.includes(project.id)
-
-            return (
-              <article key={project.id} className="customer-project-card">
-                <div className="customer-project-head">
-                  <strong>{project.title}</strong>
-                  <span className="customer-status-badge">
-                    {PROJECT_STATUS_LABELS[project.status]}
-                  </span>
-                </div>
-                <p className="customer-project-meta">
-                  {project.type ? PROJECT_TYPE_LABELS[project.type] : '-'} •{' '}
-                  {project.frequency ? PROJECT_FREQUENCY_LABELS[project.frequency] : '-'}
-                </p>
-                <p className="customer-project-meta customer-project-meta-secondary">
-                  Procenjena vrednost: {project.value ? `${project.value} RSD` : '-'}
-                </p>
-                <p className="customer-project-meta customer-project-meta-secondary">
-                  Taskovi: {projectTasks.length} • Aktivni: {activeTaskCount} • Zavrseni:{' '}
-                  {completedTaskCount}
-                </p>
-                <div className="customer-project-actions">
-                  <button
-                    type="button"
-                    className="customer-project-toggle"
-                    onClick={() => navigate(`/projects/${project.id}`)}
-                  >
-                    Otvori projekat
-                  </button>
-                  <button
-                    type="button"
-                    className="customer-project-toggle"
-                    onClick={() => toggleProjectTasks(project.id)}
-                  >
-                    {isExpanded ? 'Sakrij taskove' : 'Prikazi taskove'}
-                  </button>
-                  <button
-                    type="button"
-                    className="customer-project-toggle"
-                    onClick={() => archiveProject(project.id)}
-                  >
-                    Arhiviraj
-                  </button>
-                </div>
-                {isExpanded ? <TaskList tasks={projectTasks} /> : null}
-              </article>
-            )
-          })}
+          {activeProjects.map((project) => renderProjectCard(project))}
         </div>
       ) : (
         <div className="customer-card-empty">Nema projekata</div>
@@ -106,59 +132,7 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
         <details className="customer-archived-projects">
           <summary>Arhivirani projekti</summary>
           <div className="customer-card-stack">
-            {archivedProjects.map((project) => {
-              const projectTasks = getTasksByProjectId(project.id)
-              const activeTaskCount = projectTasks.filter((task) =>
-                activeTaskStatuses.includes(task.status),
-              ).length
-              const completedTaskCount = projectTasks.filter((task) =>
-                completedTaskStatuses.includes(task.status),
-              ).length
-              const isExpanded = expandedProjectIds.includes(project.id)
-
-              return (
-                <article key={project.id} className="customer-project-card">
-                  <div className="customer-project-head">
-                    <strong>{project.title}</strong>
-                    <span className="customer-status-badge is-muted">
-                      {PROJECT_STATUS_LABELS[project.status]}
-                    </span>
-                  </div>
-                  <p className="customer-project-meta">
-                    {project.type ? PROJECT_TYPE_LABELS[project.type] : '-'} •{' '}
-                    {project.frequency ? PROJECT_FREQUENCY_LABELS[project.frequency] : '-'}
-                  </p>
-                  <p className="customer-project-meta customer-project-meta-secondary">
-                    Taskovi: {projectTasks.length} • Aktivni: {activeTaskCount} • Zavrseni:{' '}
-                    {completedTaskCount}
-                  </p>
-                  <div className="customer-project-actions">
-                    <button
-                      type="button"
-                      className="customer-project-toggle"
-                      onClick={() => navigate(`/projects/${project.id}`)}
-                    >
-                      Otvori projekat
-                    </button>
-                    <button
-                      type="button"
-                      className="customer-project-toggle"
-                      onClick={() => toggleProjectTasks(project.id)}
-                    >
-                      {isExpanded ? 'Sakrij taskove' : 'Prikazi taskove'}
-                    </button>
-                    <button
-                      type="button"
-                      className="customer-project-toggle"
-                      onClick={() => restoreProject(project.id)}
-                    >
-                      Vrati iz arhive
-                    </button>
-                  </div>
-                  {isExpanded ? <TaskList tasks={projectTasks} /> : null}
-                </article>
-              )
-            })}
+            {archivedProjects.map((project) => renderProjectCard(project, true))}
           </div>
         </details>
       )}
