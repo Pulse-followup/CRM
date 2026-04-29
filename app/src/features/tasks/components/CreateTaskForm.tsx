@@ -1,44 +1,61 @@
 import { useState } from 'react'
 import { mockUsers } from '../../workspace/mockUsers'
+import { TASK_TYPE_LABELS } from '../taskLabels'
 import type { TaskType } from '../types'
 
 export interface CreateTaskFormValues {
   title: string
   description: string
+  projectId: string
   type: TaskType | ''
   assignedToUserId: string
   assignedToLabel: string
   dueDate: string
 }
 
+export interface CreateTaskProjectOption {
+  id: string
+  label: string
+}
+
 export interface CreateTaskFormProps {
   onCancel: () => void
   onSubmit: (values: CreateTaskFormValues) => void
+  projectOptions?: CreateTaskProjectOption[]
+  requireProjectSelection?: boolean
 }
 
 const initialValues: CreateTaskFormValues = {
   title: '',
   description: '',
+  projectId: '',
   type: '',
   assignedToUserId: '',
   assignedToLabel: '',
   dueDate: '',
 }
 
-type FormErrors = Partial<Record<'title' | 'type' | 'assignedToUserId' | 'dueDate', string>>
+type FormErrors = Partial<
+  Record<'title' | 'projectId' | 'type' | 'assignedToUserId' | 'dueDate', string>
+>
 
-const taskTypeOptions: Array<{ value: TaskType; label: string }> = [
-  { value: 'poziv', label: 'Poziv' },
-  { value: 'mail', label: 'Mail' },
-  { value: 'sastanak', label: 'Sastanak' },
-  { value: 'follow_up', label: 'Follow-up' },
-  { value: 'ponuda', label: 'Ponuda' },
-  { value: 'naplata', label: 'Naplata' },
-  { value: 'interni_zadatak', label: 'Interni zadatak' },
-  { value: 'drugo', label: 'Drugo' },
+const taskTypeOptions: TaskType[] = [
+  'poziv',
+  'mail',
+  'sastanak',
+  'follow_up',
+  'ponuda',
+  'naplata',
+  'interni_zadatak',
+  'drugo',
 ]
 
-function CreateTaskForm({ onCancel, onSubmit }: CreateTaskFormProps) {
+function CreateTaskForm({
+  onCancel,
+  onSubmit,
+  projectOptions = [],
+  requireProjectSelection = false,
+}: CreateTaskFormProps) {
   const [values, setValues] = useState<CreateTaskFormValues>(initialValues)
   const [errors, setErrors] = useState<FormErrors>({})
   const assignableUsers = mockUsers.filter((user) => user.role !== 'admin')
@@ -80,6 +97,9 @@ function CreateTaskForm({ onCancel, onSubmit }: CreateTaskFormProps) {
     if (!values.title.trim()) {
       nextErrors.title = 'Naslov je obavezan.'
     }
+    if (requireProjectSelection && !values.projectId) {
+      nextErrors.projectId = 'Projekat je obavezan.'
+    }
     if (!values.type) {
       nextErrors.type = 'Tip taska je obavezan.'
     }
@@ -102,6 +122,23 @@ function CreateTaskForm({ onCancel, onSubmit }: CreateTaskFormProps) {
 
   return (
     <form className="customer-task-create-form" onSubmit={handleSubmit}>
+      {requireProjectSelection ? (
+        <label className="customer-task-form-field">
+          <span>Projekat</span>
+          <select value={values.projectId} onChange={handleChange('projectId')}>
+            <option value="">Izaberi projekat</option>
+            {projectOptions.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.label}
+              </option>
+            ))}
+          </select>
+          {errors.projectId ? (
+            <small className="customer-task-form-error">{errors.projectId}</small>
+          ) : null}
+        </label>
+      ) : null}
+
       <label className="customer-task-form-field">
         <span>Naslov</span>
         <input type="text" value={values.title} onChange={handleChange('title')} />
@@ -118,8 +155,8 @@ function CreateTaskForm({ onCancel, onSubmit }: CreateTaskFormProps) {
         <select value={values.type} onChange={handleChange('type')}>
           <option value="">Izaberi tip</option>
           {taskTypeOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+            <option key={option} value={option}>
+              {TASK_TYPE_LABELS[option]}
             </option>
           ))}
         </select>

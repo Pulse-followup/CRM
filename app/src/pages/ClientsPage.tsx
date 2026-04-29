@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getAllClients } from '../features/clients/selectors'
+import { useClientStore } from '../features/clients/clientStore'
 
 function ClientsPage() {
   const navigate = useNavigate()
+  const { getAllClients } = useClientStore()
   const [query, setQuery] = useState('')
-  const clients = useMemo(() => getAllClients(), [])
+  const clients = getAllClients()
 
   const visibleClients = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -17,7 +18,7 @@ function ClientsPage() {
         client.city.toLowerCase().includes(normalizedQuery)
       )
     })
-  }, [query])
+  }, [clients, query])
 
   return (
     <section className="page-card clients-page-shell">

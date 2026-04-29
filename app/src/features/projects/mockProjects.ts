@@ -6,8 +6,8 @@ export const mockProjects: Project[] = [
     clientId: '1',
     title: 'Apoteka RS reklame',
     status: 'aktivan',
-    type: 'Kampanja',
-    frequency: 'Mesecno',
+    type: 'kampanja',
+    frequency: 'mesecno',
     value: 180000,
   },
   {
@@ -15,8 +15,8 @@ export const mockProjects: Project[] = [
     clientId: '1',
     title: 'Postavka pulta u Galeriji',
     status: 'aktivan',
-    type: 'Usluga',
-    frequency: 'Jednokratno',
+    type: 'postavka',
+    frequency: 'jednokratno',
     value: 95000,
   },
   {
@@ -24,8 +24,8 @@ export const mockProjects: Project[] = [
     clientId: '1',
     title: 'Pilot oznacavanja rafova',
     status: 'arhiviran',
-    type: 'Odrzavanje',
-    frequency: 'Kontinuirano',
+    type: 'odrzavanje',
+    frequency: 'po_potrebi',
     value: 42000,
   },
 ]

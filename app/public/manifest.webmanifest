@@ -1,0 +1,17 @@
+{
+  "name": "PULSE CRM",
+  "short_name": "PULSE",
+  "start_url": "/CRM/",
+  "scope": "/CRM/",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/CRM/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

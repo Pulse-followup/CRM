@@ -1,21 +1,79 @@
-import { useMemo } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useClientStore } from '../clientStore'
 import ClientActionsBar from '../components/ClientActionsBar'
 import ClientCommercialSection from '../components/ClientCommercialSection'
 import ClientContactsSection from '../components/ClientContactsSection'
+import ClientEditForm from '../components/ClientEditForm'
 import ClientHeader from '../components/ClientHeader'
 import ClientInfoSection from '../components/ClientInfoSection'
 import ClientProjectsSection from '../components/ClientProjectsSection'
-import { getClientById } from '../selectors'
-import { getProjectsByClientId } from '../../projects/selectors'
+import CreateTaskForm, {
+  type CreateTaskFormValues,
+} from '../../tasks/components/CreateTaskForm'
+import ProjectForm, { type ProjectFormValues } from '../../projects/components/ProjectForm'
+import { useProjectStore } from '../../projects/projectStore'
+import type { Task } from '../../tasks/types'
+import { useTaskStore } from '../../tasks/taskStore'
+import type { Project } from '../../projects/types'
 import './client-detail.css'
 
 function ClientDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
   const clientId = id ?? ''
-  const client = useMemo(() => getClientById(clientId), [clientId])
-  const projects = useMemo(() => getProjectsByClientId(clientId), [clientId])
+  const { getClientById, updateClient } = useClientStore()
+  const { addTask } = useTaskStore()
+  const { getProjectsByClientId, addProject } = useProjectStore()
+  const [isEditingClient, setIsEditingClient] = useState(false)
+  const [isCreatingActivity, setIsCreatingActivity] = useState(false)
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const client = getClientById(clientId)
+  const projects = getProjectsByClientId(clientId)
+
+  const handleCreateActivity = (values: CreateTaskFormValues) => {
+    if (!client) return
+
+    const nextTask: Task = {
+      id: `task-${Date.now()}`,
+      clientId: String(client.id),
+      projectId: values.projectId,
+      title: values.title.trim() || 'Nova aktivnost',
+      description: values.description.trim(),
+      type: values.type || undefined,
+      assignedToUserId: values.assignedToUserId,
+      assignedToLabel: values.assignedToLabel.trim(),
+      dueDate: values.dueDate || undefined,
+      status: 'dodeljen',
+    }
+
+    addTask(nextTask)
+    setIsCreatingActivity(false)
+  }
+
+  const handleCreateProject = (values: ProjectFormValues) => {
+    if (!client) return
+
+    const nextProject: Project = {
+      id: `project-${Date.now()}`,
+      clientId: String(client.id),
+      title: values.title.trim() || 'Novi projekat',
+      type: values.type || undefined,
+      frequency: values.frequency || undefined,
+      value: values.value.trim() ? Number(values.value) : undefined,
+      status: values.status || 'aktivan',
+    }
+
+    addProject(nextProject)
+    setIsCreatingProject(false)
+  }
+
+  const handleUpdateClient = (nextClient: typeof client) => {
+    if (!nextClient) return
+
+    updateClient(nextClient)
+    setIsEditingClient(false)
+  }
 
   if (!client) {
     return (
@@ -47,7 +105,36 @@ function ClientDetail() {
       </button>
 
       <ClientHeader name={client.name} city={client.city} />
-      <ClientActionsBar clientId={clientId} />
+      <ClientActionsBar
+        clientId={clientId}
+        onEditClient={() => setIsEditingClient((current) => !current)}
+        onNewActivity={() => setIsCreatingActivity((current) => !current)}
+        onNewProject={() => setIsCreatingProject((current) => !current)}
+      />
+      {isEditingClient ? (
+        <ClientEditForm
+          client={client}
+          onCancel={() => setIsEditingClient(false)}
+          onSubmit={handleUpdateClient}
+        />
+      ) : null}
+      {isCreatingProject ? (
+        <ProjectForm
+          onCancel={() => setIsCreatingProject(false)}
+          onSubmit={handleCreateProject}
+        />
+      ) : null}
+      {isCreatingActivity ? (
+        <CreateTaskForm
+          onCancel={() => setIsCreatingActivity(false)}
+          onSubmit={handleCreateActivity}
+          requireProjectSelection
+          projectOptions={projects.map((project) => ({
+            id: project.id,
+            label: project.title,
+          }))}
+        />
+      ) : null}
       <ClientInfoSection name={client.name} city={client.city} address={client.address} />
       <ClientContactsSection contacts={client.contacts} />
       <ClientCommercialSection {...client.commercial} />

@@ -1,31 +1,30 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import CreateTaskForm from '../../tasks/components/CreateTaskForm'
 import type { CreateTaskFormValues } from '../../tasks/components/CreateTaskForm'
 import TaskList from '../../tasks/components/TaskList'
-import { getTasksByProjectId } from '../../tasks/selectors'
 import type { Task } from '../../tasks/types'
-import { getProjectById } from '../selectors'
+import { useTaskStore } from '../../tasks/taskStore'
+import {
+  PROJECT_FREQUENCY_LABELS,
+  PROJECT_STATUS_LABELS,
+  PROJECT_TYPE_LABELS,
+} from '../projectLabels'
+import { useProjectStore } from '../projectStore'
 import '../../clients/pages/client-detail.css'
 
 function ProjectDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
   const projectId = id ?? ''
-  const project = useMemo(() => getProjectById(projectId), [projectId])
-  const projectTasks = useMemo(() => getTasksByProjectId(projectId), [projectId])
-  const [tasks, setTasks] = useState<Task[]>(projectTasks)
+  const { getProjectById } = useProjectStore()
+  const project = getProjectById(projectId)
+  const { getTasksByProjectId, updateTask, addTask } = useTaskStore()
+  const tasks = getTasksByProjectId(projectId)
   const [isCreatingTask, setIsCreatingTask] = useState(false)
 
-  useEffect(() => {
-    setTasks(projectTasks)
-    setIsCreatingTask(false)
-  }, [projectTasks])
-
   const handleTaskChange = (updatedTask: Task) => {
-    setTasks((current) =>
-      current.map((task) => (task.id === updatedTask.id ? updatedTask : task)),
-    )
+    updateTask(updatedTask)
   }
 
   const handleCreateTask = (values: CreateTaskFormValues) => {
@@ -44,7 +43,7 @@ function ProjectDetail() {
       status: 'dodeljen',
     }
 
-    setTasks((current) => [nextTask, ...current])
+    addTask(nextTask)
     setIsCreatingTask(false)
   }
 
@@ -93,15 +92,15 @@ function ProjectDetail() {
           <dl className="customer-card-detail-list">
             <div>
               <dt>Status</dt>
-              <dd>{project.status}</dd>
+              <dd>{PROJECT_STATUS_LABELS[project.status]}</dd>
             </div>
             <div>
               <dt>Tip</dt>
-              <dd>{project.type || '-'}</dd>
+              <dd>{project.type ? PROJECT_TYPE_LABELS[project.type] : '-'}</dd>
             </div>
             <div>
               <dt>Frekvencija</dt>
-              <dd>{project.frequency || '-'}</dd>
+              <dd>{project.frequency ? PROJECT_FREQUENCY_LABELS[project.frequency] : '-'}</dd>
             </div>
             <div>
               <dt>Vrednost</dt>
@@ -131,6 +130,7 @@ function ProjectDetail() {
           <CreateTaskForm
             onCancel={() => setIsCreatingTask(false)}
             onSubmit={handleCreateTask}
+            requireProjectSelection={false}
           />
         ) : null}
 

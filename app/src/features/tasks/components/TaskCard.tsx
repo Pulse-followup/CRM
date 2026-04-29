@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { completeTask, pauseTask, resumeTask, startTask } from '../taskActions'
+import { TASK_STATUS_LABELS, TASK_TYPE_LABELS } from '../taskLabels'
 import type { Task } from '../types'
 
 export interface TaskCardProps {
@@ -85,10 +86,16 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
     <article className="customer-task-card">
       <div className="customer-task-card-head">
         <strong>{task.title}</strong>
-        <span className="customer-status-badge is-muted">{task.status}</span>
+        <span className="customer-status-badge is-muted">{TASK_STATUS_LABELS[task.status]}</span>
       </div>
 
       <dl className="customer-task-detail-list">
+        {task.type ? (
+          <div>
+            <dt>Tip</dt>
+            <dd>{TASK_TYPE_LABELS[task.type]}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>Dodeljeno</dt>
           <dd>{task.assignedToLabel || '-'}</dd>
@@ -137,7 +144,7 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
           ) : null}
 
           {task.status === 'zavrsen' ? (
-            <span className="customer-status-badge">Zavrseno</span>
+            <span className="customer-status-badge">{TASK_STATUS_LABELS.zavrsen}</span>
           ) : null}
         </div>
       ) : null}
