@@ -12,23 +12,22 @@ type SidebarProps = {
 function Sidebar({ items }: SidebarProps) {
   return (
     <aside className="app-sidebar">
-      
-      {/* 🔥 NOVI HEADER SA VELIKIM LOGOM */}
       <div
         style={{
-          display: "flex",
-          justifyContent: "center",
-          padding: "16px 0"
+          display: 'flex',
+          justifyContent: 'center',
+          padding: '16px 0',
         }}
       >
         <img
-          src="/CRM/pulse-logo.png"
+          src="/CRM/pulse-header-logo.png"
           alt="PULSE"
           style={{
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+            width: 76,
+            height: 76,
+            borderRadius: 18,
+            objectFit: 'cover',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.35)',
           }}
         />
       </div>
