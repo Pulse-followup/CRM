@@ -12,16 +12,25 @@ type SidebarProps = {
 function Sidebar({ items }: SidebarProps) {
   return (
     <aside className="app-sidebar">
-      <div className="app-brand">
+      
+      {/* 🔥 NOVI HEADER SA VELIKIM LOGOM */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          padding: "16px 0"
+        }}
+      >
         <img
           src="/CRM/pulse-logo.png"
           alt="PULSE"
-          className="app-brand-logo"
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 16,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+          }}
         />
-        <div className="app-brand-text">
-          <span className="app-brand-title">PULSE</span>
-          <strong>CRM</strong>
-        </div>
       </div>
 
       <nav className="app-nav" aria-label="Glavna navigacija">
