@@ -13,8 +13,15 @@ function Sidebar({ items }: SidebarProps) {
   return (
     <aside className="app-sidebar">
       <div className="app-brand">
-        <span className="app-brand-badge">PULSE</span>
-        <strong>CRM</strong>
+        <img
+          src="/CRM/pulse-logo.png"
+          alt="PULSE"
+          className="app-brand-logo"
+        />
+        <div className="app-brand-text">
+          <span className="app-brand-title">PULSE</span>
+          <strong>CRM</strong>
+        </div>
       </div>
 
       <nav className="app-nav" aria-label="Glavna navigacija">
