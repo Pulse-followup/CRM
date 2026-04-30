@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ProjectStage } from '../../projects/types'
+import { PROJECT_STAGE_ROLE_LABELS } from '../../projects/projectTemplates'
 import { mockUsers } from '../../workspace/mockUsers'
 import { TASK_TYPE_LABELS } from '../taskLabels'
 import type { TaskType } from '../types'
@@ -7,6 +9,7 @@ export interface CreateTaskFormValues {
   title: string
   description: string
   projectId: string
+  stageId: string
   type: TaskType | ''
   assignedToUserId: string
   assignedToLabel: string
@@ -16,6 +19,7 @@ export interface CreateTaskFormValues {
 export interface CreateTaskProjectOption {
   id: string
   label: string
+  stages?: ProjectStage[]
 }
 
 export interface CreateTaskFormProps {
@@ -23,12 +27,15 @@ export interface CreateTaskFormProps {
   onSubmit: (values: CreateTaskFormValues) => void
   projectOptions?: CreateTaskProjectOption[]
   requireProjectSelection?: boolean
+  initialProjectId?: string
+  initialStageId?: string
 }
 
 const initialValues: CreateTaskFormValues = {
   title: '',
   description: '',
   projectId: '',
+  stageId: '',
   type: '',
   assignedToUserId: '',
   assignedToLabel: '',
@@ -50,15 +57,76 @@ const taskTypeOptions: TaskType[] = [
   'drugo',
 ]
 
+function getDefaultStageId(stages?: ProjectStage[], preferredStageId?: string) {
+  if (!stages?.length) {
+    return ''
+  }
+
+  if (preferredStageId && stages.some((stage) => stage.id === preferredStageId)) {
+    return preferredStageId
+  }
+
+  const activeStage = stages.find((stage) => stage.status === 'active')
+  return activeStage?.id ?? stages[0]?.id ?? ''
+}
+
+function formatStageOption(stage: ProjectStage) {
+  const roleLabel = stage.defaultRole
+    ? PROJECT_STAGE_ROLE_LABELS[stage.defaultRole as keyof typeof PROJECT_STAGE_ROLE_LABELS] ??
+      stage.defaultRole
+    : null
+
+  return roleLabel ? `${stage.name} · ${roleLabel}` : stage.name
+}
+
 function CreateTaskForm({
   onCancel,
   onSubmit,
   projectOptions = [],
   requireProjectSelection = false,
+  initialProjectId,
+  initialStageId,
 }: CreateTaskFormProps) {
-  const [values, setValues] = useState<CreateTaskFormValues>(initialValues)
+  const [values, setValues] = useState<CreateTaskFormValues>({
+    ...initialValues,
+    projectId: initialProjectId ?? initialValues.projectId,
+    stageId: initialStageId ?? initialValues.stageId,
+  })
   const [errors, setErrors] = useState<FormErrors>({})
   const assignableUsers = mockUsers.filter((user) => user.role !== 'admin')
+
+  const selectedProject = useMemo(
+    () => projectOptions.find((project) => project.id === values.projectId),
+    [projectOptions, values.projectId],
+  )
+
+  const availableStages = selectedProject?.stages
+    ? [...selectedProject.stages].sort((left, right) => left.order - right.order)
+    : []
+
+  useEffect(() => {
+    if (requireProjectSelection) {
+      return
+    }
+
+    if (initialProjectId && values.projectId !== initialProjectId) {
+      setValues((current) => ({
+        ...current,
+        projectId: initialProjectId,
+      }))
+    }
+  }, [initialProjectId, requireProjectSelection, values.projectId])
+
+  useEffect(() => {
+    const nextStageId = getDefaultStageId(availableStages, values.stageId || initialStageId)
+
+    if (nextStageId !== values.stageId) {
+      setValues((current) => ({
+        ...current,
+        stageId: nextStageId,
+      }))
+    }
+  }, [availableStages, initialStageId, values.stageId])
 
   const handleChange =
     (field: keyof CreateTaskFormValues) =>
@@ -74,6 +142,25 @@ function CreateTaskForm({
         [field]: '',
       }))
     }
+
+  const handleProjectChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextProjectId = event.target.value
+    const nextProject = projectOptions.find((project) => project.id === nextProjectId)
+    const nextStages = nextProject?.stages
+      ? [...nextProject.stages].sort((left, right) => left.order - right.order)
+      : []
+    const nextStageId = getDefaultStageId(nextStages)
+
+    setValues((current) => ({
+      ...current,
+      projectId: nextProjectId,
+      stageId: nextStageId,
+    }))
+    setErrors((current) => ({
+      ...current,
+      projectId: '',
+    }))
+  }
 
   const handleAssignedUserChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedUser = assignableUsers.find((user) => user.id === event.target.value)
@@ -116,7 +203,11 @@ function CreateTaskForm({
     }
 
     onSubmit(values)
-    setValues(initialValues)
+    setValues({
+      ...initialValues,
+      projectId: initialProjectId ?? initialValues.projectId,
+      stageId: initialStageId ?? initialValues.stageId,
+    })
     setErrors({})
   }
 
@@ -125,7 +216,7 @@ function CreateTaskForm({
       {requireProjectSelection ? (
         <label className="customer-task-form-field">
           <span>Projekat</span>
-          <select value={values.projectId} onChange={handleChange('projectId')}>
+          <select value={values.projectId} onChange={handleProjectChange}>
             <option value="">Izaberi projekat</option>
             {projectOptions.map((project) => (
               <option key={project.id} value={project.id}>
@@ -136,6 +227,19 @@ function CreateTaskForm({
           {errors.projectId ? (
             <small className="customer-task-form-error">{errors.projectId}</small>
           ) : null}
+        </label>
+      ) : null}
+
+      {availableStages.length ? (
+        <label className="customer-task-form-field">
+          <span>Faza</span>
+          <select value={values.stageId} onChange={handleChange('stageId')}>
+            {availableStages.map((stage) => (
+              <option key={stage.id} value={stage.id}>
+                {formatStageOption(stage)}
+              </option>
+            ))}
+          </select>
         </label>
       ) : null}
 

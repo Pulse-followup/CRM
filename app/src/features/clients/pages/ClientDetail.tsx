@@ -1,5 +1,14 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useBillingStore } from '../../billing/billingStore'
+import ProjectForm, { type ProjectFormValues } from '../../projects/components/ProjectForm'
+import { buildStagesFromTemplate, getTemplateIdForProjectType } from '../../projects/projectTemplates'
+import { useProjectStore } from '../../projects/projectStore'
+import type { Project } from '../../projects/types'
+import { getClientScore } from '../../scoring/scoringSelectors'
+import CreateTaskForm, { type CreateTaskFormValues } from '../../tasks/components/CreateTaskForm'
+import { useTaskStore } from '../../tasks/taskStore'
+import type { Task } from '../../tasks/types'
 import { useClientStore } from '../clientStore'
 import ClientActionsBar from '../components/ClientActionsBar'
 import ClientCommercialSection from '../components/ClientCommercialSection'
@@ -8,16 +17,6 @@ import ClientEditForm, { type ClientEditFormPatch } from '../components/ClientEd
 import ClientHeader from '../components/ClientHeader'
 import ClientInfoSection from '../components/ClientInfoSection'
 import ClientProjectsSection from '../components/ClientProjectsSection'
-import { useBillingStore } from '../../billing/billingStore'
-import { getClientScore } from '../../scoring/scoringSelectors'
-import CreateTaskForm, {
-  type CreateTaskFormValues,
-} from '../../tasks/components/CreateTaskForm'
-import ProjectForm, { type ProjectFormValues } from '../../projects/components/ProjectForm'
-import { useProjectStore } from '../../projects/projectStore'
-import type { Task } from '../../tasks/types'
-import { useTaskStore } from '../../tasks/taskStore'
-import type { Project } from '../../projects/types'
 import './client-detail.css'
 
 const PRIORITY_LABELS = {
@@ -51,6 +50,7 @@ function ClientDetail() {
   const handleCreateActivity = (values: CreateTaskFormValues) => {
     if (!client) return
 
+    const timestamp = new Date().toISOString()
     const nextTask: Task = {
       id: `task-${Date.now()}`,
       clientId: String(client.id),
@@ -61,7 +61,12 @@ function ClientDetail() {
       assignedToUserId: values.assignedToUserId,
       assignedToLabel: values.assignedToLabel.trim(),
       dueDate: values.dueDate || undefined,
+      stageId: values.stageId || undefined,
       status: 'dodeljen',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedAt: null,
+      billingState: 'not_billable',
     }
 
     addTask(nextTask)
@@ -71,6 +76,7 @@ function ClientDetail() {
   const handleCreateProject = (values: ProjectFormValues) => {
     if (!client) return
 
+    const templateId = getTemplateIdForProjectType(values.type)
     const nextProject: Project = {
       id: `project-${Date.now()}`,
       clientId: String(client.id),
@@ -79,6 +85,8 @@ function ClientDetail() {
       frequency: values.frequency || undefined,
       value: values.value.trim() ? Number(values.value) : undefined,
       status: 'aktivan',
+      templateId,
+      stages: buildStagesFromTemplate(templateId),
     }
 
     addProject(nextProject)
@@ -93,11 +101,7 @@ function ClientDetail() {
   if (!client) {
     return (
       <section className="page-card client-detail-shell">
-        <button
-          type="button"
-          className="secondary-link-button"
-          onClick={() => navigate('/clients')}
-        >
+        <button type="button" className="secondary-link-button" onClick={() => navigate('/clients')}>
           Nazad na klijente
         </button>
 
@@ -111,11 +115,7 @@ function ClientDetail() {
 
   return (
     <section className="page-card client-detail-shell">
-      <button
-        type="button"
-        className="secondary-link-button"
-        onClick={() => navigate('/clients')}
-      >
+      <button type="button" className="secondary-link-button" onClick={() => navigate('/clients')}>
         Nazad na klijente
       </button>
 
@@ -147,10 +147,7 @@ function ClientDetail() {
         />
       ) : null}
       {isCreatingProject ? (
-        <ProjectForm
-          onCancel={() => setIsCreatingProject(false)}
-          onSubmit={handleCreateProject}
-        />
+        <ProjectForm onCancel={() => setIsCreatingProject(false)} onSubmit={handleCreateProject} />
       ) : null}
       {isCreatingActivity ? (
         <CreateTaskForm
@@ -160,6 +157,7 @@ function ClientDetail() {
           projectOptions={projects.map((project) => ({
             id: project.id,
             label: project.title,
+            stages: project.stages,
           }))}
         />
       ) : null}

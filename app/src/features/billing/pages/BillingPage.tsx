@@ -10,7 +10,7 @@ const FILTER_OPTIONS: Array<{ key: 'all' | BillingStatus; label: string }> = [
   { key: 'draft', label: 'Za fakturisanje' },
   { key: 'invoiced', label: 'Fakturisano' },
   { key: 'overdue', label: 'Kasni' },
-  { key: 'paid', label: 'Placeno' },
+  { key: 'paid', label: 'Plaćeno' },
 ]
 
 function BillingPage() {
@@ -35,7 +35,7 @@ function BillingPage() {
       <header className="customer-card-header">
         <div>
           <h2 className="customer-card-title">Naplata</h2>
-          <p className="customer-card-subtitle">Pregled naloga za fakturisanje i placanja.</p>
+          <p className="customer-card-subtitle">Pregled naloga za fakturisanje i plaćanja.</p>
         </div>
         <div className="customer-project-badges">
           <span className="customer-status-badge is-info">Ukupno: {summary.total}</span>

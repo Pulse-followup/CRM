@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { PROJECT_FREQUENCY_LABELS, PROJECT_TYPE_LABELS } from '../projectLabels'
 import {
-  PROJECT_FREQUENCY_LABELS,
-  PROJECT_TYPE_LABELS,
-} from '../projectLabels'
+  buildStagesFromTemplate,
+  getTemplateIdForProjectType,
+  PROJECT_TEMPLATES,
+} from '../projectTemplates'
 import type { ProjectFrequency, ProjectType } from '../types'
 
 export interface ProjectFormValues {
@@ -29,6 +31,9 @@ type FormErrors = Partial<Record<'title' | 'type' | 'frequency' | 'value', strin
 function ProjectForm({ onCancel, onSubmit }: ProjectFormProps) {
   const [values, setValues] = useState<ProjectFormValues>(initialValues)
   const [errors, setErrors] = useState<FormErrors>({})
+
+  const templateId = useMemo(() => getTemplateIdForProjectType(values.type), [values.type])
+  const previewStages = useMemo(() => buildStagesFromTemplate(templateId), [templateId])
 
   const handleChange =
     (field: keyof ProjectFormValues) =>
@@ -114,6 +119,30 @@ function ProjectForm({ onCancel, onSubmit }: ProjectFormProps) {
         <input type="number" min="0" step="1" value={values.value} onChange={handleChange('value')} />
         {errors.value ? <small className="customer-task-form-error">{errors.value}</small> : null}
       </label>
+
+      {previewStages?.length ? (
+        <div className="customer-project-workflow-preview">
+          <div className="customer-card-section-head">
+            <h3>Preview faza</h3>
+            {templateId ? (
+              <span className="customer-status-badge is-info">{PROJECT_TEMPLATES[templateId].label}</span>
+            ) : null}
+          </div>
+          <div className="customer-workflow-list">
+            {previewStages.map((stage) => (
+              <div className="customer-workflow-stage" key={stage.id}>
+                <div>
+                  <strong>{stage.order}. {stage.name}</strong>
+                  {stage.defaultRole ? <p>Podrazumevana rola: {stage.defaultRole}</p> : null}
+                </div>
+                <span className={`customer-status-badge is-${stage.status === 'active' ? 'success' : 'muted'}`}>
+                  {stage.status === 'active' ? 'Active' : 'Locked'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="customer-task-actions">
         <button type="submit" className="customer-project-toggle">

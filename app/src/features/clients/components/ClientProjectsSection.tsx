@@ -9,8 +9,12 @@ import { getProjectHealth } from '../../projects/projectHealth'
 import { useProjectStore } from '../../projects/projectStore'
 import type { Project } from '../../projects/types'
 import TaskList from '../../tasks/components/TaskList'
+import {
+  getActiveTasks,
+  getCompletedTasks,
+  getTasksByProject as selectTasksByProject,
+} from '../../tasks/taskSelectors'
 import { useTaskStore } from '../../tasks/taskStore'
-import type { TaskStatus } from '../../tasks/types'
 
 export interface ClientProjectsSectionProps {
   projects: Project[]
@@ -19,12 +23,10 @@ export interface ClientProjectsSectionProps {
 function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
   const navigate = useNavigate()
   const { archiveProject, restoreProject } = useProjectStore()
-  const { getTasksByProjectId } = useTaskStore()
+  const { tasks } = useTaskStore()
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([])
   const activeProjects = projects.filter((project) => project.status !== 'arhiviran')
   const archivedProjects = projects.filter((project) => project.status === 'arhiviran')
-  const activeTaskStatuses: TaskStatus[] = ['dodeljen', 'u_radu', 'na_cekanju', 'vracen']
-  const completedTaskStatuses: TaskStatus[] = ['zavrsen', 'poslat_na_naplatu', 'naplacen']
 
   const toggleProjectTasks = (projectId: string) => {
     setExpandedProjectIds((current) =>
@@ -35,21 +37,14 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
   }
 
   const renderProjectCard = (project: Project, archived = false) => {
-    const projectTasks = getTasksByProjectId(project.id)
+    const projectTasks = selectTasksByProject(tasks, project.id)
     const projectHealth = getProjectHealth(project.id, projectTasks)
-    const activeTaskCount = projectTasks.filter((task) =>
-      activeTaskStatuses.includes(task.status),
-    ).length
-    const completedTaskCount = projectTasks.filter((task) =>
-      completedTaskStatuses.includes(task.status),
-    ).length
+    const activeTaskCount = getActiveTasks(projectTasks).length
+    const completedTaskCount = getCompletedTasks(projectTasks).length
     const isExpanded = expandedProjectIds.includes(project.id)
 
     return (
-      <article
-        key={project.id}
-        className={`customer-project-card${archived ? ' is-archived' : ''}`}
-      >
+      <article key={project.id} className={`customer-project-card${archived ? ' is-archived' : ''}`}>
         <div className="customer-project-head">
           <div className="customer-project-heading">
             <strong>{project.title}</strong>
@@ -77,8 +72,7 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
           <div className="customer-project-summary-item">
             <span>Task summary</span>
             <strong>
-              Ukupno: {projectTasks.length} - Aktivni: {activeTaskCount} - Zavrseni:{' '}
-              {completedTaskCount}
+              Ukupno: {projectTasks.length} - Aktivni: {activeTaskCount} - Zavrseni: {completedTaskCount}
             </strong>
           </div>
         </div>
@@ -101,9 +95,7 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
           <button
             type="button"
             className="customer-project-action-button customer-project-action-button-secondary"
-            onClick={() =>
-              archived ? restoreProject(project.id) : archiveProject(project.id)
-            }
+            onClick={() => (archived ? restoreProject(project.id) : archiveProject(project.id))}
           >
             {archived ? 'Vrati iz arhive' : 'Arhiviraj'}
           </button>
@@ -121,9 +113,7 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
       </div>
 
       {activeProjects.length ? (
-        <div className="customer-card-stack">
-          {activeProjects.map((project) => renderProjectCard(project))}
-        </div>
+        <div className="customer-card-stack">{activeProjects.map((project) => renderProjectCard(project))}</div>
       ) : (
         <div className="customer-card-empty">Nema projekata</div>
       )}

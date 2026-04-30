@@ -11,6 +11,32 @@ export type ProjectFrequency =
   | 'godisnje'
   | 'po_potrebi'
 
+export type ProjectTemplateId =
+  | 'kampanja'
+  | 'produkcija'
+  | 'jednokratni'
+  | 'sales'
+  | 'odrzavanje'
+
+export type ProjectStageStatus = 'locked' | 'active' | 'done'
+
+export type ProjectStageRole =
+  | 'admin'
+  | 'user'
+  | 'finance'
+  | 'designer'
+  | 'production'
+  | 'logistics'
+  | 'account'
+
+export interface ProjectStage {
+  id: string
+  name: string
+  order: number
+  status: ProjectStageStatus
+  defaultRole?: ProjectStageRole | string
+}
+
 export interface Project {
   id: string
   clientId: string
@@ -21,4 +47,6 @@ export interface Project {
   value?: number
   billingId?: string
   billingStatus?: BillingStatus
+  templateId?: ProjectTemplateId
+  stages?: ProjectStage[]
 }

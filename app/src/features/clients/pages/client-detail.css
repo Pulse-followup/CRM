@@ -530,3 +530,71 @@
     grid-column: auto;
   }
 }
+
+.customer-project-workflow-preview {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.customer-workflow-list {
+  display: grid;
+  gap: 10px;
+}
+
+.customer-workflow-stage {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.028);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.customer-workflow-stage strong {
+  display: block;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.customer-workflow-stage p {
+  margin: 4px 0 0;
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 640px) {
+  .customer-workflow-stage {
+    flex-direction: column;
+  }
+}
+
+.customer-workflow-stage-block {
+  gap: 14px;
+}
+
+.customer-workflow-stage-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.customer-workflow-stage-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+}
+
+@media (max-width: 640px) {
+  .customer-workflow-stage-top {
+    flex-direction: column;
+  }
+}

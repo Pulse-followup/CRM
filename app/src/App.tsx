@@ -1,24 +1,25 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
-import { AuthProvider } from './features/auth/authStore'
+import { AuthProvider, useAuthStore } from './features/auth/authStore'
 import { BillingProvider } from './features/billing/billingStore'
+import { ClientProvider } from './features/clients/clientStore'
+import { ProjectProvider } from './features/projects/projectStore'
+import ProjectDetail from './features/projects/pages/ProjectDetail'
+import TaskDetail from './features/tasks/pages/TaskDetail'
+import { TaskProvider } from './features/tasks/taskStore'
 import AdminLayout from './layouts/AdminLayout'
 import FinanceLayout from './layouts/FinanceLayout'
 import UserLayout from './layouts/UserLayout'
-import AdminDashboard from './pages/AdminDashboard'
+import AdminHome from './pages/AdminHome'
 import BillingPage from './pages/BillingPage'
 import ClientDetail from './pages/ClientDetail'
-import { ClientProvider } from './features/clients/clientStore'
 import ClientsPage from './pages/ClientsPage'
-import ProjectDetail from './features/projects/pages/ProjectDetail'
-import { ProjectProvider } from './features/projects/projectStore'
-import { TaskProvider } from './features/tasks/taskStore'
+import FinanceHome from './pages/FinanceHome'
+import NoAccessPage from './pages/NoAccessPage'
 import ProjectsPage from './pages/ProjectsPage'
 import SettingsPage from './pages/SettingsPage'
+import UserHome from './pages/UserHome'
 import UserTasks from './pages/UserTasks'
-import type { Role } from './types/role'
-
-const role: Role = 'admin'
 
 function App() {
   return (
@@ -27,45 +28,57 @@ function App() {
         <ProjectProvider>
           <TaskProvider>
             <BillingProvider>
-              <BrowserRouter basename="/CRM">
-                <Routes>
-                  {role === 'admin' && (
-                    <Route element={<AdminLayout />}>
-                      <Route path="/" element={<Navigate to="/admin" replace />} />
-                      <Route path="/admin" element={<AdminDashboard />} />
-                      <Route path="/tasks" element={<UserTasks />} />
-                      <Route path="/clients" element={<ClientsPage />} />
-                      <Route path="/clients/:id" element={<ClientDetail />} />
-                      <Route path="/projects" element={<ProjectsPage />} />
-                      <Route path="/projects/:id" element={<ProjectDetail />} />
-                      <Route path="/billing" element={<BillingPage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="*" element={<Navigate to="/admin" replace />} />
-                    </Route>
-                  )}
-
-                  {role === 'user' && (
-                    <Route element={<UserLayout />}>
-                      <Route path="/" element={<Navigate to="/tasks" replace />} />
-                      <Route path="/tasks" element={<UserTasks />} />
-                      <Route path="*" element={<Navigate to="/tasks" replace />} />
-                    </Route>
-                  )}
-
-                  {role === 'finance' && (
-                    <Route element={<FinanceLayout />}>
-                      <Route path="/" element={<Navigate to="/billing" replace />} />
-                      <Route path="/billing" element={<BillingPage />} />
-                      <Route path="*" element={<Navigate to="/billing" replace />} />
-                    </Route>
-                  )}
-                </Routes>
-              </BrowserRouter>
+              <AppRoutes />
             </BillingProvider>
           </TaskProvider>
         </ProjectProvider>
       </ClientProvider>
     </AuthProvider>
+  )
+}
+
+function AppRoutes() {
+  const { currentUser } = useAuthStore()
+  const role = currentUser.role
+
+  const layoutElement =
+    role === 'admin' ? <AdminLayout /> : role === 'finance' ? <FinanceLayout /> : <UserLayout />
+
+  const homeElement =
+    role === 'admin' ? <AdminHome /> : role === 'finance' ? <FinanceHome /> : <UserHome />
+
+  return (
+    <BrowserRouter basename="/CRM">
+      <Routes>
+        <Route element={layoutElement}>
+          <Route path="/" element={homeElement} />
+          <Route path="/admin" element={role === 'admin' ? <AdminHome /> : <NoAccessPage />} />
+          <Route
+            path="/tasks"
+            element={
+              role === 'finance' ? <NoAccessPage /> : role === 'user' ? <Navigate to="/" replace /> : <UserTasks />
+            }
+          />
+          <Route
+            path="/tasks/:taskId"
+            element={role === 'finance' ? <NoAccessPage /> : <TaskDetail />}
+          />
+          <Route path="/clients" element={role === 'admin' ? <ClientsPage /> : <NoAccessPage />} />
+          <Route
+            path="/clients/:id"
+            element={role === 'admin' ? <ClientDetail /> : <NoAccessPage />}
+          />
+          <Route path="/projects" element={role === 'admin' ? <ProjectsPage /> : <NoAccessPage />} />
+          <Route
+            path="/projects/:id"
+            element={role === 'admin' ? <ProjectDetail /> : <NoAccessPage />}
+          />
+          <Route path="/billing" element={role === 'user' ? <NoAccessPage /> : <BillingPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   )
 }
 

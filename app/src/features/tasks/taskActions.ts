@@ -6,12 +6,26 @@ export interface CompleteTaskPayload {
   materialDescription?: string
 }
 
+function getBillingStateForCompletedTask(task: Task, payload: CompleteTaskPayload) {
+  const hasBillingInputs =
+    payload.timeSpentMinutes > 0 ||
+    payload.materialCost > 0 ||
+    Boolean(payload.materialDescription?.trim())
+
+  if (hasBillingInputs) {
+    return 'ready_for_billing' as const
+  }
+
+  return task.billingState ?? 'not_billable'
+}
+
 export function startTask(task: Task): Task {
   if (task.status !== 'dodeljen') return task
 
   return {
     ...task,
     status: 'u_radu',
+    updatedAt: new Date().toISOString(),
   }
 }
 
@@ -21,6 +35,7 @@ export function pauseTask(task: Task): Task {
   return {
     ...task,
     status: 'na_cekanju',
+    updatedAt: new Date().toISOString(),
   }
 }
 
@@ -30,11 +45,14 @@ export function resumeTask(task: Task): Task {
   return {
     ...task,
     status: 'u_radu',
+    updatedAt: new Date().toISOString(),
   }
 }
 
 export function completeTask(task: Task, payload: CompleteTaskPayload): Task {
   if (task.status !== 'u_radu') return task
+
+  const completedAt = new Date().toISOString()
 
   return {
     ...task,
@@ -42,5 +60,8 @@ export function completeTask(task: Task, payload: CompleteTaskPayload): Task {
     timeSpentMinutes: payload.timeSpentMinutes,
     materialCost: payload.materialCost,
     materialDescription: payload.materialDescription || '',
+    completedAt,
+    updatedAt: completedAt,
+    billingState: getBillingStateForCompletedTask(task, payload),
   }
 }

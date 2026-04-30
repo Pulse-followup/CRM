@@ -7,8 +7,13 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react'
-import { mockTasks } from './mockTasks'
 import { readStoredArray, writeStoredValue } from '../../shared/storage'
+import { mockTasks } from './mockTasks'
+import {
+  getTaskById as selectTaskById,
+  getTasksByClient as selectTasksByClient,
+  getTasksByProject as selectTasksByProject,
+} from './taskSelectors'
 import type { Task } from './types'
 
 const TASKS_STORAGE_KEY = 'pulse.tasks.v1'
@@ -31,25 +36,20 @@ export function TaskProvider({ children }: PropsWithChildren) {
     writeStoredValue(TASKS_STORAGE_KEY, tasks)
   }, [tasks])
 
-  const getTaskById = useCallback(
-    (taskId: string) => tasks.find((task) => task.id === taskId) ?? null,
-    [tasks],
-  )
+  const getTaskById = useCallback((taskId: string) => selectTaskById(tasks, taskId), [tasks])
 
   const getTasksByProjectId = useCallback(
-    (projectId: string) => tasks.filter((task) => task.projectId === projectId),
+    (projectId: string) => selectTasksByProject(tasks, projectId),
     [tasks],
   )
 
   const getTasksByClientId = useCallback(
-    (clientId: string) => tasks.filter((task) => task.clientId === clientId),
+    (clientId: string) => selectTasksByClient(tasks, clientId),
     [tasks],
   )
 
   const updateTask = useCallback((updatedTask: Task) => {
-    setTasks((current) =>
-      current.map((task) => (task.id === updatedTask.id ? updatedTask : task)),
-    )
+    setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
   }, [])
 
   const addTask = useCallback((task: Task) => {

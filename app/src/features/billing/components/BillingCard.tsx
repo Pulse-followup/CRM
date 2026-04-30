@@ -42,7 +42,7 @@ function BillingCard({
           <dd>{record.amount ? `${record.amount} ${record.currency}` : '-'}</dd>
         </div>
         <div>
-          <dt>Rok placanja</dt>
+          <dt>Rok plaćanja</dt>
           <dd>{record.dueDate || '-'}</dd>
         </div>
         <div>
@@ -50,15 +50,15 @@ function BillingCard({
           <dd>{record.invoiceNumber || '-'}</dd>
         </div>
         <div>
-          <dt>Trosak rada</dt>
+          <dt>Trošak rada</dt>
           <dd>{record.totalLaborCost ? `${record.totalLaborCost} RSD` : '-'}</dd>
         </div>
         <div>
-          <dt>Trosak materijala</dt>
+          <dt>Trošak materijala</dt>
           <dd>{record.totalMaterialCost ? `${record.totalMaterialCost} RSD` : '-'}</dd>
         </div>
         <div>
-          <dt>Ukupan trosak</dt>
+          <dt>Ukupan trošak</dt>
           <dd>{record.totalCost ? `${record.totalCost} RSD` : '-'}</dd>
         </div>
       </dl>
@@ -66,7 +66,7 @@ function BillingCard({
       {record.status === 'draft' && onMarkInvoiced ? (
         <div className="customer-project-actions">
           <button type="button" className="customer-project-toggle" onClick={onMarkInvoiced}>
-            Oznaci kao fakturisano
+            Označi kao fakturisano
           </button>
         </div>
       ) : null}
@@ -75,12 +75,12 @@ function BillingCard({
         <div className="customer-project-actions">
           {onMarkOverdue ? (
             <button type="button" className="customer-project-toggle" onClick={onMarkOverdue}>
-              Oznaci kao kasni
+              Označi kao kasni
             </button>
           ) : null}
           {onMarkPaid ? (
             <button type="button" className="customer-project-toggle" onClick={onMarkPaid}>
-              Oznaci kao placeno
+              Označi kao plaćeno
             </button>
           ) : null}
         </div>
@@ -89,7 +89,7 @@ function BillingCard({
       {record.status === 'overdue' && onMarkPaid ? (
         <div className="customer-project-actions">
           <button type="button" className="customer-project-toggle" onClick={onMarkPaid}>
-            Oznaci kao placeno
+            Označi kao plaćeno
           </button>
         </div>
       ) : null}

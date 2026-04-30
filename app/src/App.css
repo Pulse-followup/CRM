@@ -105,6 +105,55 @@
   font-size: 28px;
 }
 
+.role-home-shell,
+.role-page-shell {
+  display: grid;
+  gap: 20px;
+}
+
+.role-home-header,
+.role-page-header,
+.no-access-shell {
+  display: grid;
+  gap: 8px;
+}
+
+.role-home-header p,
+.role-page-header p {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.role-home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.role-home-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: #0f172a;
+  padding: 20px;
+}
+
+.role-home-card h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.role-home-card strong {
+  font-size: 28px;
+}
+
+.role-home-card p {
+  margin: 0;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
 .settings-page-shell {
   display: grid;
   gap: 24px;
@@ -393,6 +442,168 @@
   border-color: rgba(148, 163, 184, 0.16);
 }
 
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-brand-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.app-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-brand-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+}
+
+.role-home-grid-focus {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.role-home-focus-card {
+  align-content: start;
+  gap: 14px;
+}
+
+.role-home-focus-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.role-home-focus-title {
+  display: grid;
+  gap: 4px;
+}
+
+.role-home-focus-title span {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.role-home-empty {
+  margin: 0;
+  color: #94a3b8;
+  padding: 4px 0;
+}
+
+.role-home-task-list {
+  display: grid;
+  gap: 12px;
+}
+
+.role-home-task-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+  background: #111827;
+  padding: 14px;
+}
+
+.role-home-task-copy {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  flex: 1 1 auto;
+}
+
+.role-home-task-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.role-home-task-copy h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.role-home-task-badge {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: normal;
+}
+
+.role-home-task-badge.is-muted {
+  background: rgba(148, 163, 184, 0.18);
+  color: #cbd5e1;
+}
+
+.role-home-task-badge.is-active {
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+}
+
+.role-home-task-badge.is-warning {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+.role-home-task-badge.is-info {
+  background: rgba(45, 212, 191, 0.18);
+  color: #99f6e4;
+}
+
+.role-home-task-badge.is-success {
+  background: rgba(34, 197, 94, 0.18);
+  color: #86efac;
+}
+
+.role-home-task-copy dl {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.role-home-task-copy dl div {
+  display: grid;
+  gap: 4px;
+}
+
+.role-home-task-copy dt {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.role-home-task-copy dd {
+  margin: 0;
+  color: #e2e8f0;
+}
+
+.role-home-open-button {
+  flex-shrink: 0;
+  align-self: center;
+}
+
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -441,41 +652,367 @@
     justify-items: start;
   }
 
-  .clients-primary-action {
+  .clients-primary-action,
+  .settings-danger-button,
+  .settings-secondary-button,
+  .role-home-open-button {
     width: 100%;
   }
 
-  .settings-danger-button {
-    width: 100%;
+  .role-home-grid,
+  .role-home-grid-focus {
+    grid-template-columns: 1fr;
   }
 
-  .settings-secondary-button {
+  .role-home-task-item,
+  .role-home-task-head {
+    flex-direction: column;
+  }
+}
+
+
+.role-home-empty-global {
+  font-size: 15px;
+}
+
+.role-home-due {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.role-home-due.is-danger {
+  border-color: rgba(248, 113, 113, 0.36);
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+}
+
+.role-home-due.is-today {
+  border-color: rgba(245, 158, 11, 0.34);
+  background: rgba(120, 53, 15, 0.22);
+  color: #fde68a;
+}
+
+.role-home-due.is-default {
+  color: #e2e8f0;
+}
+
+.role-home-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.role-home-task-actions .settings-secondary-button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.role-home-complete-form {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  padding-top: 12px;
+}
+
+.role-home-form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.role-home-form-field span {
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.role-home-form-field input {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px 14px;
+}
+
+.role-home-form-error {
+  margin: 0;
+  color: #fca5a5;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .role-home-task-actions .settings-secondary-button {
     width: 100%;
   }
 }
-.app-brand {
-  display: flex;
-  align-items: center;
+
+
+.finance-home-item {
+  align-items: stretch;
+}
+
+
+.admin-dashboard-shell {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.admin-dashboard-header {
   gap: 10px;
 }
 
-.app-brand-logo {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  object-fit: cover;
-  flex-shrink: 0;
+.admin-dashboard-card {
+  gap: 16px;
+  border-radius: 12px;
+  padding: 16px;
 }
 
-.app-brand-text {
+.admin-dashboard-priorities {
+  width: 100%;
+}
+
+.admin-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-priority-list,
+.admin-mini-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-priority-item,
+.admin-mini-item {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: #111827;
+  padding: 14px;
 }
 
-.app-brand-title {
+.admin-priority-copy,
+.admin-mini-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.admin-priority-copy strong,
+.admin-mini-copy strong {
+  font-size: 15px;
+}
+
+.admin-priority-copy p,
+.admin-mini-copy p {
+  margin: 0;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.admin-ops-grid,
+.admin-clients-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-ops-column,
+.admin-clients-column {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-ops-column h4,
+.admin-clients-column h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.admin-billing-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-billing-summary .detail-item p {
+  margin: 0;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+@media (max-width: 960px) {
+  .admin-dashboard-grid,
+  .admin-ops-grid,
+  .admin-clients-grid,
+  .admin-billing-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-priority-item,
+  .admin-mini-item {
+    flex-direction: column;
+  }
+
+  .admin-priority-item .settings-secondary-button,
+  .admin-mini-item .settings-secondary-button {
+    width: 100%;
+  }
+}
+
+
+.app-shell {
+  min-height: 100vh;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(16px);
+}
+
+.app-topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.app-topbar-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  object-fit: cover;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.app-topbar-user {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.app-topbar-role {
+  color: #60a5fa;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: #ffffff;
+  text-transform: uppercase;
+}
+
+.app-topbar-user strong {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 18px;
+}
+
+.app-topbar-menu {
+  position: relative;
+}
+
+.app-topbar-toggle {
+  display: inline-grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.84);
+  cursor: pointer;
+}
+
+.app-topbar-toggle span {
+  display: block;
+  width: 28px;
+  height: 4px;
+  border-radius: 999px;
+  background: #0ea5e9;
+}
+
+.app-topbar-toggle.is-open,
+.app-topbar-toggle:hover {
+  border-color: rgba(96, 165, 250, 0.45);
+}
+
+.app-topbar-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 190px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: #111827;
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.34);
+}
+
+.app-topbar-link {
+  display: block;
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #e2e8f0;
+  text-decoration: none;
+}
+
+.app-topbar-link:hover {
+  background: rgba(59, 130, 246, 0.18);
+  color: #eff6ff;
+}
+
+.app-content {
+  padding: 24px;
+}
+
+@media (max-width: 640px) {
+  .app-topbar {
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .app-topbar-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+
+  .app-topbar-user {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .app-topbar-user strong {
+    font-size: 16px;
+  }
+
+  .app-content {
+    padding: 20px;
+  }
 }
