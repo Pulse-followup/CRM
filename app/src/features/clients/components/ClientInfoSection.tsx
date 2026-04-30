@@ -6,28 +6,31 @@ export interface ClientInfoSectionProps {
 
 function ClientInfoSection({ name, city, address }: ClientInfoSectionProps) {
   return (
-    <section className="customer-card-section">
-      <div className="customer-card-section-head">
+    <details className="customer-card-section customer-card-collapsible">
+      <summary className="customer-card-section-head">
         <h3>Osnovni podaci</h3>
-      </div>
+        <span className="customer-collapse-icon" aria-hidden="true">▾</span>
+      </summary>
 
-      <div className="customer-card-group">
-        <dl className="customer-card-detail-list">
-          <div>
-            <dt>Naziv</dt>
-            <dd>{name || '-'}</dd>
-          </div>
-          <div>
-            <dt>Grad</dt>
-            <dd>{city || '-'}</dd>
-          </div>
-          <div>
-            <dt>Adresa</dt>
-            <dd>{address || '-'}</dd>
-          </div>
-        </dl>
+      <div className="customer-card-section-body">
+        <div className="customer-card-group">
+          <dl className="customer-card-detail-list">
+            <div>
+              <dt>Naziv</dt>
+              <dd>{name || '-'}</dd>
+            </div>
+            <div>
+              <dt>Grad</dt>
+              <dd>{city || '-'}</dd>
+            </div>
+            <div>
+              <dt>Adresa</dt>
+              <dd>{address || '-'}</dd>
+            </div>
+          </dl>
+        </div>
       </div>
-    </section>
+    </details>
   )
 }
 

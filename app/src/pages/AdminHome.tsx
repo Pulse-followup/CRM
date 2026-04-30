@@ -1,520 +1,394 @@
-import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { BILLING_STATUS_LABELS } from '../features/billing/billingLabels'
 import { useBillingStore } from '../features/billing/billingStore'
-import type { BillingRecord, BillingStatus } from '../features/billing/types'
+import type { BillingRecord } from '../features/billing/types'
 import { useClientStore } from '../features/clients/clientStore'
+import type { Client } from '../features/clients/types'
+import ClientCreateForm, { type ClientCreateFormValues } from '../features/clients/components/ClientCreateForm'
+import ClientEditForm, { type ClientEditFormPatch } from '../features/clients/components/ClientEditForm'
+import ClientInfoSection from '../features/clients/components/ClientInfoSection'
+import ClientContactsSection from '../features/clients/components/ClientContactsSection'
+import ClientCommercialSection from '../features/clients/components/ClientCommercialSection'
+import ClientProjectsSection from '../features/clients/components/ClientProjectsSection'
 import { useProjectStore } from '../features/projects/projectStore'
-import { getProjectHealth } from '../features/projects/projectHealth'
-import { getProjectStageProgress } from '../features/projects/projectWorkflow'
+import type { Project } from '../features/projects/types'
+import ProjectForm, { type ProjectFormValues } from '../features/projects/components/ProjectForm'
+import { buildStagesFromTemplate, getTemplateIdForProjectType } from '../features/projects/projectTemplates'
 import { calculateClientScore } from '../features/scoring/scoringEngine'
 import { TASK_STATUS_LABELS } from '../features/tasks/taskLabels'
-import { getCompletedTasks, getLateTasks, getTasksByStatus, getTodayTasks } from '../features/tasks/taskSelectors'
+import { getLateTasks } from '../features/tasks/taskSelectors'
 import { useTaskStore } from '../features/tasks/taskStore'
 import type { Task } from '../features/tasks/types'
+import CreateTaskForm, { type CreateTaskFormValues } from '../features/tasks/components/CreateTaskForm'
+import '../features/clients/pages/client-detail.css'
 
-const MAX_PRIORITY_ITEMS = 5
-const MAX_TASKS_PER_COLUMN = 3
-const MAX_PROJECTS = 5
-const MAX_BILLING_ITEMS = 5
-const MAX_CLIENTS = 3
-const ADMIN_BILLING_STATUSES = ['draft', 'invoiced', 'overdue', 'paid'] as const
+type ModalState =
+  | { type: 'task'; task: Task }
+  | { type: 'project'; project: Project }
+  | { type: 'billing'; record: BillingRecord }
+  | { type: 'client'; client: Client; score: number }
+  | { type: 'create-client' }
+  | { type: 'create-project'; clientId?: string }
+  | null
 
-type PriorityTone = 'danger' | 'warning' | 'info' | 'success' | 'muted'
-
-interface PriorityItem {
-  id: string
-  typeLabel: string
-  description: string
-  context?: string
-  tone: PriorityTone
-  href: string
-}
-
-function formatDueDate(value?: string | null) {
-  if (!value) {
-    return 'Bez roka'
-  }
-
+function formatDate(value?: string | null) {
+  if (!value) return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat('sr-RS', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
 }
 
-function formatAmount(amount: number | null, currency = 'RSD') {
-  if (typeof amount !== 'number') {
-    return '-'
-  }
-
-  return `${amount} ${currency}`
+function formatAmount(record: BillingRecord) {
+  return typeof record.amount === 'number' ? `${record.amount.toLocaleString('sr-RS')} ${record.currency}` : '-'
 }
 
-function getProjectHealthPresentation(projectId: string, tasks: Task[]) {
-  const health = getProjectHealth(projectId, tasks)
-
-  const labels = {
-    no_tasks: 'Nema taskova',
-    late: 'Kasni',
-    waiting: 'Na ?ekanju',
-    active: 'U toku',
-    done: 'Zavr?eno',
-  } as const
-
-  return {
-    ...health,
-    label: labels[health.key],
-  }
+function isOverdueDate(value?: string | null) {
+  if (!value) return false
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date.getTime() < today.getTime()
 }
 
-function getPriorityLabel(priority: 'low' | 'medium' | 'high') {
-  if (priority === 'high') return 'Visok prioritet'
-  if (priority === 'medium') return 'Srednji prioritet'
-  return 'Nizak prioritet'
+function daysLate(value?: string | null) {
+  if (!value) return 0
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 0
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86400000))
 }
 
-function getPriorityToneFromScore(priority: 'low' | 'medium' | 'high'): PriorityTone {
-  if (priority === 'high') return 'danger'
-  if (priority === 'medium') return 'warning'
-  return 'muted'
+function getStageDueDate(stage?: Project['stages'] extends Array<infer T> ? T : never) {
+  return stage ? (stage as { dueDate?: string | null }).dueDate : undefined
 }
 
-function sortTasksByDueDate(tasks: Task[]) {
-  return [...tasks].sort((left, right) => {
-    const leftTime = left.dueDate ? new Date(left.dueDate).getTime() : Number.MAX_SAFE_INTEGER
-    const rightTime = right.dueDate ? new Date(right.dueDate).getTime() : Number.MAX_SAFE_INTEGER
-    return leftTime - rightTime
+function findOverdueStage(project: Project) {
+  return project.stages?.find((stage) => {
+    const dueDate = getStageDueDate(stage)
+    return dueDate ? isOverdueDate(dueDate) : false
   })
 }
 
-function sortBillingByPriority(records: BillingRecord[]) {
-  const statusRank: Record<BillingStatus, number> = {
-    overdue: 0,
-    draft: 1,
-    invoiced: 2,
-    paid: 3,
-    cancelled: 4,
-  }
+function ProjectCreateModal({
+  clients,
+  initialClientId,
+  onCancel,
+  onSubmit,
+}: {
+  clients: Client[]
+  initialClientId?: string
+  onCancel: () => void
+  onSubmit: (clientId: string, values: ProjectFormValues) => void
+}) {
+  const [clientId, setClientId] = useState(initialClientId ?? String(clients[0]?.id ?? ''))
 
-  return [...records].sort((left, right) => {
-    const statusDelta = statusRank[left.status] - statusRank[right.status]
-    if (statusDelta !== 0) {
-      return statusDelta
-    }
+  return (
+    <div className="pulse-create-modal-content">
+      <label className="customer-task-form-field">
+        <span>Klijent</span>
+        <select value={clientId} onChange={(event) => setClientId(event.target.value)}>
+          {clients.map((client) => (
+            <option key={client.id} value={String(client.id)}>
+              {client.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <ProjectForm onCancel={onCancel} onSubmit={(values) => onSubmit(clientId, values)} />
+    </div>
+  )
+}
 
-    const leftTime = left.dueDate ? new Date(left.dueDate).getTime() : Number.MAX_SAFE_INTEGER
-    const rightTime = right.dueDate ? new Date(right.dueDate).getTime() : Number.MAX_SAFE_INTEGER
-    return leftTime - rightTime
-  })
+function ClientCardDrawer({
+  client,
+  score,
+  projects,
+  onClose,
+  onUpdateClient,
+  onCreateProject,
+  onCreateTask,
+}: {
+  client: Client
+  score: number
+  projects: Project[]
+  onClose: () => void
+  onUpdateClient: (patch: ClientEditFormPatch) => void
+  onCreateProject: (values: ProjectFormValues) => void
+  onCreateTask: (values: CreateTaskFormValues) => void
+}) {
+  const [isEditingClient, setIsEditingClient] = useState(false)
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const [isCreatingActivity, setIsCreatingActivity] = useState(false)
+
+  return (
+    <div className="pulse-client-drawer-content">
+      <div className="pulse-client-drawer-head">
+        <div>
+          <h3>{client.name}</h3>
+          <p>{client.city || '-'}</p>
+        </div>
+        <span className="pulse-pill pulse-pill-cyan">PULSE {score}</span>
+      </div>
+      <div className="pulse-client-drawer-actions">
+        <button type="button" className="customer-project-toggle" onClick={() => setIsEditingClient((value) => !value)}>
+          Izmeni podatke
+        </button>
+        <button type="button" className="customer-project-toggle" onClick={() => setIsCreatingActivity((value) => !value)}>
+          Nova aktivnost
+        </button>
+        <button type="button" className="customer-project-toggle" onClick={() => setIsCreatingProject((value) => !value)}>
+          Novi projekat
+        </button>
+      </div>
+      {isEditingClient ? (
+        <ClientEditForm
+          client={client}
+          onCancel={() => setIsEditingClient(false)}
+          onSubmit={(patch) => {
+            onUpdateClient(patch)
+            setIsEditingClient(false)
+          }}
+        />
+      ) : null}
+      {isCreatingProject ? (
+        <ProjectForm
+          onCancel={() => setIsCreatingProject(false)}
+          onSubmit={(values) => {
+            onCreateProject(values)
+            setIsCreatingProject(false)
+          }}
+        />
+      ) : null}
+      {isCreatingActivity ? (
+        <CreateTaskForm
+          onCancel={() => setIsCreatingActivity(false)}
+          onSubmit={(values) => {
+            onCreateTask(values)
+            setIsCreatingActivity(false)
+          }}
+          requireProjectSelection
+          projectOptions={projects.map((project) => ({
+            id: project.id,
+            label: project.title,
+            stages: project.stages,
+          }))}
+        />
+      ) : null}
+      <ClientInfoSection name={client.name} city={client.city} address={client.address} />
+      <ClientContactsSection contacts={client.contacts} />
+      <ClientCommercialSection {...client.commercial} />
+      <ClientProjectsSection projects={projects} />
+      <div className="pulse-modal-actions">
+        <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onClose}>Zatvori</button>
+      </div>
+    </div>
+  )
+}
+
+function AdminModal({
+  state,
+  clients,
+  projects,
+  onClose,
+  onCreateClient,
+  onCreateProject,
+  onUpdateClient,
+  onCreateTask,
+}: {
+  state: ModalState
+  clients: Client[]
+  projects: Project[]
+  onClose: () => void
+  onCreateClient: (values: ClientCreateFormValues) => void
+  onCreateProject: (clientId: string, values: ProjectFormValues) => void
+  onUpdateClient: (clientId: string, patch: ClientEditFormPatch) => void
+  onCreateTask: (clientId: string, values: CreateTaskFormValues) => void
+}) {
+  if (!state) return null
+  const clientProjects = state.type === 'client' ? projects.filter((project) => project.clientId === String(state.client.id)) : []
+
+  return (
+    <div className="pulse-modal-backdrop" onMouseDown={onClose}>
+      <div className={`pulse-modal ${state.type === 'client' ? 'pulse-client-drawer' : ''} ${state.type === 'create-client' ? 'pulse-create-client-modal' : ''} ${state.type === 'create-project' ? 'pulse-create-project-modal' : ''}`} onMouseDown={(event) => event.stopPropagation()}>
+        <button className="pulse-modal-x" type="button" onClick={onClose}>x</button>
+        {state.type === 'billing' ? <><h3>Detalji naplatnog naloga</h3><p><strong>Iznos</strong> - {formatAmount(state.record)}</p><p><strong>Opis</strong> - {state.record.description}</p><p><strong>Rok</strong> - {formatDate(state.record.dueDate)}</p><p><strong>Status</strong> - {BILLING_STATUS_LABELS[state.record.status]}</p><p><strong>Faktura</strong> - {state.record.invoiceNumber || '-'}</p></> : null}
+        {state.type === 'task' ? <><h3>Detalji zadatka</h3><p><strong>{state.task.title}</strong></p><p>Tip - {state.task.type || '-'}</p><p>Status - {TASK_STATUS_LABELS[state.task.status] ?? state.task.status}</p><p>Rok - {formatDate(state.task.dueDate)}</p><p>Dodeljeno - {state.task.assignedToLabel || '-'}</p><p>Opis - {state.task.description || '-'}</p></> : null}
+        {state.type === 'project' ? <><h3>Detalji projekta</h3><p><strong>{state.project.title}</strong></p><p>Status - {state.project.status}</p><p>Tip - {state.project.type}</p><p>Frekvencija - {state.project.frequency}</p><p>Vrednost - {state.project.value ? `${state.project.value.toLocaleString('sr-RS')} RSD` : '-'}</p></> : null}
+        {state.type === 'client' ? (
+          <ClientCardDrawer
+            client={state.client}
+            score={state.score}
+            projects={clientProjects}
+            onClose={onClose}
+            onUpdateClient={(patch) => onUpdateClient(String(state.client.id), patch)}
+            onCreateProject={(values) => onCreateProject(String(state.client.id), values)}
+            onCreateTask={(values) => onCreateTask(String(state.client.id), values)}
+          />
+        ) : null}
+        {state.type === 'create-client' ? <><h3>+ Novi klijent</h3><ClientCreateForm onCancel={onClose} onSubmit={onCreateClient} /></> : null}
+        {state.type === 'create-project' ? <><h3>+ Novi projekat</h3><ProjectCreateModal clients={clients} initialClientId={state.clientId} onCancel={onClose} onSubmit={onCreateProject} /></> : null}
+      </div>
+    </div>
+  )
 }
 
 function AdminHome() {
-  const navigate = useNavigate()
-  const { clients } = useClientStore()
-  const { projects } = useProjectStore()
-  const { tasks } = useTaskStore()
+  const { clients, addClient, updateClient } = useClientStore()
+  const { projects, addProject } = useProjectStore()
+  const { tasks, addTask } = useTaskStore()
   const { getAllBilling } = useBillingStore()
-
+  const [modal, setModal] = useState<ModalState>(null)
   const billing = getAllBilling()
 
-  const clientNameById = useMemo(
-    () => new Map(clients.map((client) => [String(client.id), client.name])),
-    [clients],
-  )
+  const clientById = useMemo(() => new Map(clients.map((client) => [String(client.id), client])), [clients])
+  const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
 
-  const projectTitleById = useMemo(
-    () => new Map(projects.map((project) => [project.id, project.title])),
-    [projects],
-  )
+  const clientName = (id: string) => clientById.get(String(id))?.name ?? 'Nepoznat klijent'
+  const projectTitle = (id: string) => projectById.get(id)?.title ?? 'Nepoznat projekat'
 
-  const clientScores = useMemo(
-    () =>
-      clients.map((client) => ({
-        client,
-        score: calculateClientScore(String(client.id), {
-          clients,
-          projects,
-          tasks,
-          billing,
-        }),
-      })),
-    [clients, projects, tasks, billing],
-  )
+  const urgentBilling = billing.filter((record) => record.status === 'overdue' || isOverdueDate(record.dueDate))
+  const lateTasks = getLateTasks(tasks)
+  const riskyProjects = projects.filter((project) => Boolean(findOverdueStage(project)))
+  const teamTasks = tasks.filter((task) => ['dodeljen', 'u_radu', 'na_cekanju'].includes(task.status))
+  const sortedBilling = [...billing].sort((a, b) => (a.status === 'overdue' ? -1 : 0) - (b.status === 'overdue' ? -1 : 0))
+  const clientScores = clients.map((client) => ({ client, score: calculateClientScore(String(client.id), { clients, projects, tasks, billing }).total }))
 
-  const priorityItems = useMemo(() => {
-    const lateTaskItems: PriorityItem[] = sortTasksByDueDate(getLateTasks(tasks))
-      .slice(0, 2)
-      .map((task) => ({
-        id: `task-${task.id}`,
-        typeLabel: 'Kasni task',
-        description: task.title,
-        context: `${clientNameById.get(String(task.clientId)) ?? 'Klijent'} ? ${projectTitleById.get(task.projectId) ?? 'Projekat'}`,
-        tone: 'danger',
-        href: `/tasks/${task.id}`,
-      }))
+  const handleCreateClient = (values: ClientCreateFormValues) => {
+    const nextId = Math.max(0, ...clients.map((client) => Number(client.id) || 0)) + 1
+    addClient({
+      id: nextId,
+      name: values.name,
+      city: values.city,
+      address: values.address,
+      contacts: values.contacts,
+      commercial: values.commercial,
+    })
+    setModal(null)
+  }
 
-    const overdueBillingItems: PriorityItem[] = sortBillingByPriority(
-      billing.filter((record) => record.status === 'overdue'),
-    )
-      .slice(0, 2)
-      .map((record) => ({
-        id: `billing-${record.id}`,
-        typeLabel: 'Kasna naplata',
-        description: formatAmount(record.amount, record.currency),
-        context: `${clientNameById.get(record.clientId) ?? 'Klijent'} ? ${projectTitleById.get(record.projectId) ?? 'Projekat'}`,
-        tone: 'danger',
-        href: `/projects/${record.projectId}`,
-      }))
+  const handleCreateProject = (clientId: string, values: ProjectFormValues) => {
+    const templateId = getTemplateIdForProjectType(values.type)
+    addProject({
+      id: `project-${Date.now()}`,
+      clientId,
+      title: values.title.trim() || 'Novi projekat',
+      type: values.type || undefined,
+      frequency: values.frequency || undefined,
+      value: values.value.trim() ? Number(values.value) : undefined,
+      status: 'aktivan',
+      templateId,
+      stages: buildStagesFromTemplate(templateId),
+    })
+    setModal(null)
+  }
 
-    const projectSignalItems: PriorityItem[] = projects
-      .filter((project) => project.status === 'aktivan')
-      .map((project) => ({
-        project,
-        health: getProjectHealthPresentation(project.id, tasks),
-      }))
-      .filter(({ health }) => health.key === 'late' || health.key === 'waiting')
-      .slice(0, 2)
-      .map(({ project, health }) => ({
-        id: `project-${project.id}`,
-        typeLabel: 'Signal projekta',
-        description: health.label,
-        context: `${clientNameById.get(project.clientId) ?? 'Klijent'} ? ${project.title}`,
-        tone: health.key === 'late' ? 'danger' : 'warning',
-        href: `/projects/${project.id}`,
-      }))
-
-    const clientRiskItems: PriorityItem[] = clientScores
-      .filter(({ score }) => score.signals.risks.length > 0)
-      .sort(
-        (left, right) =>
-          right.score.signals.risks.length - left.score.signals.risks.length ||
-          left.score.total - right.score.total,
-      )
-      .slice(0, 2)
-      .map(({ client, score }) => ({
-        id: `client-${client.id}`,
-        typeLabel: 'Rizik klijenta',
-        description: score.signals.risks[0],
-        context: client.name,
-        tone: getPriorityToneFromScore(score.priority),
-        href: `/clients/${client.id}`,
-      }))
-
-    return [
-      ...lateTaskItems,
-      ...overdueBillingItems,
-      ...projectSignalItems,
-      ...clientRiskItems,
-    ].slice(0, MAX_PRIORITY_ITEMS)
-  }, [billing, clientNameById, clientScores, projectTitleById, projects, tasks])
-
-  const operationalColumns = useMemo(
-    () => [
-      {
-        key: 'late',
-        title: 'Kasni',
-        items: sortTasksByDueDate(getLateTasks(tasks)).slice(0, MAX_TASKS_PER_COLUMN),
-      },
-      {
-        key: 'today',
-        title: 'Danas',
-        items: sortTasksByDueDate(getTodayTasks(tasks)).slice(0, MAX_TASKS_PER_COLUMN),
-      },
-      {
-        key: 'in-progress',
-        title: 'U radu',
-        items: sortTasksByDueDate(getTasksByStatus(tasks, 'u_radu')).slice(0, MAX_TASKS_PER_COLUMN),
-      },
-      {
-        key: 'done',
-        title: 'Zavr?eno',
-        items: [...getCompletedTasks(tasks)].slice(0, MAX_TASKS_PER_COLUMN),
-      },
-    ],
-    [tasks],
-  )
-
-  const activeProjects = useMemo(
-    () => projects.filter((project) => project.status === 'aktivan').slice(0, MAX_PROJECTS),
-    [projects],
-  )
-
-  const billingSummaryByStatus = useMemo(() => {
-    const base = {
-      draft: { count: 0, amount: 0 },
-      invoiced: { count: 0, amount: 0 },
-      overdue: { count: 0, amount: 0 },
-      paid: { count: 0, amount: 0 },
-    }
-
-    for (const record of billing) {
-      if (record.status in base) {
-        base[record.status as keyof typeof base].count += 1
-        base[record.status as keyof typeof base].amount += record.amount ?? 0
-      }
-    }
-
-    return base
-  }, [billing])
-
-  const importantBilling = useMemo(
-    () => sortBillingByPriority(billing).slice(0, MAX_BILLING_ITEMS),
-    [billing],
-  )
-
-  const topRiskClients = useMemo(
-    () =>
-      [...clientScores]
-        .sort(
-          (left, right) =>
-            right.score.signals.risks.length - left.score.signals.risks.length ||
-            left.score.total - right.score.total,
-        )
-        .slice(0, MAX_CLIENTS),
-    [clientScores],
-  )
-
-  const topScoreClients = useMemo(
-    () => [...clientScores].sort((left, right) => right.score.total - left.score.total).slice(0, MAX_CLIENTS),
-    [clientScores],
-  )
+  const handleCreateTask = (clientId: string, values: CreateTaskFormValues) => {
+    const timestamp = new Date().toISOString()
+    addTask({
+      id: `task-${Date.now()}`,
+      clientId,
+      projectId: values.projectId,
+      title: values.title.trim() || 'Nova aktivnost',
+      description: values.description.trim(),
+      type: values.type || undefined,
+      assignedToUserId: values.assignedToUserId,
+      assignedToLabel: values.assignedToLabel.trim(),
+      dueDate: values.dueDate || undefined,
+      stageId: values.stageId || undefined,
+      status: 'dodeljen',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedAt: null,
+      billingState: 'not_billable',
+    })
+  }
 
   return (
-    <section className="role-home-shell admin-dashboard-shell">
-      <header className="role-home-header admin-dashboard-header">
-        <h2>Pregled poslovanja</h2>
-        <p>?ta danas tra?i tvoju pa?nju.</p>
-      </header>
+    <section className="pulse-phone-screen admin-phone-screen">
+      <h2>Pregled poslovanja</h2>
 
-      <article className="role-home-card admin-dashboard-card admin-dashboard-priorities">
-        <div className="role-home-focus-head">
-          <div className="role-home-focus-title">
-            <h3>Prioriteti</h3>
-          </div>
+      <section className="pulse-panel pulse-panel-red">
+        <h3>HITNO – BITNO !!!</h3>
+        <div className="pulse-list">
+          {urgentBilling.map((record) => (
+            <article className="pulse-item" key={`billing-${record.id}`}>
+              <div className="pulse-item-title-row"><h4>Naplati projekat !</h4><span className="pulse-pill pulse-pill-red">KASNI</span></div>
+              <dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(record.clientId)}</dd></div><div><dt>Projekat:</dt><dd>{projectTitle(record.projectId)}</dd></div><div><dt>Rok za plaćanje:</dt><dd>{formatDate(record.dueDate)}</dd></div></dl>
+              <button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'billing', record })}>OTVORI</button>
+            </article>
+          ))}
+          {riskyProjects.map((project) => (
+            <article className="pulse-item" key={`project-${project.id}`}>
+              <div className="pulse-item-title-row"><h4>FAZA KASNI {daysLate(getStageDueDate(findOverdueStage(project)))} DANA !!!</h4></div>
+              <dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(project.clientId)}</dd></div><div><dt>Projekat:</dt><dd>{project.title}</dd></div><div><dt>Rok :</dt><dd>{formatDate(getStageDueDate(findOverdueStage(project)))}</dd></div></dl>
+              <button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'project', project })}>OTVORI</button>
+            </article>
+          ))}
+          {lateTasks.map((task) => (
+            <article className="pulse-item" key={`task-${task.id}`}>
+              <div className="pulse-item-title-row"><h4>{task.title}</h4><span className="pulse-pill pulse-pill-red">ZADATAK</span></div>
+              <dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(String(task.clientId))}</dd></div><div><dt>Projekat:</dt><dd>{projectTitle(task.projectId)}</dd></div><div><dt>Rok :</dt><dd>{formatDate(task.dueDate)}</dd></div></dl>
+              <button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'task', task })}>OTVORI</button>
+            </article>
+          ))}
+          {urgentBilling.length + riskyProjects.length + lateTasks.length === 0 ? <p className="pulse-empty">Nema hitnih stavki.</p> : null}
         </div>
+      </section>
 
-        {priorityItems.length ? (
-          <div className="admin-priority-list">
-            {priorityItems.map((item) => (
-              <div key={item.id} className="admin-priority-item">
-                <div className="admin-priority-copy">
-                  <span className={`customer-status-badge is-${item.tone}`}>{item.typeLabel}</span>
-                  <strong>{item.description}</strong>
-                  {item.context ? <p>{item.context}</p> : null}
-                </div>
-                <button
-                  type="button"
-                  className="settings-secondary-button"
-                  onClick={() => navigate(item.href)}
-                >
-                  Otvori
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="role-home-empty">Sve pod kontrolom.</p>
-        )}
-      </article>
+      <section className="pulse-panel pulse-panel-green">
+        <h3>MOJ TIM – šta ko radi danas</h3>
+        <div className="pulse-list">
+          {teamTasks.length ? teamTasks.map((task) => {
+            const project = projectById.get(task.projectId)
+            return <article className="pulse-item pulse-team-card" key={task.id}>
+              <div className="pulse-item-title-row"><h4>{task.assignedToLabel || 'Bez dodele'}</h4><button className="pulse-pill pulse-pill-red" type="button" onClick={() => setModal({ type: 'task', task })}>ZADATAK</button></div>
+              <p>{clientName(String(task.clientId))} – {projectTitle(task.projectId)}</p>
+              <p><strong>Rok :</strong> {formatDate(task.dueDate)}</p>
+              {project ? <button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'project', project })}>PROJEKAT</button> : null}
+            </article>
+          }) : <p className="pulse-empty">Nema aktivnih zadataka.</p>}
+        </div>
+      </section>
 
-      <div className="admin-dashboard-grid">
-        <article className="role-home-card admin-dashboard-card">
-          <div className="role-home-focus-head">
-            <div className="role-home-focus-title">
-              <h3>Operativa</h3>
-            </div>
-          </div>
+      <section className="pulse-panel pulse-panel-white">
+        <h3>NAPLATA</h3>
+        <div className="pulse-list">
+          {sortedBilling.map((record) => (
+            <article className="pulse-item pulse-billing-row" key={record.id} onClick={() => setModal({ type: 'billing', record })}>
+              <div className="pulse-item-title-row"><h4>{formatAmount(record)}</h4><span className={`pulse-pill ${record.status === 'overdue' ? 'pulse-pill-red' : record.status === 'paid' ? 'pulse-pill-green' : 'pulse-pill-blue'}`}>{BILLING_STATUS_LABELS[record.status]}</span></div>
+              <dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(record.clientId)}</dd></div><div><dt>Projekat:</dt><dd>{projectTitle(record.projectId)}</dd></div><div><dt>Rok za plaćanje:</dt><dd>{formatDate(record.dueDate)}</dd></div></dl>
+            </article>
+          ))}
+        </div>
+      </section>
 
-          <div className="admin-ops-grid">
-            {operationalColumns.map((column) => (
-              <section key={column.key} className="admin-ops-column">
-                <h4>{column.title}</h4>
-                {column.items.length ? (
-                  <div className="admin-mini-list">
-                    {column.items.map((task) => (
-                      <div key={task.id} className="admin-mini-item">
-                        <div className="admin-mini-copy">
-                          <strong>{task.title}</strong>
-                          <p>
-                            {clientNameById.get(String(task.clientId)) ?? 'Klijent'} ?{' '}
-                            {projectTitleById.get(task.projectId) ?? 'Projekat'}
-                          </p>
-                          <p>
-                            {task.assignedToLabel || 'Bez dodele'} ? {TASK_STATUS_LABELS[task.status]}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="settings-secondary-button"
-                          onClick={() => navigate(`/tasks/${task.id}`)}
-                        >
-                          Otvori
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="role-home-empty">Nema stavki.</p>
-                )}
-              </section>
-            ))}
-          </div>
-        </article>
-
-        <article className="role-home-card admin-dashboard-card">
-          <div className="role-home-focus-head">
-            <div className="role-home-focus-title">
-              <h3>Projekti</h3>
-            </div>
-          </div>
-
-          {activeProjects.length ? (
-            <div className="admin-mini-list">
-              {activeProjects.map((project) => {
-                const health = getProjectHealthPresentation(project.id, tasks)
-                const activeStage = project.stages?.find((stage) => stage.status === 'active')
-                const progress = getProjectStageProgress(project, tasks)
-                const totalTasks = progress.reduce((sum, item) => sum + item.totalTasks, 0)
-                const completedTasks = progress.reduce((sum, item) => sum + item.completedTasks, 0)
-
-                return (
-                  <div key={project.id} className="admin-mini-item">
-                    <div className="admin-mini-copy">
-                      <strong>{project.title}</strong>
-                      <p>{clientNameById.get(project.clientId) ?? 'Klijent'}</p>
-                      <p>Faza: {activeStage?.name ?? 'Bez aktivne faze'}</p>
-                      <p>
-                        {health.label} ? {completedTasks}/{totalTasks} taskova zavr?eno
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="settings-secondary-button"
-                      onClick={() => navigate(`/projects/${project.id}`)}
-                    >
-                      Otvori
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="role-home-empty">Nema aktivnih projekata.</p>
-          )}
-        </article>
-
-        <article className="role-home-card admin-dashboard-card">
-          <div className="role-home-focus-head">
-            <div className="role-home-focus-title">
-              <h3>Naplata</h3>
-            </div>
-          </div>
-
-          <div className="admin-billing-summary">
-            {ADMIN_BILLING_STATUSES.map((status) => (
-              <div key={status} className="detail-item">
-                <span>{BILLING_STATUS_LABELS[status]}</span>
-                <strong>{billingSummaryByStatus[status].count}</strong>
-                <p>{formatAmount(billingSummaryByStatus[status].amount, 'RSD')}</p>
-              </div>
-            ))}
-          </div>
-
-          {importantBilling.length ? (
-            <div className="admin-mini-list">
-              {importantBilling.map((record) => (
-                <div key={record.id} className="admin-mini-item">
-                  <div className="admin-mini-copy">
-                    <strong>{projectTitleById.get(record.projectId) ?? 'Projekat'}</strong>
-                    <p>{clientNameById.get(record.clientId) ?? 'Klijent'}</p>
-                    <p>
-                      {formatAmount(record.amount, record.currency)} ? {formatDueDate(record.dueDate)}
-                    </p>
-                    <p>{BILLING_STATUS_LABELS[record.status]}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="settings-secondary-button"
-                    onClick={() => navigate(`/projects/${record.projectId}`)}
-                  >
-                    Otvori
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="role-home-empty">Nema billing naloga.</p>
-          )}
-        </article>
-
-        <article className="role-home-card admin-dashboard-card">
-          <div className="role-home-focus-head">
-            <div className="role-home-focus-title">
-              <h3>Klijenti</h3>
-            </div>
-          </div>
-
-          <div className="admin-clients-grid">
-            <section className="admin-clients-column">
-              <h4>Top rizik</h4>
-              {topRiskClients.length ? (
-                <div className="admin-mini-list">
-                  {topRiskClients.map(({ client, score }) => (
-                    <div key={`risk-${client.id}`} className="admin-mini-item">
-                      <div className="admin-mini-copy">
-                        <strong>{client.name}</strong>
-                        <p>PULSE {score.total} ? {getPriorityLabel(score.priority)}</p>
-                        <p>{score.signals.risks[0] ?? 'Nema izra?enih rizika.'}</p>
-                      </div>
-                      <button
-                        type="button"
-                        className="settings-secondary-button"
-                        onClick={() => navigate(`/clients/${client.id}`)}
-                      >
-                        Otvori
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="role-home-empty">Nema rizi?nih klijenata.</p>
-              )}
-            </section>
-
-            <section className="admin-clients-column">
-              <h4>Top score</h4>
-              {topScoreClients.length ? (
-                <div className="admin-mini-list">
-                  {topScoreClients.map(({ client, score }) => (
-                    <div key={`score-${client.id}`} className="admin-mini-item">
-                      <div className="admin-mini-copy">
-                        <strong>{client.name}</strong>
-                        <p>PULSE {score.total} ? {getPriorityLabel(score.priority)}</p>
-                        <p>{score.signals.positives[0] ?? 'Bez dodatnih pozitivnih signala.'}</p>
-                      </div>
-                      <button
-                        type="button"
-                        className="settings-secondary-button"
-                        onClick={() => navigate(`/clients/${client.id}`)}
-                      >
-                        Otvori
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="role-home-empty">Nema klijenata za prikaz.</p>
-              )}
-            </section>
-          </div>
-        </article>
-      </div>
+      <section className="pulse-panel pulse-panel-blue">
+        <h3>KLIJENTI – score card</h3>
+        <input className="pulse-search" placeholder="PRETRAGA" />
+        <div className="pulse-create-row"><button className="pulse-outline-btn" onClick={() => setModal({ type: 'create-client' })}>+ NOVI KLIJENT</button><button className="pulse-outline-btn" onClick={() => setModal({ type: 'create-project' })}>+ NOVI PROJEKAT</button></div>
+        <div className="pulse-list">
+          {clientScores.map(({ client, score }) => (
+            <article className="pulse-item pulse-client-score" key={client.id}>
+              <div className="pulse-item-title-row"><h4>{client.name}</h4><span className="pulse-pill pulse-pill-cyan">PULSE {score}</span></div>
+              <p><strong>Tekući projekti</strong> – {projects.find((project) => project.clientId === String(client.id))?.title ?? '-'}</p>
+              <p><strong>Naplata :</strong> u roku</p>
+              <button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'client', client, score })}>DETALJI</button>
+            </article>
+          ))}
+        </div>
+      </section>
+      <AdminModal
+        state={modal}
+        clients={clients}
+        projects={projects}
+        onClose={() => setModal(null)}
+        onCreateClient={handleCreateClient}
+        onCreateProject={handleCreateProject}
+        onUpdateClient={updateClient}
+        onCreateTask={handleCreateTask}
+      />
     </section>
   )
 }

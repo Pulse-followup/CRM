@@ -1016,3 +1016,212 @@
     padding: 20px;
   }
 }
+
+/* PULSE mobile mock UI rewrite 30.04 */
+:root{--pulse-bg:#e9e9e9;--pulse-phone:#101824;--pulse-card:#1d3358;--pulse-red:#ff1616;--pulse-green:#25d74d;--pulse-muted:#a7adb8}body{background:var(--pulse-bg)}.app-shell{min-height:100vh;display:flex;flex-direction:column;align-items:center;background:var(--pulse-bg);color:#d5d8df;padding:72px 12px}.app-content{width:min(560px,100%);padding:0}.pulse-topbar{width:min(480px,100%);height:128px;display:grid;grid-template-columns:86px 1fr 76px;align-items:center;gap:12px;padding:22px;background:var(--pulse-phone);border:2px solid #05313d;border-bottom:1px solid #0a86bd;border-radius:58px 58px 0 0;position:relative}.pulse-logo{width:64px;height:64px;object-fit:contain;border-radius:16px}.pulse-role{text-align:center;color:#0399ee;font-weight:900;font-size:19px;letter-spacing:.06em}.pulse-hamburger{width:58px;height:50px;border:0;background:transparent;display:grid;gap:7px;cursor:pointer}.pulse-hamburger span{height:8px;border-radius:999px;background:#0a99d4;display:block}.pulse-menu{position:relative;display:flex;justify-content:flex-end}.pulse-dropdown{position:absolute;right:0;top:58px;z-index:50;min-width:170px;display:grid;gap:4px;padding:10px;border-radius:18px;background:#142847;border:1px solid rgba(255,255,255,.2)}.pulse-dropdown a{color:white;text-decoration:none;font-weight:800;padding:10px 12px;border-radius:12px}.pulse-phone-screen{width:min(480px,100%);min-height:760px;margin:0 auto;padding:24px 18px 28px;background:var(--pulse-phone);border:2px solid #05313d;border-top:0;border-radius:0 0 58px 58px;box-shadow:0 10px 30px rgba(0,0,0,.18)}.admin-phone-screen{min-height:920px}.pulse-phone-screen h2{margin:0 0 24px;color:#d9d9de;font-size:27px;line-height:1.1;font-weight:900}
+.pulse-panel{border:2px solid rgba(255,255,255,.8);border-radius:28px;margin:0 0 24px;overflow:hidden;background:rgba(14,24,38,.35)}.pulse-panel-red{border-color:var(--pulse-red)}.pulse-panel-blue{border-color:#008fff}.pulse-panel-green{border-color:var(--pulse-green)}.pulse-panel-white{border-color:rgba(255,255,255,.72)}.pulse-panel h3{margin:0;padding:13px 20px 10px;border-bottom:2px solid currentColor;color:#dddfe6;font-size:20px;font-weight:900}.pulse-panel-red h3{border-color:var(--pulse-red)}.pulse-panel-blue h3{border-color:#008fff}.pulse-panel-green h3{border-color:var(--pulse-green)}.pulse-panel-white h3{border-color:rgba(255,255,255,.72)}.pulse-empty{min-height:70px;margin:0;padding:14px 18px 22px;color:var(--pulse-muted);font-size:20px;line-height:1.25}.pulse-list{display:grid;gap:14px;padding:14px 16px 18px}.pulse-item{position:relative;border-radius:20px;background:var(--pulse-card);padding:16px;color:#d4d7df}.pulse-item-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.pulse-item h4{margin:0 0 12px;font-size:17px;line-height:1.15;font-weight:900;color:#e4e5ea}.pulse-item p{margin:5px 0;color:var(--pulse-muted);font-weight:700}.pulse-mini-dl{display:grid;gap:2px;margin:0}.pulse-mini-dl div{display:grid;grid-template-columns:96px 1fr;gap:8px}.pulse-mini-dl dt{color:#c6c9d2;font-weight:900}.pulse-mini-dl dd{margin:0;color:var(--pulse-muted);font-weight:700}
+.pulse-pill{border:3px solid #fff;border-radius:999px;padding:6px 14px;color:#fff;font-size:12px;line-height:1;font-weight:900;text-transform:uppercase;white-space:nowrap}.pulse-pill-red{background:var(--pulse-red)}.pulse-pill-blue{background:#1689d8}.pulse-pill-green{background:#41c957}.pulse-pill-cyan{background:#3d8698}.pulse-item-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:20px}.pulse-date-pill,.pulse-outline-btn{border:3px solid #fff;border-radius:999px;background:transparent;color:#f2f3f5;padding:8px 17px;font-size:12px;font-weight:900;line-height:1;cursor:pointer}.pulse-card-open{float:right;margin-top:8px}.pulse-create-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 18px 12px}.pulse-search{width:calc(100% - 36px);margin:14px 18px 12px;height:40px;border:0;border-radius:8px;background:var(--pulse-card);color:white;padding:0 14px;font-weight:800}.pulse-client-score .pulse-card-open{margin-top:-28px}.pulse-modal-backdrop{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.18)}.pulse-modal{position:relative;width:min(390px,92vw);max-height:86vh;overflow:auto;border-radius:38px;background:var(--pulse-card);color:#d6d9e2;padding:34px 32px 28px;box-shadow:0 20px 50px rgba(0,0,0,.25)}.pulse-modal h3{margin:0 42px 26px 0;font-size:18px;line-height:1.25}.pulse-modal p{margin:13px 0;font-size:17px;line-height:1.25;color:#d0d4de}.pulse-modal strong{color:#e7e9ef}.pulse-modal-x{position:absolute;right:22px;top:22px;width:34px;height:34px;border:3px solid var(--pulse-red);border-radius:50%;background:transparent;color:var(--pulse-red);font-size:20px;font-weight:900;line-height:1;cursor:pointer}.pulse-modal-actions{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:28px}.pulse-modal-btn{border-radius:999px;background:transparent;padding:10px 18px;color:#dce0e8;font-size:11px;font-weight:900;cursor:pointer}.pulse-modal-btn-blue{border:3px solid #008fff}.pulse-modal-btn-green{border:3px solid var(--pulse-green)}.pulse-modal-btn-red{border:3px solid var(--pulse-red)}@media(max-width:560px){.app-shell{padding:0}.pulse-topbar{width:100%;border-radius:0;border-left:0;border-right:0}.app-content,.pulse-phone-screen{width:100%}.pulse-phone-screen{min-height:calc(100vh - 128px);border-radius:0;border-left:0;border-right:0}.pulse-mini-dl div{grid-template-columns:82px 1fr}}
+
+/* Admin client card / create modal wiring */
+.pulse-modal.pulse-client-drawer{width:min(560px,96vw);max-height:92vh;border-radius:24px;padding:28px;background:#121b2f}.pulse-client-drawer .customer-card-group,.pulse-client-drawer .customer-project-card,.pulse-client-drawer .customer-client-edit-form,.pulse-client-drawer .customer-task-create-form,.pulse-create-modal-content .customer-task-create-form,.pulse-modal .customer-client-edit-form{background:rgba(8,14,28,.42);border-color:rgba(255,255,255,.08)}.pulse-client-drawer-content{padding-top:6px}.pulse-client-drawer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.pulse-client-drawer-head h3{margin:0 0 6px;font-size:22px}.pulse-client-drawer-head p{margin:0;color:#9aa8c4}.pulse-client-drawer-actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px}.pulse-create-modal-content{display:grid;gap:14px}.pulse-modal .customer-task-form-field input,.pulse-modal .customer-task-form-field select,.pulse-modal .customer-task-form-field textarea{background:#07101f;color:#f6f8ff;border:1px solid rgba(255,255,255,.12)}.pulse-modal .customer-project-toggle{color:#f6f8ff}.pulse-modal .customer-card-section-head h3{margin:0;font-size:16px}.pulse-modal .customer-card-group h3,.pulse-modal .customer-card-group p{font-size:14px}.pulse-modal .customer-card-group{margin-bottom:14px}@media(min-width:900px){.pulse-modal.pulse-client-drawer{position:fixed;right:16px;top:16px;bottom:16px;max-height:none;margin:0}.pulse-modal-backdrop:has(.pulse-client-drawer){place-items:stretch end}}
+
+/* 30.04 polish: wider create client modal, tighter form, proper outlined buttons, centered close X */
+.pulse-modal-x{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  line-height:1;
+  text-align:center;
+  font-family:inherit;
+}
+
+.pulse-create-client-modal{
+  width:min(920px,90vw);
+  max-height:92vh;
+  border-radius:34px;
+  padding:30px 34px 28px;
+}
+
+.pulse-create-client-modal .customer-client-edit-form{
+  width:100%;
+  display:block;
+  background:transparent !important;
+  border:0 !important;
+  padding:0 !important;
+  margin:0 !important;
+}
+
+.pulse-create-client-modal .customer-card-group{
+  background:transparent !important;
+  border:1px solid rgba(255,255,255,.12) !important;
+  padding:14px !important;
+  margin:0 0 16px !important;
+  box-shadow:none !important;
+}
+
+.pulse-create-client-modal .customer-card-stack .customer-card-group{
+  padding:12px !important;
+  margin:10px 0 0 !important;
+}
+
+.pulse-create-client-modal .customer-client-edit-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  width:100%;
+}
+
+.pulse-create-client-modal .customer-client-edit-field-full{
+  grid-column:1 / -1;
+}
+
+.pulse-create-client-modal .customer-task-form-field,
+.pulse-create-client-modal .customer-task-form-field input,
+.pulse-create-client-modal .customer-task-form-field select,
+.pulse-create-client-modal .customer-task-form-field textarea{
+  width:100%;
+  box-sizing:border-box;
+}
+
+.pulse-create-client-modal .customer-task-form-field input,
+.pulse-create-client-modal .customer-task-form-field select,
+.pulse-create-client-modal .customer-task-form-field textarea{
+  min-height:48px;
+}
+
+.pulse-create-client-modal .customer-card-section-head{
+  align-items:center;
+  gap:12px;
+}
+
+.pulse-create-client-modal .customer-project-toggle,
+.pulse-client-drawer .customer-project-toggle,
+.pulse-create-project-modal .customer-project-toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:34px;
+  padding:8px 16px;
+  border:3px solid #fff !important;
+  border-radius:999px;
+  background:#1689d8 !important;
+  color:#fff !important;
+  font-size:12px;
+  font-weight:900;
+  line-height:1;
+  text-transform:none;
+  cursor:pointer;
+  text-decoration:none;
+}
+
+.pulse-create-client-modal .customer-task-actions{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:16px;
+}
+
+.pulse-create-client-modal .customer-task-actions .customer-project-toggle:first-child{
+  background:#1689d8 !important;
+}
+
+.pulse-create-client-modal .customer-task-actions .customer-project-toggle:last-child{
+  background:var(--pulse-red) !important;
+}
+
+.pulse-create-client-modal .customer-card-section-head .customer-project-toggle{
+  background:#1d3358 !important;
+}
+
+@media(max-width:720px){
+  .pulse-create-client-modal{
+    width:94vw;
+    padding:26px 18px 24px;
+    border-radius:28px;
+  }
+  .pulse-create-client-modal .customer-client-edit-grid{
+    grid-template-columns:1fr;
+  }
+}
+
+/* 30.04 final polish: create project modal follows create client modal */
+.pulse-create-project-modal{
+  width:min(920px,90vw);
+  max-height:92vh;
+  border-radius:34px;
+  padding:30px 34px 28px;
+}
+
+.pulse-create-project-modal .pulse-create-modal-content{
+  width:100%;
+  display:grid;
+  gap:14px;
+}
+
+.pulse-create-project-modal .customer-task-create-form,
+.pulse-create-project-modal .customer-project-workflow-preview{
+  width:100%;
+  background:transparent !important;
+  border:0 !important;
+  padding:0 !important;
+  margin:0 !important;
+  box-shadow:none !important;
+}
+
+.pulse-create-project-modal .customer-task-form-field,
+.pulse-create-project-modal .customer-task-form-field input,
+.pulse-create-project-modal .customer-task-form-field select,
+.pulse-create-project-modal .customer-task-form-field textarea{
+  width:100%;
+  box-sizing:border-box;
+}
+
+.pulse-create-project-modal .customer-task-form-field input,
+.pulse-create-project-modal .customer-task-form-field select,
+.pulse-create-project-modal .customer-task-form-field textarea{
+  min-height:48px;
+  background:#07101f !important;
+  color:#f6f8ff !important;
+  border:1px solid rgba(255,255,255,.12) !important;
+}
+
+.pulse-create-project-modal .customer-task-actions{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:12px;
+  margin-top:18px;
+  width:100%;
+}
+
+.pulse-create-project-modal .customer-task-actions .customer-project-toggle{
+  min-width:min(260px,100%);
+  justify-content:center;
+}
+
+.pulse-create-project-modal .customer-task-actions .customer-project-toggle:first-child{
+  background:#1689d8 !important;
+}
+
+.pulse-create-project-modal .customer-task-actions .customer-project-toggle:last-child{
+  background:var(--pulse-red) !important;
+}
+
+.pulse-create-project-modal .customer-card-section-head,
+.pulse-create-project-modal .customer-workflow-list,
+.pulse-create-project-modal .customer-workflow-stage{
+  background:transparent !important;
+  border-color:rgba(255,255,255,.12) !important;
+}
+
+@media(max-width:720px){
+  .pulse-create-project-modal{
+    width:94vw;
+    padding:26px 18px 24px;
+    border-radius:28px;
+  }
+}

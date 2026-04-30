@@ -598,3 +598,18 @@
     flex-direction: column;
   }
 }
+
+/* 30.04 client drawer fix: sections collapsed by default, clearer actions, badge away from close X */
+.pulse-client-drawer .pulse-client-drawer-head{padding-right:54px;}
+.pulse-client-drawer .pulse-client-drawer-head .pulse-pill{margin-right:10px;flex-shrink:0;}
+.pulse-client-drawer .pulse-client-drawer-actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px;}
+.pulse-client-drawer .pulse-client-drawer-actions .customer-project-toggle,
+.pulse-client-drawer .customer-project-toggle{display:inline-flex !important;align-items:center !important;justify-content:center !important;min-height:36px !important;width:auto !important;padding:9px 18px !important;border:3px solid #008fff !important;border-radius:999px !important;background:transparent !important;color:#f6f8ff !important;font-size:12px !important;font-weight:900 !important;line-height:1 !important;cursor:pointer !important;text-decoration:none !important;box-shadow:none !important;}
+.pulse-client-drawer .pulse-client-drawer-actions .customer-project-toggle:hover,
+.pulse-client-drawer .customer-project-toggle:hover{background:rgba(0,143,255,.16) !important;color:#fff !important;}
+.pulse-client-drawer .customer-card-collapsible:not([open]){padding:14px 16px;}
+.pulse-client-drawer .customer-card-collapsible:not([open]) .customer-card-section-head{margin:0;}
+.pulse-client-drawer .customer-card-collapsible:not([open]) .customer-collapse-icon{transform:rotate(-90deg);}
+.pulse-client-drawer .customer-card-collapsible[open] .customer-collapse-icon{transform:rotate(0deg);}
+.pulse-client-drawer .customer-collapse-icon{transition:transform .15s ease;}
+@media(max-width:560px){.pulse-client-drawer .pulse-client-drawer-head{padding-right:50px;align-items:flex-start;}}

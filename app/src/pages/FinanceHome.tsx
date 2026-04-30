@@ -1,216 +1,88 @@
-import { useMemo } from 'react'
-import { BILLING_STATUS_LABELS, BILLING_STATUS_TONES } from '../features/billing/billingLabels'
+import { useMemo, useState } from 'react'
+import { BILLING_STATUS_LABELS } from '../features/billing/billingLabels'
 import { useBillingStore } from '../features/billing/billingStore'
 import type { BillingRecord, BillingStatus } from '../features/billing/types'
 import { useClientStore } from '../features/clients/clientStore'
 import { useProjectStore } from '../features/projects/projectStore'
 
-interface FinanceBillingItem {
-  record: BillingRecord
-  clientName: string
-  projectTitle: string
+type BillingItem = { record: BillingRecord; client: string; project: string }
+
+function formatDate(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
 }
 
-function formatAmount(amount: number | null, currency: string) {
-  if (typeof amount !== 'number') {
-    return '-'
-  }
-
-  return `${amount} ${currency}`
+function formatAmount(record: BillingRecord) {
+  return typeof record.amount === 'number' ? `${record.amount.toLocaleString('sr-RS')} ${record.currency}` : '-'
 }
 
-function formatDueDate(dueDate: string | null) {
-  if (!dueDate) {
-    return 'Rok nije unet'
-  }
-
-  const date = new Date(dueDate)
-
-  if (Number.isNaN(date.getTime())) {
-    return dueDate
-  }
-
-  return new Intl.DateTimeFormat('sr-RS', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date)
+function tone(status: BillingStatus) {
+  if (status === 'overdue') return 'red'
+  if (status === 'paid') return 'green'
+  if (status === 'invoiced') return 'blue'
+  return 'white'
 }
 
-function FinanceBillingCard({
-  item,
-  primaryActionLabel,
-  onPrimaryAction,
-  secondaryActionLabel,
-  onSecondaryAction,
-}: {
-  item: FinanceBillingItem
-  primaryActionLabel?: string
-  onPrimaryAction?: () => void
-  secondaryActionLabel?: string
-  onSecondaryAction?: () => void
-}) {
-  const { record, clientName, projectTitle } = item
-
+function Section({ title, empty, items, toneClass, onOpen }: { title: string; empty: string; items: BillingItem[]; toneClass: 'red' | 'white' | 'blue' | 'green'; onOpen: (item: BillingItem) => void }) {
   return (
-    <article className="role-home-task-item finance-home-item">
-      <div className="role-home-task-copy">
-        <div className="role-home-task-head">
-          <h4>{projectTitle}</h4>
-          <span className={`role-home-task-badge is-${BILLING_STATUS_TONES[record.status]}`}>
-            {BILLING_STATUS_LABELS[record.status]}
-          </span>
-        </div>
-
-        <dl>
-          <div>
-            <dt>Klijent</dt>
-            <dd>{clientName}</dd>
-          </div>
-          <div>
-            <dt>Iznos</dt>
-            <dd>{formatAmount(record.amount, record.currency)}</dd>
-          </div>
-          <div>
-            <dt>Rok</dt>
-            <dd>{formatDueDate(record.dueDate)}</dd>
-          </div>
-          <div>
-            <dt>Broj fakture</dt>
-            <dd>{record.invoiceNumber || '-'}</dd>
-          </div>
-        </dl>
-
-        {primaryActionLabel || secondaryActionLabel ? (
-          <div className="role-home-task-actions">
-            {primaryActionLabel && onPrimaryAction ? (
-              <button className="settings-secondary-button" type="button" onClick={onPrimaryAction}>
-                {primaryActionLabel}
-              </button>
-            ) : null}
-            {secondaryActionLabel && onSecondaryAction ? (
-              <button className="settings-secondary-button" type="button" onClick={onSecondaryAction}>
-                {secondaryActionLabel}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    </article>
+    <section className={`pulse-panel pulse-panel-${toneClass}`}>
+      <h3>{title}</h3>
+      {items.length === 0 ? <p className="pulse-empty">{empty}</p> : <div className="pulse-list">{items.map((item) => (
+        <article key={item.record.id} className="pulse-item pulse-billing-card" onClick={() => onOpen(item)}>
+          <div className="pulse-item-title-row"><h4>{formatAmount(item.record)}</h4><span className={`pulse-pill pulse-pill-${tone(item.record.status)}`}>{BILLING_STATUS_LABELS[item.record.status]}</span></div>
+          <dl className="pulse-mini-dl">
+            <div><dt>Klijent:</dt><dd>{item.client}</dd></div>
+            <div><dt>Projekat:</dt><dd>{item.project}</dd></div>
+            <div><dt>Rok za plaćanje:</dt><dd>{formatDate(item.record.dueDate)}</dd></div>
+          </dl>
+        </article>
+      ))}</div>}
+    </section>
   )
 }
 
-function FinanceSection({
-  title,
-  emptyText,
-  items,
-  primaryActionLabel,
-  onPrimaryAction,
-  secondaryActionLabel,
-  onSecondaryAction,
-}: {
-  title: string
-  emptyText: string
-  items: FinanceBillingItem[]
-  primaryActionLabel?: (record: BillingRecord) => string
-  onPrimaryAction?: (record: BillingRecord) => void
-  secondaryActionLabel?: (record: BillingRecord) => string
-  onSecondaryAction?: (record: BillingRecord) => void
-}) {
+function BillingModal({ item, onClose, onPaid, onInvoiced, onOverdue }: { item: BillingItem; onClose: () => void; onPaid: () => void; onInvoiced: () => void; onOverdue: () => void }) {
   return (
-    <article className="role-home-card role-home-focus-card">
-      <div className="role-home-focus-head">
-        <div className="role-home-focus-title">
-          <h3>{title}</h3>
+    <div className="pulse-modal-backdrop" onMouseDown={onClose}>
+      <div className="pulse-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="pulse-modal-x" type="button" onClick={onClose}>x</button>
+        <h3>Detalji naplatnog naloga</h3>
+        <p><strong>Klijent</strong> - {item.client}</p>
+        <p><strong>Projekat</strong> - {item.project}</p>
+        <p><strong>Opis</strong> - {item.record.description || '-'}</p>
+        <p><strong>Iznos</strong> - {formatAmount(item.record)}</p>
+        <p><strong>Rok</strong> - {formatDate(item.record.dueDate)}</p>
+        <p><strong>Status</strong> - {BILLING_STATUS_LABELS[item.record.status]}</p>
+        <p><strong>Broj fakture</strong> - {item.record.invoiceNumber || '-'}</p>
+        <div className="pulse-modal-actions">
+          <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onInvoiced}>FAKTURISANO</button>
+          <button className="pulse-modal-btn pulse-modal-btn-red" type="button" onClick={onOverdue}>KASNI</button>
+          <button className="pulse-modal-btn pulse-modal-btn-green" type="button" onClick={onPaid}>PLAĆENO</button>
         </div>
       </div>
-
-      {items.length === 0 ? (
-        <p className="role-home-empty">{emptyText}</p>
-      ) : (
-        <div className="role-home-task-list">
-          {items.map((item) => (
-            <FinanceBillingCard
-              key={item.record.id}
-              item={item}
-              primaryActionLabel={primaryActionLabel?.(item.record)}
-              onPrimaryAction={onPrimaryAction ? () => onPrimaryAction(item.record) : undefined}
-              secondaryActionLabel={secondaryActionLabel?.(item.record)}
-              onSecondaryAction={onSecondaryAction ? () => onSecondaryAction(item.record) : undefined}
-            />
-          ))}
-        </div>
-      )}
-    </article>
+    </div>
   )
 }
 
 function FinanceHome() {
-  const { getAllBilling, markBillingInvoiced, markBillingOverdue, markBillingPaid } =
-    useBillingStore()
+  const { getAllBilling, markBillingInvoiced, markBillingOverdue, markBillingPaid } = useBillingStore()
   const { getClientById } = useClientStore()
   const { getProjectById } = useProjectStore()
+  const [opened, setOpened] = useState<BillingItem | null>(null)
 
-  const billing = getAllBilling()
-
-  const billingItems = useMemo(
-    () =>
-      billing.map((record) => ({
-        record,
-        clientName: getClientById(record.clientId)?.name ?? 'Nepoznat klijent',
-        projectTitle: getProjectById(record.projectId)?.title ?? 'Nepoznat projekat',
-      })),
-    [billing, getClientById, getProjectById],
-  )
-
-  const byStatus = (status: BillingStatus) =>
-    billingItems.filter((item) => item.record.status === status)
-
-  const handleReminder = (record: BillingRecord) => {
-    window.alert(
-      `Podsetnik za ${getProjectById(record.projectId)?.title ?? 'projekat'} ide u sledećoj fazi. Za sada nalog ostaje u statusu Kasni.`,
-    )
-  }
+  const items = useMemo(() => getAllBilling().map((record) => ({ record, client: getClientById(record.clientId)?.name ?? 'Nepoznat klijent', project: getProjectById(record.projectId)?.title ?? 'Nepoznat projekat' })), [getAllBilling, getClientById, getProjectById])
+  const by = (status: BillingStatus) => items.filter((i) => i.record.status === status)
 
   return (
-    <section className="role-home-shell">
-      <header className="role-home-header">
-        <h2>Naplata</h2>
-        <p>Pregled faktura i otvorenih obaveza.</p>
-      </header>
-
-      <div className="role-home-grid role-home-grid-focus">
-        <FinanceSection
-          title="Za fakturisanje"
-          emptyText="Nema naloga spremnih za fakturisanje."
-          items={byStatus('draft')}
-          primaryActionLabel={() => 'Kreiraj fakturu'}
-          onPrimaryAction={(record) => markBillingInvoiced(record.id)}
-        />
-        <FinanceSection
-          title="Fakturisano"
-          emptyText="Nema otvorenih faktura koje čekaju uplatu."
-          items={byStatus('invoiced')}
-          primaryActionLabel={() => 'Označi kao plaćeno'}
-          onPrimaryAction={(record) => markBillingPaid(record.id)}
-          secondaryActionLabel={() => 'Označi kao kasni'}
-          onSecondaryAction={(record) => markBillingOverdue(record.id)}
-        />
-        <FinanceSection
-          title="Plaćeno"
-          emptyText="Još nema zatvorenih uplata."
-          items={byStatus('paid')}
-        />
-        <FinanceSection
-          title="Kasni"
-          emptyText="Nema dospelih kašnjenja."
-          items={byStatus('overdue')}
-          primaryActionLabel={() => 'Pošalji podsetnik'}
-          onPrimaryAction={handleReminder}
-          secondaryActionLabel={() => 'Označi kao plaćeno'}
-          onSecondaryAction={(record) => markBillingPaid(record.id)}
-        />
-      </div>
+    <section className="pulse-phone-screen">
+      <h2>Pregled faktura</h2>
+      <Section title="Za fakturisanje" empty="Nema naloga spremnih za fakturisanje." items={by('draft')} toneClass="white" onOpen={setOpened} />
+      <Section title="FAKTURISANO" empty="Nema otvorenih faktura koje čekaju uplatu." items={by('invoiced')} toneClass="blue" onOpen={setOpened} />
+      <Section title="PLAĆENO" empty="Još nema zatvorenih uplata." items={by('paid')} toneClass="green" onOpen={setOpened} />
+      <Section title="KASNI" empty="Nema dospelih kašnjenja." items={by('overdue')} toneClass="red" onOpen={setOpened} />
+      {opened ? <BillingModal item={opened} onClose={() => setOpened(null)} onInvoiced={() => { markBillingInvoiced(opened.record.id); setOpened(null) }} onOverdue={() => { markBillingOverdue(opened.record.id); setOpened(null) }} onPaid={() => { markBillingPaid(opened.record.id); setOpened(null) }} /> : null}
     </section>
   )
 }

@@ -107,26 +107,29 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
   }
 
   return (
-    <section className="customer-card-section">
-      <div className="customer-card-section-head">
+    <details className="customer-card-section customer-card-collapsible">
+      <summary className="customer-card-section-head">
         <h3>Projekti</h3>
+        <span className="customer-collapse-icon" aria-hidden="true">▾</span>
+      </summary>
+
+      <div className="customer-card-section-body">
+        {activeProjects.length ? (
+          <div className="customer-card-stack">{activeProjects.map((project) => renderProjectCard(project))}</div>
+        ) : (
+          <div className="customer-card-empty">Nema projekata</div>
+        )}
+
+        {archivedProjects.length > 0 && (
+          <details className="customer-archived-projects">
+            <summary>Arhivirani projekti</summary>
+            <div className="customer-card-stack">
+              {archivedProjects.map((project) => renderProjectCard(project, true))}
+            </div>
+          </details>
+        )}
       </div>
-
-      {activeProjects.length ? (
-        <div className="customer-card-stack">{activeProjects.map((project) => renderProjectCard(project))}</div>
-      ) : (
-        <div className="customer-card-empty">Nema projekata</div>
-      )}
-
-      {archivedProjects.length > 0 && (
-        <details className="customer-archived-projects">
-          <summary>Arhivirani projekti</summary>
-          <div className="customer-card-stack">
-            {archivedProjects.map((project) => renderProjectCard(project, true))}
-          </div>
-        </details>
-      )}
-    </section>
+    </details>
   )
 }
 

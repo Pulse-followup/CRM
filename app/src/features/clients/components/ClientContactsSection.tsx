@@ -6,46 +6,49 @@ export interface ClientContactsSectionProps {
 
 function ClientContactsSection({ contacts }: ClientContactsSectionProps) {
   return (
-    <section className="customer-card-section">
-      <div className="customer-card-section-head">
+    <details className="customer-card-section customer-card-collapsible">
+      <summary className="customer-card-section-head">
         <h3>Kontakti</h3>
-      </div>
+        <span className="customer-collapse-icon" aria-hidden="true">▾</span>
+      </summary>
 
-      {contacts.length ? (
-        <div className="customer-card-stack">
-          {contacts.map((contact, index) => (
-            <article key={`${contact.email}-${index}`} className="customer-card-group">
-              <dl className="customer-card-detail-list">
-                <div>
-                  <dt>Ime</dt>
-                  <dd>{contact.name || '-'}</dd>
-                </div>
-                <div>
-                  <dt>Funkcija</dt>
-                  <dd>{contact.role || '-'}</dd>
-                </div>
-                <div>
-                  <dt>Email</dt>
-                  <dd>{contact.email || '-'}</dd>
-                </div>
-                <div>
-                  <dt>Telefon</dt>
-                  <dd>{contact.phone || '-'}</dd>
-                </div>
-                {contact.note ? (
+      <div className="customer-card-section-body">
+        {contacts.length ? (
+          <div className="customer-card-stack">
+            {contacts.map((contact, index) => (
+              <article key={`${contact.email}-${index}`} className="customer-card-group">
+                <dl className="customer-card-detail-list">
                   <div>
-                    <dt>Napomena</dt>
-                    <dd>{contact.note}</dd>
+                    <dt>Ime</dt>
+                    <dd>{contact.name || '-'}</dd>
                   </div>
-                ) : null}
-              </dl>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className="customer-card-empty">Nema unetih kontakata</div>
-      )}
-    </section>
+                  <div>
+                    <dt>Funkcija</dt>
+                    <dd>{contact.role || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>Email</dt>
+                    <dd>{contact.email || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>Telefon</dt>
+                    <dd>{contact.phone || '-'}</dd>
+                  </div>
+                  {contact.note ? (
+                    <div>
+                      <dt>Napomena</dt>
+                      <dd>{contact.note}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="customer-card-empty">Nema unetih kontakata</div>
+        )}
+      </div>
+    </details>
   )
 }
 

@@ -1,240 +1,113 @@
-import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { useAuthStore } from '../features/auth/authStore'
 import { useClientStore } from '../features/clients/clientStore'
 import { useProjectStore } from '../features/projects/projectStore'
 import { TASK_STATUS_LABELS } from '../features/tasks/taskLabels'
-import { getUserTaskBuckets, isTaskDueToday, isTaskLate } from '../features/tasks/taskSelectors'
+import { getUserTaskBuckets } from '../features/tasks/taskSelectors'
 import { useTaskStore } from '../features/tasks/taskStore'
 import type { Task } from '../features/tasks/types'
 
-const MAX_ITEMS_PER_SECTION = 5
+type Item = { task: Task; client: string; project: string; stage: string }
 
-interface UserHomeTaskItem {
-  task: Task
-  clientName: string
-  projectTitle: string
-  stageName: string
+function formatDate(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
 }
 
-function formatDueDate(dueDate?: string) {
-  if (!dueDate) {
-    return 'Rok nije unet'
+function typeLabel(type?: string) {
+  const labels: Record<string, string> = {
+    poziv: 'Poziv', mail: 'Mail', sastanak: 'Sastanak', follow_up: 'Follow-up', ponuda: 'Ponuda', naplata: 'Naplata', interni_zadatak: 'Interni zadatak', drugo: 'Drugo',
   }
-
-  const parsed = new Date(dueDate)
-
-  if (Number.isNaN(parsed.getTime())) {
-    return dueDate
-  }
-
-  return new Intl.DateTimeFormat('sr-RS', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(parsed)
+  return type ? labels[type] ?? type : '-'
 }
 
-function sortByDueDate(tasks: Task[]) {
-  return [...tasks].sort((left, right) => {
-    const leftTime = left.dueDate ? new Date(left.dueDate).getTime() : Number.MAX_SAFE_INTEGER
-    const rightTime = right.dueDate ? new Date(right.dueDate).getTime() : Number.MAX_SAFE_INTEGER
-
-    return leftTime - rightTime
-  })
-}
-
-function getStatusTone(task: Task) {
-  switch (task.status) {
-    case 'zavrsen':
-    case 'naplacen':
-      return 'success'
-    case 'na_cekanju':
-      return 'warning'
-    case 'vracen':
-    case 'poslat_na_naplatu':
-      return 'info'
-    case 'u_radu':
-      return 'active'
-    case 'dodeljen':
-    default:
-      return 'muted'
-  }
-}
-
-function getDueTone(task: Task) {
-  if (isTaskLate(task)) {
-    return 'danger'
-  }
-
-  if (isTaskDueToday(task)) {
-    return 'today'
-  }
-
-  return 'default'
-}
-
-function UserTaskCard({
-  item,
-  onOpen,
-}: {
-  item: UserHomeTaskItem
-  onOpen: (task: Task) => void
-}) {
-  const { task, clientName, projectTitle, stageName } = item
-
-  const dueTone = getDueTone(task)
-
+function TaskCard({ item, onOpen }: { item: Item; onOpen: (task: Task) => void }) {
   return (
-    <div className="role-home-task-item">
-      <div className="role-home-task-copy">
-        <div className="role-home-task-head">
-          <h4>{task.title}</h4>
-          <span className={`role-home-task-badge is-${getStatusTone(task)}`}>
-            {TASK_STATUS_LABELS[task.status]}
-          </span>
-        </div>
-
-        <dl>
-          <div>
-            <dt>Klijent</dt>
-            <dd>{clientName}</dd>
-          </div>
-          <div>
-            <dt>Projekat</dt>
-            <dd>{projectTitle}</dd>
-          </div>
-          <div>
-            <dt>Faza</dt>
-            <dd>{stageName}</dd>
-          </div>
-          <div>
-            <dt>Rok</dt>
-            <dd className={`role-home-due is-${dueTone}`}>{formatDueDate(task.dueDate)}</dd>
-          </div>
-        </dl>
+    <article className="pulse-item pulse-task-card">
+      <div className="pulse-item-title-row">
+        <h4>{item.task.title}</h4>
+        <span className="pulse-pill pulse-pill-blue">{TASK_STATUS_LABELS[item.task.status] ?? item.task.status}</span>
       </div>
-
-      <button
-        className="settings-secondary-button role-home-open-button"
-        type="button"
-        onClick={() => onOpen(task)}
-      >
-        Otvori
-      </button>
-    </div>
-  )
-}
-
-function TaskFocusList({
-  title,
-  emptyText,
-  items,
-  onOpen,
-}: {
-  title: string
-  emptyText: string
-  items: UserHomeTaskItem[]
-  onOpen: (task: Task) => void
-}) {
-  return (
-    <article className="role-home-card role-home-focus-card">
-      <div className="role-home-focus-head">
-        <div className="role-home-focus-title">
-          <h3>{title}</h3>
-        </div>
+      <dl className="pulse-mini-dl">
+        <div><dt>Klijent:</dt><dd>{item.client}</dd></div>
+        <div><dt>Projekat:</dt><dd>{item.project}</dd></div>
+        <div><dt>Faza:</dt><dd>{item.stage}</dd></div>
+      </dl>
+      <div className="pulse-item-actions">
+        <span className="pulse-date-pill">{formatDate(item.task.dueDate)}</span>
+        <button className="pulse-outline-btn" type="button" onClick={() => onOpen(item.task)}>OTVORI</button>
       </div>
-
-      {items.length === 0 ? (
-        <p className="role-home-empty">{emptyText}</p>
-      ) : (
-        <div className="role-home-task-list">
-          {items.map((item) => (
-            <UserTaskCard key={item.task.id} item={item} onOpen={onOpen} />
-          ))}
-        </div>
-      )}
     </article>
   )
 }
 
+function Section({ title, empty, items, tone, onOpen }: { title: string; empty: string; items: Item[]; tone: 'red' | 'white' | 'blue'; onOpen: (task: Task) => void }) {
+  return (
+    <section className={`pulse-panel pulse-panel-${tone}`}>
+      <h3>{title}</h3>
+      {items.length === 0 ? <p className="pulse-empty">{empty}</p> : <div className="pulse-list">{items.map((item) => <TaskCard key={item.task.id} item={item} onOpen={onOpen} />)}</div>}
+    </section>
+  )
+}
+
+function TaskModal({ task, item, onClose, onHold, onDone }: { task: Task; item?: Item; onClose: () => void; onHold: () => void; onDone: () => void }) {
+  return (
+    <div className="pulse-modal-backdrop" onMouseDown={onClose}>
+      <div className="pulse-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="pulse-modal-x" type="button" onClick={onClose}>x</button>
+        <h3>{task.title}</h3>
+        <p><strong>Tip</strong> - {typeLabel(task.type)}</p>
+        <p><strong>Klijent</strong> - {item?.client ?? '-'}</p>
+        <p><strong>Projekat</strong> - {item?.project ?? '-'}</p>
+        <p><strong>Opis:</strong> {task.description || '-'}</p>
+        <br />
+        <p>Dodeljeno - {task.assignedToLabel || '-'}</p>
+        <p>Rok - {formatDate(task.dueDate)}</p>
+        <p>Utrošeno vreme - {task.timeSpentMinutes ? `${task.timeSpentMinutes} min` : '-'}</p>
+        <p>Trošak materijala - {task.materialCost ?? '-'}</p>
+        <p>Opis materijala:</p>
+        <p>{task.materialDescription || '-'}</p>
+        <div className="pulse-modal-actions">
+          <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onHold}>STAVI NA ČEKANJE</button>
+          <button className="pulse-modal-btn pulse-modal-btn-green" type="button" onClick={onDone}>ZAVRŠI TASK</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function UserHome() {
-  const navigate = useNavigate()
   const { currentUser } = useAuthStore()
-  const { tasks } = useTaskStore()
+  const { tasks, updateTask } = useTaskStore()
   const { clients } = useClientStore()
   const { projects } = useProjectStore()
+  const [opened, setOpened] = useState<Task | null>(null)
 
-  const clientNameById = useMemo(
-    () => new Map(clients.map((client) => [String(client.id), client.name])),
-    [clients],
-  )
-
-  const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
+  const itemsById = useMemo(() => {
+    const clientById = new Map(clients.map((c) => [String(c.id), c.name]))
+    const projectById = new Map(projects.map((p) => [p.id, p]))
+    const map = new Map<string, Item>()
+    tasks.forEach((task) => {
+      const project = projectById.get(task.projectId)
+      const stage = project?.stages?.find((s) => s.id === task.stageId)?.name ?? 'Bez faze'
+      map.set(task.id, { task, client: clientById.get(String(task.clientId)) ?? 'Nepoznat klijent', project: project?.title ?? 'Nepoznat projekat', stage })
+    })
+    return map
+  }, [clients, projects, tasks])
 
   const buckets = useMemo(() => getUserTaskBuckets(tasks, currentUser), [tasks, currentUser])
-
-  const myTasks = useMemo(
-    () => tasks.filter((task) => task.assignedToUserId === currentUser.id || task.assignedToLabel === currentUser.name),
-    [tasks, currentUser.id, currentUser.name],
-  )
-
-  const toTaskItems = (sectionTasks: Task[]): UserHomeTaskItem[] =>
-    sortByDueDate(sectionTasks)
-      .slice(0, MAX_ITEMS_PER_SECTION)
-      .map((task) => {
-        const project = projectById.get(task.projectId)
-        const stageName =
-          project?.stages?.find((stage) => stage.id === task.stageId)?.name ?? (task.stageId ? 'Bez faze' : 'Bez faze')
-
-        return {
-          task,
-          clientName: clientNameById.get(String(task.clientId)) ?? 'Nepoznat klijent',
-          projectTitle: project?.title ?? 'Nepoznat projekat',
-          stageName,
-        }
-      })
-
-  const handleOpenTask = (task: Task) => {
-    navigate(`/tasks/${task.id}`)
-  }
-
-  const hasNoTasks = myTasks.length === 0
+  const toItems = (list: Task[]) => list.map((task) => itemsById.get(task.id)).filter(Boolean) as Item[]
+  const openedItem = opened ? itemsById.get(opened.id) : undefined
 
   return (
-    <section className="role-home-shell">
-      <header className="role-home-header">
-        <h2>Tvoj fokus danas</h2>
-      </header>
-
-      {hasNoTasks ? (
-        <article className="role-home-card role-home-focus-card">
-          <p className="role-home-empty role-home-empty-global">
-            Nema zadataka. Sa?ekaj dodelu od admina.
-          </p>
-        </article>
-      ) : (
-        <div className="role-home-grid role-home-grid-focus">
-          <TaskFocusList
-            title="Kasni zadaci"
-            emptyText="Nema kašnjenja"
-            items={toTaskItems(buckets.late)}
-            onOpen={handleOpenTask}
-          />
-          <TaskFocusList
-            title="Danas"
-            emptyText="Nema zadataka za danas"
-            items={toTaskItems(buckets.today)}
-            onOpen={handleOpenTask}
-          />
-          <TaskFocusList
-            title="U radu"
-            emptyText="Nema aktivnih zadataka"
-            items={toTaskItems(buckets.inProgress)}
-            onOpen={handleOpenTask}
-          />
-        </div>
-      )}
+    <section className="pulse-phone-screen">
+      <h2>Tvoj fokus danas</h2>
+      <Section title="Zadaci koji kasne" empty="Nema kašnjenja" items={toItems(buckets.late)} tone="red" onOpen={setOpened} />
+      <Section title="Danas" empty="Nema zadataka za danas" items={toItems(buckets.today)} tone="white" onOpen={setOpened} />
+      <Section title="U radu" empty="Nema aktivnih zadataka" items={toItems(buckets.inProgress)} tone="blue" onOpen={setOpened} />
+      {opened ? <TaskModal task={opened} item={openedItem} onClose={() => setOpened(null)} onHold={() => { updateTask({ ...opened, status: 'na_cekanju', updatedAt: new Date().toISOString() }); setOpened(null) }} onDone={() => { updateTask({ ...opened, status: 'zavrsen', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setOpened(null) }} /> : null}
     </section>
   )
 }

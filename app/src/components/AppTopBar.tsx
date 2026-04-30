@@ -1,17 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../features/auth/authStore'
 
-function getRoleLabel(role: string) {
-  switch (role) {
-    case 'admin':
-      return 'Admin'
-    case 'finance':
-      return 'Finance'
-    case 'user':
-    default:
-      return 'User'
-  }
+function roleLabel(role: string) {
+  if (role === 'admin') return 'ADMIN'
+  if (role === 'finance') return 'FINANCE'
+  return 'USER'
 }
 
 function AppTopBar() {
@@ -20,80 +14,36 @@ function AppTopBar() {
   const menuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
-      if (!menuRef.current) {
-        return
-      }
-
-      if (!menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
+    const close = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setIsOpen(false)
     }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
+    const esc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false)
     }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleEscape)
-
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc)
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleEscape)
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', esc)
     }
   }, [])
 
-  const roleLabel = getRoleLabel(currentUser.role)
-
-  const menuItems = useMemo(() => {
-    const primaryLabel = currentUser.role === 'admin' ? 'Dashboard' : 'Po?etna'
-
-    return [
-      { to: '/', label: primaryLabel },
-      { to: '/settings', label: 'Pode?avanja' },
-    ]
-  }, [currentUser.role])
-
   return (
-    <header className="app-topbar">
-      <Link to="/" className="app-topbar-brand" aria-label="PULSE po?etna">
-        <img src="/CRM/pulse-header-logo.png" alt="PULSE" className="app-topbar-logo" />
+    <header className="pulse-topbar">
+      <Link to="/" className="pulse-logo-wrap" aria-label="PULSE home">
+        <img src="/CRM/pulse-header-logo.png" alt="PULSE" className="pulse-logo" />
       </Link>
-
-      <div className="app-topbar-user">
-        <span className="app-topbar-role">{roleLabel}</span>
-        <strong>{currentUser.name}</strong>
-      </div>
-
-      <div className="app-topbar-menu" ref={menuRef}>
-        <button
-          type="button"
-          className={`app-topbar-toggle${isOpen ? ' is-open' : ''}`}
-          onClick={() => setIsOpen((current) => !current)}
-          aria-expanded={isOpen}
-          aria-haspopup="menu"
-          aria-label="Otvori meni"
-        >
+      <div className="pulse-role">{roleLabel(currentUser.role)}</div>
+      <div className="pulse-menu" ref={menuRef}>
+        <button className="pulse-hamburger" type="button" onClick={() => setIsOpen((v) => !v)} aria-label="Meni">
           <span />
           <span />
           <span />
         </button>
-
         {isOpen ? (
-          <div className="app-topbar-dropdown" role="menu" aria-label="Glavni meni">
-            {menuItems.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="app-topbar-link"
-                role="menuitem"
-                onClick={() => setIsOpen(false)}
-              >
-                {item.label}
-              </Link>
-            ))}
+          <div className="pulse-dropdown">
+            <Link to="/settings" onClick={() => setIsOpen(false)}>Podešavanja</Link>
+            <Link to="/" onClick={() => setIsOpen(false)}>Home</Link>
           </div>
         ) : null}
       </div>
