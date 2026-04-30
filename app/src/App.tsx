@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { AuthProvider, useAuthStore } from './features/auth/authStore'
+import { CloudProvider } from './features/cloud/cloudStore'
 import { BillingProvider } from './features/billing/billingStore'
 import { ClientProvider } from './features/clients/clientStore'
 import { ProjectProvider } from './features/projects/projectStore'
@@ -23,17 +24,19 @@ import UserTasks from './pages/UserTasks'
 
 function App() {
   return (
-    <AuthProvider>
-      <ClientProvider>
-        <ProjectProvider>
-          <TaskProvider>
-            <BillingProvider>
-              <AppRoutes />
-            </BillingProvider>
-          </TaskProvider>
-        </ProjectProvider>
-      </ClientProvider>
-    </AuthProvider>
+    <CloudProvider>
+      <AuthProvider>
+        <ClientProvider>
+          <ProjectProvider>
+            <TaskProvider>
+              <BillingProvider>
+                <AppRoutes />
+              </BillingProvider>
+            </TaskProvider>
+          </ProjectProvider>
+        </ClientProvider>
+      </AuthProvider>
+    </CloudProvider>
   )
 }
 

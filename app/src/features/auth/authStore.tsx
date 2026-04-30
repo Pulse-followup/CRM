@@ -7,6 +7,7 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react'
+import { useCloudStore } from '../cloud/cloudStore'
 import { mockUsers } from './mockUsers'
 import type { AppUser } from './types'
 
@@ -17,6 +18,7 @@ interface AuthStoreValue {
   users: AppUser[]
   currentUser: AppUser
   setCurrentUser: (userId: string) => void
+  isCloudUser: boolean
 }
 
 const AuthStoreContext = createContext<AuthStoreValue | null>(null)
@@ -45,31 +47,77 @@ function writeStoredUserId(userId: string) {
   }
 }
 
+function workspaceRoleToAppRole(role?: string): AppUser['role'] {
+  if (role === 'admin') return 'admin'
+  if (role === 'finance') return 'finance'
+  return 'user'
+}
+
+function profileName(email: string, fullName?: string | null) {
+  if (fullName?.trim()) return fullName.trim()
+  return email.split('@')[0] || email
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
+  const cloud = useCloudStore()
   const [currentUserId, setCurrentUserId] = useState<string>(() => readStoredUserId())
 
   useEffect(() => {
     writeStoredUserId(currentUserId)
   }, [currentUserId])
 
-  const currentUser =
-    mockUsers.find((user) => user.id === currentUserId) ?? DEFAULT_USER
+  const cloudUsers = useMemo<AppUser[]>(() => {
+    if (!cloud.activeWorkspace || !cloud.members.length) return []
 
-  const setCurrentUser = useCallback((userId: string) => {
-    if (!mockUsers.some((user) => user.id === userId)) {
-      return
+    return cloud.members.map((member) => {
+      const email = member.profile?.email || member.user_id
+      return {
+        id: member.user_id,
+        name: profileName(email, member.profile?.full_name),
+        email,
+        role: workspaceRoleToAppRole(member.role),
+      }
+    })
+  }, [cloud.activeWorkspace, cloud.members])
+
+  const cloudCurrentUser = useMemo<AppUser | null>(() => {
+    if (!cloud.user || !cloud.membership) return null
+    const email = cloud.profile?.email || cloud.user.email || cloud.user.id
+
+    return {
+      id: cloud.user.id,
+      name: profileName(email, cloud.profile?.full_name),
+      email,
+      role: workspaceRoleToAppRole(cloud.membership.role),
     }
+  }, [cloud.membership, cloud.profile, cloud.user])
 
-    setCurrentUserId(userId)
-  }, [])
+  const users = cloudCurrentUser ? cloudUsers : mockUsers
+  const currentUser = cloudCurrentUser || mockUsers.find((user) => user.id === currentUserId) || DEFAULT_USER
+
+  const setCurrentUser = useCallback(
+    (userId: string) => {
+      if (cloudCurrentUser) {
+        return
+      }
+
+      if (!mockUsers.some((user) => user.id === userId)) {
+        return
+      }
+
+      setCurrentUserId(userId)
+    },
+    [cloudCurrentUser],
+  )
 
   const value = useMemo<AuthStoreValue>(
     () => ({
-      users: mockUsers,
+      users,
       currentUser,
       setCurrentUser,
+      isCloudUser: Boolean(cloudCurrentUser),
     }),
-    [currentUser, setCurrentUser],
+    [cloudCurrentUser, currentUser, setCurrentUser, users],
   )
 
   return <AuthStoreContext.Provider value={value}>{children}</AuthStoreContext.Provider>

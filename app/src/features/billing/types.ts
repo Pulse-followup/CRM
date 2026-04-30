@@ -10,9 +10,13 @@ export interface BillingRecord {
   dueDate: string | null
   status: BillingStatus
   invoiceNumber: string
+  taskCount?: number
+  totalTimeMinutes?: number
   totalLaborCost?: number
   totalMaterialCost?: number
   totalCost?: number
+  marginPercent?: number
+  netAmount?: number
   createdAt: string
   updatedAt: string
   invoicedAt?: string | null
@@ -25,7 +29,11 @@ export interface CreateBillingPayload {
   currency: string
   dueDate: string | null
   invoiceNumber: string
+  taskCount?: number
+  totalTimeMinutes?: number
   totalLaborCost?: number
   totalMaterialCost?: number
   totalCost?: number
+  marginPercent?: number
+  netAmount?: number
 }

@@ -1,6 +1,6 @@
 import type { BillingRecord } from './types'
 
-const ACTIVE_BILLING_STATUSES = new Set(['draft', 'invoiced', 'overdue', 'paid'])
+const ACTIVE_BILLING_STATUSES = new Set(['draft', 'invoiced', 'overdue'])
 
 export function getAllBilling(records: BillingRecord[]) {
   return records

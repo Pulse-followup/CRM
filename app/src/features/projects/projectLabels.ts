@@ -2,6 +2,7 @@ import type { ProjectFrequency, ProjectStatus, ProjectType } from './types'
 
 export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
   kampanja: 'Kampanja',
+  prodaja: 'Prodaja',
   usluga: 'Usluga',
   postavka: 'Postavka',
   odrzavanje: 'Odrzavanje',

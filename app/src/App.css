@@ -1225,3 +1225,171 @@
     border-radius:28px;
   }
 }
+
+.settings-cloud-panel label,
+.settings-cloud-panel .settings-invite-link {
+  display: grid;
+  gap: 0.45rem;
+  color: #9fb1cf;
+  font-weight: 800;
+}
+
+.settings-form-grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.settings-form-grid input,
+.settings-form-grid select,
+.settings-invite-link input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(5, 13, 28, 0.78);
+  color: #f6f8ff;
+  padding: 0 1rem;
+  font-weight: 800;
+}
+
+.settings-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.settings-help-box {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid rgba(0, 143, 255, 0.38);
+  border-radius: 16px;
+  background: rgba(13, 38, 78, 0.55);
+  padding: 1rem;
+  color: #dbe8ff;
+  font-weight: 800;
+}
+
+.settings-help-box code {
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 8px;
+  padding: 0.15rem 0.35rem;
+}
+
+.settings-error-text {
+  color: #ff8e8e !important;
+  font-weight: 900;
+}
+
+.settings-success-text {
+  color: #51e476 !important;
+  font-weight: 900;
+}
+
+.settings-team-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.settings-team-list h4,
+.settings-form-grid h4 {
+  margin: 0.25rem 0;
+  color: #ffffff;
+}
+
+.settings-team-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.6rem;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 14px;
+  background: rgba(7, 16, 34, 0.72);
+  padding: 0.8rem;
+}
+
+.settings-team-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-team-row strong,
+.settings-team-row em {
+  color: #dce7ff;
+  font-style: normal;
+  font-size: 0.85rem;
+}
+
+.pulse-complete-form{
+  margin-top:22px;
+  padding-top:18px;
+  border-top:1px solid rgba(255,255,255,.14);
+}
+.pulse-complete-form h4{
+  margin:0 0 14px;
+  font-size:15px;
+  color:#fff;
+}
+.pulse-form-field{
+  display:grid;
+  gap:7px;
+  margin:12px 0;
+  font-weight:800;
+  color:#aebcdf;
+}
+.pulse-form-field input,
+.pulse-form-field textarea,
+.pulse-form-field select{
+  width:100%;
+  box-sizing:border-box;
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:13px;
+  background:#07101f;
+  color:#fff;
+  padding:12px 14px;
+  font:inherit;
+  font-weight:800;
+}
+.pulse-form-field textarea{
+  min-height:90px;
+  resize:vertical;
+}
+
+/* MVP final polish: softer glass modals */
+.pulse-modal-backdrop {
+  background: rgba(3, 8, 18, 0.32) !important;
+  backdrop-filter: blur(7px) saturate(115%);
+}
+
+.pulse-modal {
+  background: linear-gradient(145deg, rgba(18, 31, 56, 0.82), rgba(8, 15, 29, 0.72)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(18px) saturate(125%);
+}
+
+.pulse-modal.pulse-client-drawer {
+  background: linear-gradient(145deg, rgba(18, 31, 56, 0.84), rgba(8, 15, 29, 0.74)) !important;
+}
+
+.pulse-form-field input,
+.pulse-form-field textarea,
+.pulse-modal .customer-task-form-field input,
+.pulse-modal .customer-task-form-field select,
+.pulse-modal .customer-task-form-field textarea {
+  background: rgba(4, 11, 24, 0.72) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.pulse-project-billing-summary {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.pulse-project-billing-summary h4 {
+  margin: 0;
+  color: #f8fafc;
+}

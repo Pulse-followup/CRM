@@ -44,4 +44,5 @@ export interface Task {
   laborCost?: number
   billingStatus?: string
   billingState?: TaskBillingState
+  billingId?: string | null
 }

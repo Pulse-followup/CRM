@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useAuthStore } from '../features/auth/authStore'
+import { useCloudStore } from '../features/cloud/cloudStore'
 import { useClientStore } from '../features/clients/clientStore'
 import { useProjectStore } from '../features/projects/projectStore'
+import { completeTask, pauseTask, resumeTask, startTask } from '../features/tasks/taskActions'
 import { TASK_STATUS_LABELS } from '../features/tasks/taskLabels'
 import { getUserTaskBuckets } from '../features/tasks/taskSelectors'
 import { useTaskStore } from '../features/tasks/taskStore'
@@ -18,7 +20,14 @@ function formatDate(value?: string | null) {
 
 function typeLabel(type?: string) {
   const labels: Record<string, string> = {
-    poziv: 'Poziv', mail: 'Mail', sastanak: 'Sastanak', follow_up: 'Follow-up', ponuda: 'Ponuda', naplata: 'Naplata', interni_zadatak: 'Interni zadatak', drugo: 'Drugo',
+    poziv: 'Poziv',
+    mail: 'Mail',
+    sastanak: 'Sastanak',
+    follow_up: 'Follow-up',
+    ponuda: 'Ponuda',
+    naplata: 'Naplata',
+    interni_zadatak: 'Interni zadatak',
+    drugo: 'Drugo',
   }
   return type ? labels[type] ?? type : '-'
 }
@@ -52,7 +61,71 @@ function Section({ title, empty, items, tone, onOpen }: { title: string; empty: 
   )
 }
 
-function TaskModal({ task, item, onClose, onHold, onDone }: { task: Task; item?: Item; onClose: () => void; onHold: () => void; onDone: () => void }) {
+function CompletionForm({
+  onCancel,
+  onSubmit,
+}: {
+  onCancel: () => void
+  onSubmit: (payload: { timeSpentMinutes: number; materialCost: number; materialDescription: string }) => void
+}) {
+  const [timeSpentMinutes, setTimeSpentMinutes] = useState('')
+  const [materialCost, setMaterialCost] = useState('0')
+  const [materialDescription, setMaterialDescription] = useState('')
+
+  const handleSubmit = () => {
+    const parsedTime = Number(timeSpentMinutes)
+    const parsedMaterial = Number(materialCost)
+    if (!Number.isFinite(parsedTime) || parsedTime < 0) return
+    if (!Number.isFinite(parsedMaterial) || parsedMaterial < 0) return
+    onSubmit({
+      timeSpentMinutes: parsedTime,
+      materialCost: parsedMaterial,
+      materialDescription,
+    })
+  }
+
+  return (
+    <div className="pulse-complete-form">
+      <h4>Unos utrošenog vremena i materijala</h4>
+      <label className="pulse-form-field">
+        <span>Utrošeno vreme (min)</span>
+        <input type="number" min="0" value={timeSpentMinutes} onChange={(event) => setTimeSpentMinutes(event.target.value)} placeholder="npr. 45" />
+      </label>
+      <label className="pulse-form-field">
+        <span>Trošak materijala (RSD)</span>
+        <input type="number" min="0" value={materialCost} onChange={(event) => setMaterialCost(event.target.value)} placeholder="npr. 1200" />
+      </label>
+      <label className="pulse-form-field">
+        <span>Opis materijala</span>
+        <input type="text" value={materialDescription} onChange={(event) => setMaterialDescription(event.target.value)} placeholder="npr. štampa, nosači, transport..." />
+      </label>
+      <div className="pulse-modal-actions">
+        <button className="pulse-modal-btn pulse-modal-btn-green" type="button" onClick={handleSubmit}>POTVRDI ZAVRŠETAK</button>
+        <button className="pulse-modal-btn pulse-modal-btn-red" type="button" onClick={onCancel}>OTKAŽI</button>
+      </div>
+    </div>
+  )
+}
+
+function TaskModal({
+  task,
+  item,
+  onClose,
+  onStart,
+  onHold,
+  onResume,
+  onComplete,
+}: {
+  task: Task
+  item?: Item
+  onClose: () => void
+  onStart: () => void
+  onHold: () => void
+  onResume: () => void
+  onComplete: (payload: { timeSpentMinutes: number; materialCost: number; materialDescription: string }) => void
+}) {
+  const [isCompleting, setIsCompleting] = useState(false)
+
   return (
     <div className="pulse-modal-backdrop" onMouseDown={onClose}>
       <div className="pulse-modal" onMouseDown={(e) => e.stopPropagation()}>
@@ -69,10 +142,17 @@ function TaskModal({ task, item, onClose, onHold, onDone }: { task: Task; item?:
         <p>Trošak materijala - {task.materialCost ?? '-'}</p>
         <p>Opis materijala:</p>
         <p>{task.materialDescription || '-'}</p>
-        <div className="pulse-modal-actions">
-          <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onHold}>STAVI NA ČEKANJE</button>
-          <button className="pulse-modal-btn pulse-modal-btn-green" type="button" onClick={onDone}>ZAVRŠI TASK</button>
-        </div>
+
+        {isCompleting ? (
+          <CompletionForm onCancel={() => setIsCompleting(false)} onSubmit={onComplete} />
+        ) : (
+          <div className="pulse-modal-actions">
+            {task.status === 'dodeljen' ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onStart}>PREUZMI TASK</button> : null}
+            {task.status === 'u_radu' ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onHold}>STAVI NA ČEKANJE</button> : null}
+            {(task.status === 'na_cekanju' || task.status === 'vracen') ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onResume}>NASTAVI RAD</button> : null}
+            {task.status === 'u_radu' ? <button className="pulse-modal-btn pulse-modal-btn-green" type="button" onClick={() => setIsCompleting(true)}>ZAVRŠI TASK</button> : null}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -80,6 +160,7 @@ function TaskModal({ task, item, onClose, onHold, onDone }: { task: Task; item?:
 
 function UserHome() {
   const { currentUser } = useAuthStore()
+  const { membership } = useCloudStore()
   const { tasks, updateTask } = useTaskStore()
   const { clients } = useClientStore()
   const { projects } = useProjectStore()
@@ -101,13 +182,34 @@ function UserHome() {
   const toItems = (list: Task[]) => list.map((task) => itemsById.get(task.id)).filter(Boolean) as Item[]
   const openedItem = opened ? itemsById.get(opened.id) : undefined
 
+  const closeModal = () => setOpened(null)
+  const updateOpenedTask = (nextTask: Task) => {
+    updateTask(nextTask)
+    setOpened(nextTask)
+  }
+
   return (
     <section className="pulse-phone-screen">
       <h2>Tvoj fokus danas</h2>
       <Section title="Zadaci koji kasne" empty="Nema kašnjenja" items={toItems(buckets.late)} tone="red" onOpen={setOpened} />
       <Section title="Danas" empty="Nema zadataka za danas" items={toItems(buckets.today)} tone="white" onOpen={setOpened} />
       <Section title="U radu" empty="Nema aktivnih zadataka" items={toItems(buckets.inProgress)} tone="blue" onOpen={setOpened} />
-      {opened ? <TaskModal task={opened} item={openedItem} onClose={() => setOpened(null)} onHold={() => { updateTask({ ...opened, status: 'na_cekanju', updatedAt: new Date().toISOString() }); setOpened(null) }} onDone={() => { updateTask({ ...opened, status: 'zavrsen', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setOpened(null) }} /> : null}
+      {opened ? (
+        <TaskModal
+          task={opened}
+          item={openedItem}
+          onClose={closeModal}
+          onStart={() => updateOpenedTask(startTask(opened))}
+          onHold={() => updateOpenedTask(pauseTask(opened))}
+          onResume={() => updateOpenedTask(resumeTask(opened))}
+          onComplete={(payload) => {
+            const hourlyRate = membership?.hourly_rate ?? 0
+            const laborCost = Math.round((payload.timeSpentMinutes / 60) * hourlyRate)
+            updateTask({ ...completeTask(opened, payload), laborCost })
+            setOpened(null)
+          }}
+        />
+      ) : null}
     </section>
   )
 }

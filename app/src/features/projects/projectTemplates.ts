@@ -79,6 +79,7 @@ export const PROJECT_TEMPLATES: Record<ProjectTemplateId, ProjectTemplateDefinit
 
 const PROJECT_TYPE_TEMPLATE_MAP: Partial<Record<ProjectType, ProjectTemplateId>> = {
   kampanja: 'kampanja',
+  prodaja: 'sales',
   postavka: 'produkcija',
   usluga: 'jednokratni',
   odrzavanje: 'odrzavanje',

@@ -2,7 +2,7 @@ import type { BillingStatus } from '../billing/types'
 
 export type ProjectStatus = 'aktivan' | 'arhiviran' | 'zavrsen'
 
-export type ProjectType = 'kampanja' | 'usluga' | 'postavka' | 'odrzavanje' | 'drugo'
+export type ProjectType = 'kampanja' | 'prodaja' | 'usluga' | 'postavka' | 'odrzavanje' | 'drugo'
 
 export type ProjectFrequency =
   | 'jednokratno'

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ProjectStage } from '../../projects/types'
 import { PROJECT_STAGE_ROLE_LABELS } from '../../projects/projectTemplates'
-import { mockUsers } from '../../workspace/mockUsers'
+import { useAuthStore } from '../../auth/authStore'
 import { TASK_TYPE_LABELS } from '../taskLabels'
 import type { TaskType } from '../types'
 
@@ -93,7 +93,8 @@ function CreateTaskForm({
     stageId: initialStageId ?? initialValues.stageId,
   })
   const [errors, setErrors] = useState<FormErrors>({})
-  const assignableUsers = mockUsers.filter((user) => user.role !== 'admin')
+  const { users, isCloudUser } = useAuthStore()
+  const assignableUsers = users.filter((user) => user.role !== 'admin')
 
   const selectedProject = useMemo(
     () => projectOptions.find((project) => project.id === values.projectId),
@@ -271,11 +272,17 @@ function CreateTaskForm({
         <span>Dodeljeno</span>
         <select value={values.assignedToUserId} onChange={handleAssignedUserChange}>
           <option value="">Izaberi korisnika</option>
-          {assignableUsers.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
+          {assignableUsers.length ? (
+            assignableUsers.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))
+          ) : (
+            <option value="" disabled>
+              {isCloudUser ? 'Nema clanova workspace-a' : 'Nema korisnika'}
             </option>
-          ))}
+          )}
         </select>
         {errors.assignedToUserId ? (
           <small className="customer-task-form-error">{errors.assignedToUserId}</small>

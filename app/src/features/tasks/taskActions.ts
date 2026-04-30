@@ -6,19 +6,6 @@ export interface CompleteTaskPayload {
   materialDescription?: string
 }
 
-function getBillingStateForCompletedTask(task: Task, payload: CompleteTaskPayload) {
-  const hasBillingInputs =
-    payload.timeSpentMinutes > 0 ||
-    payload.materialCost > 0 ||
-    Boolean(payload.materialDescription?.trim())
-
-  if (hasBillingInputs) {
-    return 'ready_for_billing' as const
-  }
-
-  return task.billingState ?? 'not_billable'
-}
-
 export function startTask(task: Task): Task {
   if (task.status !== 'dodeljen') return task
 
@@ -62,6 +49,6 @@ export function completeTask(task: Task, payload: CompleteTaskPayload): Task {
     materialDescription: payload.materialDescription || '',
     completedAt,
     updatedAt: completedAt,
-    billingState: getBillingStateForCompletedTask(task, payload),
+    billingState: task.billingState ?? 'not_billable',
   }
 }
