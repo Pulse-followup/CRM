@@ -211,7 +211,11 @@ function AdminHome() {
   const clientName = (id: string) => clientById.get(String(id))?.name ?? 'Nepoznat klijent'
   const projectTitle = (id: string) => projectById.get(id)?.title ?? 'Nepoznat projekat'
 
-  const urgentBilling = billing.filter((record) => record.status === 'overdue' || isOverdueDate(record.dueDate))
+  const urgentBilling = billing.filter((record) => {
+    const status = String(record.status || '').toLowerCase()
+    if (status === 'paid' || status === 'placeno' || status === 'cancelled' || status === 'otkazano') return false
+    return status === 'overdue' || status === 'kasni' || isOverdueDate(record.dueDate)
+  })
   const lateTasks = getLateTasks(tasks).filter((task) => task.clientId && task.projectId && clientById.has(String(task.clientId)) && projectById.has(task.projectId))
   const riskyProjects = projects.filter((project) => Boolean(findOverdueStage(project)))
   const validLinkedTasks = tasks.filter((task) => task.clientId && task.projectId && clientById.has(String(task.clientId)) && projectById.has(task.projectId))
