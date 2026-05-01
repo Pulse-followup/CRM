@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BILLING_STATUS_LABELS } from '../features/billing/billingLabels'
 import { useBillingStore } from '../features/billing/billingStore'
 import type { BillingRecord, BillingStatus } from '../features/billing/types'
@@ -22,6 +22,7 @@ function tone(status: BillingStatus) {
   if (status === 'overdue') return 'red'
   if (status === 'paid') return 'green'
   if (status === 'invoiced') return 'blue'
+  if (status === 'ready' || status === 'draft') return 'white'
   return 'white'
 }
 
@@ -82,7 +83,7 @@ function BillingModal({
         <p><strong>Ukupni interni trošak</strong> - {formatAmountValue(item.record.totalCost ?? 0)}</p>
         <p><strong>Status</strong> - {BILLING_STATUS_LABELS[item.record.status]}</p>
 
-        {item.record.status === 'draft' ? (
+        {item.record.status === 'draft' || item.record.status === 'ready' ? (
           <div className="pulse-complete-form">
             <label className="pulse-form-field"><span>Broj fakture</span><input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="npr. 2026/EC/001" /></label>
             <label className="pulse-form-field"><span>Iznos za naplatu</span><input type="number" min="0" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
@@ -106,15 +107,21 @@ function BillingModal({
 }
 
 function FinanceHome() {
-  const { getAllBilling, updateBillingRecord, markBillingOverdue, markBillingPaid } = useBillingStore()
+  const { getAllBilling, updateBillingRecord, markBillingOverdue, markBillingPaid, refreshBillingFromCloud, isCloudBillingMode } = useBillingStore()
   const { getClientById } = useClientStore()
   const { getProjectById } = useProjectStore()
   const [opened, setOpened] = useState<FinanceItem | null>(null)
 
+  useEffect(() => {
+    if (isCloudBillingMode) {
+      void refreshBillingFromCloud()
+    }
+  }, [isCloudBillingMode, refreshBillingFromCloud])
+
   const billingItems = useMemo<FinanceItem[]>(() => getAllBilling().map((record) => ({
     record,
-    client: getClientById(record.clientId)?.name ?? 'Nepoznat klijent',
-    project: getProjectById(record.projectId)?.title ?? 'Nepoznat projekat',
+    client: getClientById(record.clientId)?.name ?? (record as any).clientName ?? 'Nepoznat klijent',
+    project: getProjectById(record.projectId)?.title ?? (record as any).projectName ?? record.description ?? 'Nepoznat projekat',
   })), [getAllBilling, getClientById, getProjectById])
 
   const by = (status: BillingStatus) => billingItems.filter((item) => item.record.status === status)
@@ -122,12 +129,12 @@ function FinanceHome() {
   return (
     <section className="pulse-phone-screen">
       <h2>Pregled faktura</h2>
-      <Section title="Za fakturisanje" empty="Nema naloga spremnih za fakturisanje." items={by('draft')} toneClass="white" onOpen={setOpened} />
+      <Section title="Za fakturisanje" empty="Nema naloga spremnih za fakturisanje." items={billingItems.filter((item) => item.record.status === 'ready' || item.record.status === 'draft')} toneClass="white" onOpen={setOpened} />
       <Section title="FAKTURISANO" empty="Nema otvorenih faktura koje čekaju uplatu." items={by('invoiced')} toneClass="blue" onOpen={setOpened} />
       <Section title="PLAĆENO" empty="Još nema zatvorenih uplata." items={by('paid')} toneClass="green" onOpen={setOpened} />
       <Section title="KASNI" empty="Nema dospelih kašnjenja." items={by('overdue')} toneClass="red" onOpen={setOpened} />
-      {opened ? <BillingModal item={opened} onClose={() => setOpened(null)} onSaveInvoice={(payload) => {
-        updateBillingRecord(opened.record.id, {
+      {opened ? <BillingModal item={opened} onClose={() => setOpened(null)} onSaveInvoice={async (payload) => {
+        await updateBillingRecord(opened.record.id, {
           invoiceNumber: payload.invoiceNumber,
           amount: payload.amount,
           currency: payload.currency,
@@ -135,8 +142,11 @@ function FinanceHome() {
           status: 'invoiced',
           invoicedAt: new Date().toISOString(),
         })
+        if (isCloudBillingMode) {
+          await refreshBillingFromCloud()
+        }
         setOpened(null)
-      }} onOverdue={() => { markBillingOverdue(opened.record.id); setOpened(null) }} onPaid={() => { markBillingPaid(opened.record.id); setOpened(null) }} /> : null}
+      }} onOverdue={async () => { await markBillingOverdue(opened.record.id); if (isCloudBillingMode) await refreshBillingFromCloud(); setOpened(null) }} onPaid={async () => { await markBillingPaid(opened.record.id); if (isCloudBillingMode) await refreshBillingFromCloud(); setOpened(null) }} /> : null}
     </section>
   )
 }

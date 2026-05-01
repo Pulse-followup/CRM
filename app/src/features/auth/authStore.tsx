@@ -53,9 +53,16 @@ function workspaceRoleToAppRole(role?: string): AppUser['role'] {
   return 'user'
 }
 
-function profileName(email: string, fullName?: string | null) {
-  if (fullName?.trim()) return fullName.trim()
-  return email.split('@')[0] || email
+function profileName(email: string, fullName?: string | null, role?: AppUser["role"]) {
+  const cleanName = fullName?.trim() || ""
+  if (cleanName && !cleanName.includes("@")) return cleanName
+
+  if (role === "finance") return "Finansije"
+  if (role === "admin") return "Admin"
+  if (role === "user") return "Radnik"
+
+  const localPart = email.split("@")[0]?.trim()
+  return localPart || email
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -73,9 +80,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const email = member.profile?.email || member.user_id
       return {
         id: member.user_id,
-        name: profileName(email, member.profile?.full_name),
-        email,
         role: workspaceRoleToAppRole(member.role),
+        name: profileName(email, member.display_name || member.profile?.full_name, workspaceRoleToAppRole(member.role)),
+        email,
       }
     })
   }, [cloud.activeWorkspace, cloud.members])
@@ -86,9 +93,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     return {
       id: cloud.user.id,
-      name: profileName(email, cloud.profile?.full_name),
-      email,
       role: workspaceRoleToAppRole(cloud.membership.role),
+      name: profileName(email, cloud.membership?.display_name || cloud.profile?.full_name, workspaceRoleToAppRole(cloud.membership.role)),
+      email,
     }
   }, [cloud.membership, cloud.profile, cloud.user])
 

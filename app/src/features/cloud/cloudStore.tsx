@@ -61,6 +61,7 @@ interface CloudStoreValue {
   acceptInvite: (inviteId?: string) => Promise<void>
   buildInviteLink: (invite: CloudWorkspaceInvite) => string
   updateMemberHourlyRate: (memberId: string, hourlyRate: number | null) => Promise<void>
+  updateProfileName: (fullName: string) => Promise<void>
 }
 
 const CloudStoreContext = createContext<CloudStoreValue | null>(null)
@@ -415,7 +416,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
   )
 
   const inviteMember = useCallback(
-    async ({ email, role, hourlyRate }: InviteMemberPayload) => {
+    async ({ email, fullName, role, hourlyRate }: InviteMemberPayload) => {
       if (!supabase || !user || !activeWorkspace || membership?.role !== 'admin') {
         throw new Error('Samo admin workspace-a moze da poziva clanove.')
       }
@@ -497,6 +498,24 @@ export function CloudProvider({ children }: PropsWithChildren) {
     [loadWorkspaceContext, membership?.role, supabase, user],
   )
 
+  const updateProfileName = useCallback(
+    async (fullName: string) => {
+      if (!supabase || !user) throw new Error('Moras biti ulogovan.')
+      const cleanName = fullName.trim()
+      if (!cleanName) throw new Error('Unesi ime.')
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({ id: user.id, email: user.email || '', full_name: cleanName }, { onConflict: 'id' })
+      if (profileError) {
+        setError(profileError.message)
+        throw profileError
+      }
+      await supabase.auth.updateUser({ data: { full_name: cleanName, name: cleanName } })
+      await loadWorkspaceContext(user)
+    },
+    [loadWorkspaceContext, supabase, user],
+  )
+
   const buildInviteLink = useCallback((invite: CloudWorkspaceInvite) => {
     if (typeof window === 'undefined') return invite.id
     const url = new URL(window.location.href)
@@ -509,6 +528,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
     () => ({
       isConfigured,
       isLoading,
+      updateProfileName,
       error,
       session,
       user,
@@ -533,6 +553,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
     [
       acceptInvite,
       activeWorkspace,
+      updateProfileName,
       buildInviteLink,
       createWorkspace,
       error,

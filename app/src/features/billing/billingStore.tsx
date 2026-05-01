@@ -32,12 +32,12 @@ interface BillingStoreValue {
   cloudReadStatus: CloudReadStatus
   cloudReadError: string | null
   refreshBillingFromCloud: () => Promise<void>
-  createBillingForProject: (projectId: string, payload: CreateBillingPayload) => BillingRecord | null
-  updateBillingRecord: (billingId: string, patch: Partial<BillingRecord>) => BillingRecord | null
-  markBillingInvoiced: (billingId: string) => BillingRecord | null
-  markBillingOverdue: (billingId: string) => BillingRecord | null
-  markBillingPaid: (billingId: string) => BillingRecord | null
-  cancelBilling: (billingId: string) => BillingRecord | null
+  createBillingForProject: (projectId: string, payload: CreateBillingPayload) => Promise<BillingRecord | null>
+  updateBillingRecord: (billingId: string, patch: Partial<BillingRecord>) => Promise<BillingRecord | null>
+  markBillingInvoiced: (billingId: string) => Promise<BillingRecord | null>
+  markBillingOverdue: (billingId: string) => Promise<BillingRecord | null>
+  markBillingPaid: (billingId: string) => Promise<BillingRecord | null>
+  cancelBilling: (billingId: string) => Promise<BillingRecord | null>
   getAllBilling: () => BillingRecord[]
   getBillingById: (id: string) => BillingRecord | null
   getBillingByProjectId: (projectId: string) => BillingRecord[]
@@ -75,30 +75,44 @@ function asNumberOrNull(value: unknown) {
 }
 
 function normalizeBillingStatus(value: unknown): BillingStatus {
-  const status = asString(value)
-  if (['draft', 'invoiced', 'overdue', 'paid', 'cancelled'].includes(status)) return status as BillingStatus
-  return 'draft'
+  const status = asString(value).toLowerCase()
+  if (status === 'za_fakturisanje' || status === 'za-fakturisanje' || status === 'ready_for_invoice' || status === 'sent_to_finance') return 'ready'
+  if (status === 'fakturisano' || status === 'invoiced') return 'invoiced'
+  if (status === 'placeno' || status === 'paid') return 'paid'
+  if (status === 'kasni' || status === 'overdue') return 'overdue'
+  if (status === 'otkazano' || status === 'cancelled') return 'cancelled'
+  if (status === 'draft' || status === 'ready') return status as BillingStatus
+  return 'ready'
+}
+
+function makeBillingId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  return `billing-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 function mapBillingRowToReact(row: Record<string, unknown>): BillingRecord {
   const createdAt = asString(row.created_at) || new Date().toISOString()
+  const totalCost = asNumberOrNull(row.total_cost ?? row.totalCost) ?? 0
+  const amount = asNumberOrNull(row.amount ?? row.invoice_amount ?? row.suggested_invoice_amount ?? row.total_with_margin ?? row.net_amount ?? totalCost)
   return normalizeRuntimeStatus({
     id: asString(row.id),
-    clientId: asString(row.client_id || row.clientId),
-    projectId: asString(row.project_id || row.projectId),
-    description: asString(row.description),
-    amount: asNumberOrNull(row.amount),
+    clientId: asString(row.client_id ?? row.clientId),
+    projectId: asString(row.project_id ?? row.projectId),
+    clientName: asString(row.client_name ?? row.clientName),
+    projectName: asString(row.project_name ?? row.projectName),
+    description: asString(row.description ?? row.invoice_description ?? row.project_name ?? row.projectName),
+    amount,
     currency: asString(row.currency) || 'RSD',
-    dueDate: asString(row.due_date || row.dueDate) || null,
+    dueDate: asString(row.due_date ?? row.dueDate) || null,
     status: normalizeBillingStatus(row.status),
-    invoiceNumber: asString(row.invoice_number || row.invoiceNumber),
-    taskCount: asNumberOrNull(row.task_count || row.taskCount) ?? 0,
-    totalTimeMinutes: asNumberOrNull(row.total_time_minutes || row.totalTimeMinutes) ?? 0,
-    totalLaborCost: asNumberOrNull(row.total_labor_cost || row.totalLaborCost) ?? 0,
-    totalMaterialCost: asNumberOrNull(row.total_material_cost || row.totalMaterialCost) ?? 0,
-    totalCost: asNumberOrNull(row.total_cost || row.totalCost) ?? 0,
-    marginPercent: asNumberOrNull(row.margin_percent || row.marginPercent) ?? 0,
-    netAmount: asNumberOrNull(row.net_amount || row.netAmount) ?? 0,
+    invoiceNumber: asString(row.invoice_number ?? row.invoiceNumber),
+    taskCount: asNumberOrNull(row.task_count ?? row.taskCount ?? row.total_tasks) ?? 0,
+    totalTimeMinutes: asNumberOrNull(row.total_time_minutes ?? row.totalTimeMinutes ?? row.total_time) ?? 0,
+    totalLaborCost: asNumberOrNull(row.total_labor_cost ?? row.totalLaborCost ?? row.labor_cost) ?? 0,
+    totalMaterialCost: asNumberOrNull(row.total_material_cost ?? row.totalMaterialCost ?? row.total_material) ?? 0,
+    totalCost,
+    marginPercent: asNumberOrNull(row.margin_percent ?? row.marginPercent ?? row.margin) ?? 0,
+    netAmount: asNumberOrNull(row.net_amount ?? row.netAmount ?? row.total_with_margin ?? amount ?? totalCost) ?? 0,
     createdAt,
     updatedAt: asString(row.updated_at) || createdAt,
     invoicedAt: (row.invoiced_at as string | null | undefined) ?? null,
@@ -107,29 +121,74 @@ function mapBillingRowToReact(row: Record<string, unknown>): BillingRecord {
 }
 
 function mapBillingToSupabaseRow(record: BillingRecord, workspaceId: string) {
+  const amount = record.amount ?? record.netAmount ?? record.totalCost ?? 0
   return {
     id: record.id,
     workspace_id: workspaceId,
-    client_id: record.clientId,
-    project_id: record.projectId,
+    client_id: String(record.clientId || ''),
+    project_id: String(record.projectId || ''),
+    client_name: record.clientName || '',
+    project_name: record.projectName || record.description || '',
     description: record.description || '',
-    amount: record.amount,
+    amount,
     currency: record.currency || 'RSD',
     due_date: record.dueDate || null,
-    status: record.status,
+    status: normalizeBillingStatus(record.status),
     invoice_number: record.invoiceNumber || '',
+    invoice_description: record.description || '',
+    invoice_amount: amount,
     task_count: record.taskCount ?? 0,
+    total_tasks: record.taskCount ?? 0,
     total_time_minutes: record.totalTimeMinutes ?? 0,
+    total_time: record.totalTimeMinutes ?? 0,
     total_labor_cost: record.totalLaborCost ?? 0,
+    labor_cost: record.totalLaborCost ?? 0,
     total_material_cost: record.totalMaterialCost ?? 0,
+    total_material: record.totalMaterialCost ?? 0,
     total_cost: record.totalCost ?? 0,
     margin_percent: record.marginPercent ?? 0,
-    net_amount: record.netAmount ?? record.totalCost ?? 0,
+    margin: record.marginPercent ?? 0,
+    net_amount: record.netAmount ?? record.totalCost ?? amount,
+    total_with_margin: amount,
+    suggested_invoice_amount: amount,
+    source: 'pulse',
     created_at: record.createdAt || new Date().toISOString(),
     updated_at: record.updatedAt || new Date().toISOString(),
     invoiced_at: record.invoicedAt || null,
     paid_at: record.paidAt || null,
   }
+}
+
+function mapBillingToMinimalSupabaseRow(record: BillingRecord, workspaceId: string) {
+  const amount = record.amount ?? record.netAmount ?? record.totalCost ?? 0
+  return {
+    id: record.id,
+    workspace_id: workspaceId,
+    client_id: String(record.clientId || ''),
+    project_id: String(record.projectId || ''),
+    description: record.description || record.projectName || '',
+    amount,
+    currency: record.currency || 'RSD',
+    due_date: record.dueDate || null,
+    status: normalizeBillingStatus(record.status),
+    invoice_number: record.invoiceNumber || '',
+    total_labor_cost: record.totalLaborCost ?? 0,
+    total_material_cost: record.totalMaterialCost ?? 0,
+    total_cost: record.totalCost ?? 0,
+    created_at: record.createdAt || new Date().toISOString(),
+    updated_at: record.updatedAt || new Date().toISOString(),
+    invoiced_at: record.invoicedAt || null,
+    paid_at: record.paidAt || null,
+  }
+}
+
+function mergeBillingRows(records: BillingRecord[]) {
+  const map = new Map<string, BillingRecord>()
+  records.forEach((record) => {
+    if (!record.id) return
+    map.set(record.id, record)
+  })
+  return Array.from(map.values()).sort((left, right) => (right.createdAt || '').localeCompare(left.createdAt || ''))
 }
 
 export function BillingProvider({ children }: PropsWithChildren) {
@@ -152,16 +211,44 @@ export function BillingProvider({ children }: PropsWithChildren) {
 
   const persistCloudBilling = useCallback(
     async (record: BillingRecord) => {
-      if (!isCloudBillingMode || !activeWorkspace?.id) return
+      if (!isCloudBillingMode || !activeWorkspace?.id) return null
       const supabase = getSupabaseClient()
-      if (!supabase) return
-      const { error } = await supabase
-        .from('billing_records')
-        .upsert(mapBillingToSupabaseRow(record, activeWorkspace.id), { onConflict: 'id' })
-      if (error) {
-        setCloudReadStatus('error')
-        setCloudReadError(error.message)
+      if (!supabase) return null
+
+      const fullRow = mapBillingToSupabaseRow(record, activeWorkspace.id)
+      let savedRow: Record<string, unknown> | null = null
+      let lastError: { message?: string } | null = null
+
+      const first = await supabase.from('billing_records').upsert(fullRow, { onConflict: 'id' }).select('*').single()
+      if (first.error) {
+        lastError = first.error
+        const minimalRow = mapBillingToMinimalSupabaseRow(record, activeWorkspace.id)
+        const second = await supabase.from('billing_records').upsert(minimalRow, { onConflict: 'id' }).select('*').single()
+        if (second.error) {
+          lastError = second.error
+        } else {
+          savedRow = second.data as Record<string, unknown>
+        }
+      } else {
+        savedRow = first.data as Record<string, unknown>
       }
+
+      if (!savedRow) {
+        // Last-resort compatibility with the old legacy table. Finance read also checks this table.
+        const legacy = await supabase.from('billing').upsert(mapBillingToMinimalSupabaseRow(record, activeWorkspace.id), { onConflict: 'id' }).select('*').single()
+        if (legacy.error) {
+          setCloudReadStatus('error')
+          setCloudReadError(legacy.error.message || lastError?.message || 'Nalog za naplatu nije upisan u Supabase.')
+          return null
+        }
+        savedRow = legacy.data as Record<string, unknown>
+      }
+
+      const savedRecord = mapBillingRowToReact(savedRow)
+      setCloudBilling((current) => mergeBillingRows([savedRecord, ...current]))
+      setCloudReadStatus('cloud')
+      setCloudReadError(null)
+      return savedRecord
     },
     [activeWorkspace?.id, isCloudBillingMode],
   )
@@ -177,29 +264,40 @@ export function BillingProvider({ children }: PropsWithChildren) {
     setCloudReadStatus('loading')
     setCloudReadError(null)
 
-    const { data, error } = await supabase
+    const recordQuery = await supabase
       .from('billing_records')
       .select('*')
       .eq('workspace_id', activeWorkspace.id)
       .order('created_at', { ascending: false })
 
-    if (error) {
+    const legacyQuery = await supabase
+      .from('billing')
+      .select('*')
+      .eq('workspace_id', activeWorkspace.id)
+      .order('created_at', { ascending: false })
+
+    if (recordQuery.error && legacyQuery.error) {
       setCloudBilling([])
       setCloudReadStatus('error')
-      setCloudReadError(error.message || 'Naplata nije ucitana iz Supabase-a.')
+      setCloudReadError(recordQuery.error.message || legacyQuery.error.message || 'Naplata nije ucitana iz Supabase-a.')
       return
     }
 
-    const nextBilling = Array.isArray(data)
-      ? data.map((row) => mapBillingRowToReact(row as Record<string, unknown>)).filter((record) => record.id && record.clientId && record.projectId)
-      : []
+    // IMPORTANT:
+    // Legacy table can contain an older row with the same id/status = ready.
+    // Put legacy FIRST and billing_records SECOND so billing_records wins in mergeBillingRows().
+    const records = [
+      ...(Array.isArray(legacyQuery.data) ? legacyQuery.data : []),
+      ...(Array.isArray(recordQuery.data) ? recordQuery.data : []),
+    ]
+      .map((row) => mapBillingRowToReact(row as Record<string, unknown>))
+      .filter((record) => record.id)
 
+    const nextBilling = mergeBillingRows(records)
     setCloudBilling(nextBilling)
     setCloudReadStatus(nextBilling.length ? 'cloud' : 'cloud-empty')
 
-    nextBilling
-      .filter((record) => record.status === 'overdue')
-      .forEach((record) => void persistCloudBilling(record))
+    nextBilling.filter((record) => record.status === 'overdue').forEach((record) => void persistCloudBilling(record))
   }, [activeWorkspace?.id, isConfigured, persistCloudBilling])
 
   useEffect(() => {
@@ -228,32 +326,36 @@ export function BillingProvider({ children }: PropsWithChildren) {
   )
 
   const replaceRecord = useCallback(
-    (record: BillingRecord) => {
+    async (record: BillingRecord) => {
       const normalizedRecord = normalizeRuntimeStatus(record)
+      let savedRecord = normalizedRecord
+
       if (isCloudBillingMode) {
-        setCloudBilling((current) => {
-          const exists = current.some((item) => item.id === normalizedRecord.id)
-          return exists
-            ? current.map((item) => (item.id === normalizedRecord.id ? normalizedRecord : item))
-            : [normalizedRecord, ...current]
-        })
-        void persistCloudBilling(normalizedRecord)
+        setCloudBilling((current) => mergeBillingRows([normalizedRecord, ...current]))
+        const persistedRecord = await persistCloudBilling(normalizedRecord)
+        if (persistedRecord) {
+          savedRecord = {
+            ...normalizedRecord,
+            ...persistedRecord,
+            id: persistedRecord.id || normalizedRecord.id,
+            clientId: persistedRecord.clientId || normalizedRecord.clientId,
+            projectId: persistedRecord.projectId || normalizedRecord.projectId,
+            status: normalizeBillingStatus(persistedRecord.status || normalizedRecord.status),
+          }
+          setCloudBilling((current) => mergeBillingRows([savedRecord, ...current]))
+        }
       } else {
-        setLocalBilling((current) => {
-          const exists = current.some((item) => item.id === normalizedRecord.id)
-          return exists
-            ? current.map((item) => (item.id === normalizedRecord.id ? normalizedRecord : item))
-            : [normalizedRecord, ...current]
-        })
+        setLocalBilling((current) => mergeBillingRows([normalizedRecord, ...current]))
       }
-      syncProjectBilling(normalizedRecord)
-      return normalizedRecord
+
+      syncProjectBilling(savedRecord)
+      return savedRecord
     },
     [isCloudBillingMode, persistCloudBilling, syncProjectBilling],
   )
 
   const createBillingForProject = useCallback(
-    (projectId: string, payload: CreateBillingPayload) => {
+    async (projectId: string, payload: CreateBillingPayload) => {
       const existingRecord = selectActiveBillingByProjectId(billing, projectId)
       if (existingRecord) return existingRecord
 
@@ -262,14 +364,16 @@ export function BillingProvider({ children }: PropsWithChildren) {
 
       const timestamp = new Date().toISOString()
       const nextRecord: BillingRecord = {
-        id: `billing-${Date.now()}`,
-        clientId: project.clientId,
-        projectId,
-        description: payload.description.trim(),
+        id: makeBillingId(),
+        clientId: String(project.clientId),
+        projectId: String(projectId),
+        clientName: '',
+        projectName: project.title,
+        description: payload.description.trim() || `Nalog za naplatu - ${project.title}`,
         amount: Number.isFinite(payload.amount) ? payload.amount : null,
         currency: payload.currency.trim() || 'RSD',
         dueDate: payload.dueDate,
-        status: 'draft',
+        status: 'ready',
         invoiceNumber: payload.invoiceNumber.trim(),
         taskCount: payload.taskCount ?? 0,
         totalTimeMinutes: payload.totalTimeMinutes ?? 0,
@@ -284,19 +388,20 @@ export function BillingProvider({ children }: PropsWithChildren) {
         paidAt: null,
       }
 
-      return replaceRecord(nextRecord)
+      return await replaceRecord(nextRecord)
     },
     [billing, getProjectById, replaceRecord],
   )
 
   const updateBillingRecord = useCallback(
-    (billingId: string, patch: Partial<BillingRecord>) => {
+    async (billingId: string, patch: Partial<BillingRecord>) => {
       const currentRecord = selectBillingById(billing, billingId)
       if (!currentRecord) return null
 
-      return replaceRecord({
+      return await replaceRecord({
         ...currentRecord,
         ...patch,
+        status: patch.status ? normalizeBillingStatus(patch.status) : currentRecord.status,
         updatedAt: new Date().toISOString(),
       })
     },

@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import BillingCard from '../../billing/components/BillingCard'
 import { BILLING_STATUS_LABELS } from '../../billing/billingLabels'
 import { useBillingStore } from '../../billing/billingStore'
+import { useCloudStore } from '../../cloud/cloudStore'
+import { getSupabaseClient } from '../../../lib/supabaseClient'
 import '../../clients/pages/client-detail.css'
 import CreateTaskForm from '../../tasks/components/CreateTaskForm'
 import type { CreateTaskFormValues } from '../../tasks/components/CreateTaskForm'
@@ -55,6 +57,7 @@ function ProjectDetail() {
   const { id } = useParams()
   const projectId = id ?? ''
   const { getProjectById } = useProjectStore()
+  const { activeWorkspace, members } = useCloudStore()
   const project = getProjectById(projectId)
   const { tasks: allTasks, updateTask, addTask } = useTaskStore()
   const { getActiveBillingByProjectId, createBillingForProject } = useBillingStore()
@@ -108,9 +111,9 @@ function ProjectDetail() {
     setIsCreatingTask(false)
   }
 
-  const handleCreateBilling = () => {
+  const handleCreateBilling = async () => {
     if (!project || billingPreview.taskCount === 0) return
-    const record = createBillingForProject(project.id, {
+    const record = await createBillingForProject(project.id, {
       description: `Nalog za naplatu - ${project.title}`,
       amount: billingPreview.suggestedAmount,
       currency: 'RSD',
@@ -124,6 +127,49 @@ function ProjectDetail() {
       marginPercent: billingPreview.marginPercent,
       netAmount: billingPreview.netAmount,
     })
+    const financeMember = members.find((member) => member.role === 'finance')
+    const supabase = getSupabaseClient()
+
+    if (record && supabase && activeWorkspace?.id && project) {
+      await supabase.from('billing_records').upsert(
+        {
+          id: record.id,
+          workspace_id: activeWorkspace.id,
+          client_id: String(project.clientId),
+          project_id: String(project.id),
+          client_name: record.clientName || '',
+          project_name: project.title,
+          description: record.description,
+          amount: billingPreview.suggestedAmount,
+          currency: 'RSD',
+          due_date: null,
+          status: 'ready',
+          invoice_number: '',
+          task_count: billingPreview.taskCount,
+          total_tasks: billingPreview.taskCount,
+          total_time_minutes: billingPreview.totalTimeMinutes,
+          total_time: billingPreview.totalTimeMinutes,
+          total_labor_cost: billingPreview.totalLaborCost,
+          labor_cost: billingPreview.totalLaborCost,
+          total_material_cost: billingPreview.totalMaterialCost,
+          total_material: billingPreview.totalMaterialCost,
+          total_cost: billingPreview.netAmount,
+          margin_percent: billingPreview.marginPercent,
+          margin: billingPreview.marginPercent,
+          net_amount: billingPreview.netAmount,
+          total_with_margin: billingPreview.suggestedAmount,
+          suggested_invoice_amount: billingPreview.suggestedAmount,
+          assigned_finance_user_id: financeMember?.user_id || null,
+          source: 'pulse',
+          created_at: record.createdAt || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          invoiced_at: null,
+          paid_at: null,
+        },
+        { onConflict: 'id' },
+      )
+    }
+
     if (record) {
       billableTasks.forEach((task) => {
         void updateTask({ ...task, billingId: record.id, billingState: 'sent_to_billing', billingStatus: 'sent_to_billing', updatedAt: new Date().toISOString() })
@@ -138,7 +184,7 @@ function ProjectDetail() {
 
   return (
     <section className="page-card client-detail-shell">
-      <button type="button" className="secondary-link-button" onClick={() => navigate(`/clients/${project.clientId}`)}>Nazad na klijenta</button>
+      <button type="button" className="secondary-link-button" onClick={() => navigate("/")}>Nazad na dashboard</button>
       <header className="customer-card-header"><div><h2 className="customer-card-title">{project.title}</h2><p className="customer-card-subtitle">Projekat</p></div><div className="customer-project-badges"><span className="customer-status-badge">{PROJECT_STATUS_LABELS[project.status]}</span><span className={`customer-status-badge is-${projectHealth.tone}`}>{projectHealth.label}</span></div></header>
 
       <section className="customer-card-section"><div className="customer-card-section-head"><h3>Osnovni podaci</h3></div><div className="customer-card-group"><dl className="customer-card-detail-list"><div><dt>Status</dt><dd>{PROJECT_STATUS_LABELS[project.status]}</dd></div><div><dt>Tip</dt><dd>{project.type ? PROJECT_TYPE_LABELS[project.type] : '-'}</dd></div><div><dt>Frekvencija</dt><dd>{project.frequency ? PROJECT_FREQUENCY_LABELS[project.frequency] : '-'}</dd></div><div><dt>Vrednost</dt><dd>{project.value ? `${project.value} RSD` : '-'}</dd></div><div><dt>Billing status</dt><dd>{project.billingStatus ? BILLING_STATUS_LABELS[project.billingStatus] : '-'}</dd></div></dl></div></section>

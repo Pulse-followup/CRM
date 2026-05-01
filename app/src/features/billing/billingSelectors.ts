@@ -1,6 +1,6 @@
 import type { BillingRecord } from './types'
 
-const ACTIVE_BILLING_STATUSES = new Set(['draft', 'invoiced', 'overdue'])
+const ACTIVE_BILLING_STATUSES = new Set(['ready', 'draft', 'invoiced', 'overdue'])
 
 export function getAllBilling(records: BillingRecord[]) {
   return records
@@ -30,7 +30,7 @@ export function getBillingSummary(records: BillingRecord[]) {
   return records.reduce(
     (summary, record) => ({
       total: summary.total + 1,
-      draft: summary.draft + (record.status === 'draft' ? 1 : 0),
+      draft: summary.draft + (record.status === 'draft' || record.status === 'ready' ? 1 : 0),
       invoiced: summary.invoiced + (record.status === 'invoiced' ? 1 : 0),
       overdue: summary.overdue + (record.status === 'overdue' ? 1 : 0),
       paid: summary.paid + (record.status === 'paid' ? 1 : 0),

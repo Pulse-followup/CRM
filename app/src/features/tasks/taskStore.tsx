@@ -86,8 +86,9 @@ function mapTaskRowToReact(row: Record<string, unknown>): Task {
     materialCost: asNumber(row.material_cost || row.materialCost),
     materialDescription: asString(row.material_description || row.materialDescription),
     laborCost: asNumber(row.labor_cost || row.laborCost),
-
-    billingId: asString(row.billing_id || row.billingId) || null,
+    billingState: normalizeBillingState(row.billing_state || row.billable_status || row.billingState),
+    billingStatus: asString(row.billable_status || row.billing_status || row.billingStatus),
+    billingId: asString(row.billing_record_id || row.billing_id || row.billingId) || null,
   }
 }
 
@@ -113,6 +114,7 @@ function mapTaskToSupabaseRow(task: Task, workspaceId: string, userId?: string |
     billable_status: task.billingState || task.billingStatus || 'not_billable',
     billing_state: task.billingState || 'not_billable',
     billing_id: task.billingId || null,
+    billing_record_id: task.billingId || null,
     archived: false,
     created_at: task.createdAt || new Date().toISOString(),
     updated_at: task.updatedAt || new Date().toISOString(),

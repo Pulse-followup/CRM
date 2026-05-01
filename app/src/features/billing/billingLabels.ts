@@ -1,6 +1,7 @@
 import type { BillingStatus } from './types'
 
 export const BILLING_STATUS_LABELS: Record<BillingStatus, string> = {
+  ready: 'Za fakturisanje',
   draft: 'Za fakturisanje',
   invoiced: 'Fakturisano',
   overdue: 'Kasni',
@@ -9,6 +10,7 @@ export const BILLING_STATUS_LABELS: Record<BillingStatus, string> = {
 }
 
 export const BILLING_STATUS_TONES: Record<BillingStatus, 'muted' | 'info' | 'warning' | 'success' | 'danger'> = {
+  ready: 'info',
   draft: 'info',
   invoiced: 'muted',
   overdue: 'warning',

@@ -1,9 +1,11 @@
-export type BillingStatus = 'draft' | 'invoiced' | 'overdue' | 'paid' | 'cancelled'
+export type BillingStatus = 'ready' | 'draft' | 'invoiced' | 'overdue' | 'paid' | 'cancelled'
 
 export interface BillingRecord {
   id: string
   clientId: string
   projectId: string
+  clientName?: string
+  projectName?: string
   description: string
   amount: number | null
   currency: string

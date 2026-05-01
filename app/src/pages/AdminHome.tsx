@@ -20,6 +20,8 @@ import { getLateTasks } from '../features/tasks/taskSelectors'
 import { useTaskStore } from '../features/tasks/taskStore'
 import type { Task } from '../features/tasks/types'
 import CreateTaskForm, { type CreateTaskFormValues } from '../features/tasks/components/CreateTaskForm'
+import { useCloudStore } from '../features/cloud/cloudStore'
+import { getSupabaseClient } from '../lib/supabaseClient'
 import '../features/clients/pages/client-detail.css'
 
 type ModalState =
@@ -99,7 +101,7 @@ function ProjectDetailModal({
   project: Project
   tasks: Task[]
   activeBilling: BillingRecord | null
-  onCreateBilling: (project: Project, tasksForBilling: Task[]) => void
+  onCreateBilling: (project: Project, tasksForBilling: Task[]) => void | Promise<void>
 }) {
   const completedTasks = tasks.filter((task) => task.status === 'zavrsen')
   const unbilledCompletedTasks = completedTasks.filter((task) => task.billingState !== 'sent_to_billing' && task.billingState !== 'billed' && !task.billingId)
@@ -136,7 +138,7 @@ function ProjectDetailModal({
         {activeBilling ? <p><strong>Nalog za naplatu:</strong> {BILLING_STATUS_LABELS[activeBilling.status]}</p> : null}
         {!activeBilling && unbilledCompletedTasks.length ? (
           <div className="pulse-modal-actions">
-            <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={() => onCreateBilling(project, unbilledCompletedTasks)}>
+            <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={() => void onCreateBilling(project, unbilledCompletedTasks)}>
               POŠALJI NA NAPLATU
             </button>
           </div>
@@ -174,7 +176,7 @@ function ClientCardDrawer({ client, score, projects, onClose, onUpdateClient, on
   )
 }
 
-function AdminModal({ state, clients, projects, tasks, billing, onClose, onCreateClient, onCreateProject, onUpdateClient, onCreateTask, onCreateBillingFromProject }: { state: ModalState; clients: Client[]; projects: Project[]; tasks: Task[]; billing: BillingRecord[]; onClose: () => void; onCreateClient: (values: ClientCreateFormValues) => void | Promise<void>; onCreateProject: (clientId: string, values: ProjectFormValues) => void | Promise<void>; onUpdateClient: (clientId: string, patch: ClientEditFormPatch) => void | Promise<void>; onCreateTask: (clientId: string, values: CreateTaskFormValues) => void | Promise<void>; onCreateBillingFromProject: (project: Project, tasksForBilling: Task[]) => void }) {
+function AdminModal({ state, clients, projects, tasks, billing, onClose, onCreateClient, onCreateProject, onUpdateClient, onCreateTask, onCreateBillingFromProject }: { state: ModalState; clients: Client[]; projects: Project[]; tasks: Task[]; billing: BillingRecord[]; onClose: () => void; onCreateClient: (values: ClientCreateFormValues) => void | Promise<void>; onCreateProject: (clientId: string, values: ProjectFormValues) => void | Promise<void>; onUpdateClient: (clientId: string, patch: ClientEditFormPatch) => void | Promise<void>; onCreateTask: (clientId: string, values: CreateTaskFormValues) => void | Promise<void>; onCreateBillingFromProject: (project: Project, tasksForBilling: Task[]) => void | Promise<void> }) {
   if (!state) return null
   const clientProjects = state.type === 'client' ? projects.filter((project) => project.clientId === String(state.client.id)) : []
   const projectTasks = state.type === 'project' ? tasks.filter((task) => task.projectId === state.project.id) : []
@@ -196,6 +198,7 @@ function AdminModal({ state, clients, projects, tasks, billing, onClose, onCreat
 }
 
 function AdminHome() {
+  const { activeWorkspace, members } = useCloudStore()
   const { clients, addClient, updateClient } = useClientStore()
   const { projects, addProject } = useProjectStore()
   const { tasks, addTask, updateTask } = useTaskStore()
@@ -239,13 +242,60 @@ function AdminHome() {
     await addTask({ id: taskId, clientId, projectId: values.projectId, title: values.title.trim() || 'Nova aktivnost', description: values.description.trim(), type: values.type || undefined, assignedToUserId: values.assignedToUserId, assignedToLabel: values.assignedToLabel.trim(), dueDate: values.dueDate || undefined, stageId: values.stageId || undefined, status: 'dodeljen', createdAt: timestamp, updatedAt: timestamp, completedAt: null, billingState: 'not_billable' })
   }
 
-  const handleCreateBillingFromProject = (project: Project, tasksForBilling: Task[]) => {
+  const handleCreateBillingFromProject = async (project: Project, tasksForBilling: Task[]) => {
+    const totalTimeMinutes = tasksForBilling.reduce((sum, task) => sum + (task.timeSpentMinutes ?? 0), 0)
     const totalLaborCost = tasksForBilling.reduce((sum, task) => sum + (task.laborCost ?? 0), 0)
     const totalMaterialCost = tasksForBilling.reduce((sum, task) => sum + (task.materialCost ?? 0), 0)
     const totalCost = totalLaborCost + totalMaterialCost
-    const record = createBillingForProject(project.id, { description: project.title, amount: totalCost, currency: 'RSD', dueDate: null, invoiceNumber: '', totalLaborCost, totalMaterialCost, totalCost })
+    const marginPercent = 30
+    const amountForFinance = Math.round(totalCost * (1 + marginPercent / 100))
+    const record = await createBillingForProject(project.id, { description: `Nalog za naplatu - ${project.title}`, amount: amountForFinance, currency: 'RSD', dueDate: null, invoiceNumber: '', taskCount: tasksForBilling.length, totalTimeMinutes, totalLaborCost, totalMaterialCost, totalCost, marginPercent, netAmount: amountForFinance })
+    const client = clientById.get(String(project.clientId))
+    const financeMember = members.find((member) => member.role === 'finance')
+    const supabase = getSupabaseClient()
+
+    if (record && supabase && activeWorkspace?.id) {
+      await supabase.from('billing_records').upsert(
+        {
+          id: record.id,
+          workspace_id: activeWorkspace.id,
+          client_id: String(project.clientId),
+          project_id: String(project.id),
+          client_name: client?.name || record.clientName || '',
+          project_name: project.title,
+          description: record.description,
+          amount: amountForFinance,
+          currency: 'RSD',
+          due_date: null,
+          status: 'ready',
+          invoice_number: '',
+          task_count: tasksForBilling.length,
+          total_tasks: tasksForBilling.length,
+          total_time_minutes: totalTimeMinutes,
+          total_time: totalTimeMinutes,
+          total_labor_cost: totalLaborCost,
+          labor_cost: totalLaborCost,
+          total_material_cost: totalMaterialCost,
+          total_material: totalMaterialCost,
+          total_cost: totalCost,
+          margin_percent: marginPercent,
+          margin: marginPercent,
+          net_amount: totalCost,
+          total_with_margin: amountForFinance,
+          suggested_invoice_amount: amountForFinance,
+          assigned_finance_user_id: financeMember?.user_id || null,
+          source: 'pulse',
+          created_at: record.createdAt || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          invoiced_at: null,
+          paid_at: null,
+        },
+        { onConflict: 'id' },
+      )
+    }
+
     if (record) {
-      tasksForBilling.forEach((task) => updateTask({ ...task, billingState: 'sent_to_billing', billingStatus: 'sent_to_billing', billingId: record.id, updatedAt: new Date().toISOString() }))
+      await Promise.all(tasksForBilling.map((task) => Promise.resolve(updateTask({ ...task, billingState: 'sent_to_billing', billingStatus: 'sent_to_billing', billingId: record.id, updatedAt: new Date().toISOString() }))))
     }
     setModal({ type: 'billing', record: record || { id: '', clientId: project.clientId, projectId: project.id, description: project.title, amount: totalCost, currency: 'RSD', dueDate: null, status: 'draft', invoiceNumber: '', totalLaborCost, totalMaterialCost, totalCost, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } })
   }
@@ -262,7 +312,7 @@ function AdminHome() {
       <section className="pulse-panel pulse-panel-green"><h3>MOJ TIM – šta ko radi danas</h3><div className="pulse-list">{teamTasks.length ? teamTasks.map((task) => { const project = projectById.get(task.projectId); return <article className="pulse-item pulse-team-card" key={task.id}><div className="pulse-item-title-row"><h4>{task.assignedToLabel || 'Bez dodele'}</h4><button className="pulse-pill pulse-pill-red" type="button" onClick={() => setModal({ type: 'task', task })}>ZADATAK</button></div><p>{clientName(String(task.clientId))} – {projectTitle(task.projectId)}</p><p><strong>Rok :</strong> {formatDate(task.dueDate)}</p>{project ? <button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'project', project })}>PROJEKAT</button> : null}</article> }) : <p className="pulse-empty">Nema aktivnih zadataka.</p>}</div></section>
       <section className="pulse-panel pulse-panel-white"><h3>NAPLATA</h3><div className="pulse-list">{sortedBilling.map((record) => <article className="pulse-item pulse-billing-row" key={record.id} onClick={() => setModal({ type: 'billing', record })}><div className="pulse-item-title-row"><h4>{formatAmount(record)}</h4><span className={`pulse-pill ${record.status === 'overdue' ? 'pulse-pill-red' : record.status === 'paid' ? 'pulse-pill-green' : 'pulse-pill-blue'}`}>{BILLING_STATUS_LABELS[record.status]}</span></div><dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(record.clientId)}</dd></div><div><dt>Projekat:</dt><dd>{projectTitle(record.projectId)}</dd></div><div><dt>Rok za plaćanje:</dt><dd>{formatDate(record.dueDate)}</dd></div></dl></article>)}</div></section>
       <section className="pulse-panel pulse-panel-blue"><h3>KLIJENTI – score card</h3><input className="pulse-search" placeholder="PRETRAGA" /><div className="pulse-create-row"><button className="pulse-outline-btn" onClick={() => setModal({ type: 'create-client' })}>+ NOVI KLIJENT</button><button className="pulse-outline-btn" onClick={() => setModal({ type: 'create-project' })}>+ NOVI PROJEKAT</button></div><div className="pulse-list">{clientScores.map(({ client, score }) => <article className="pulse-item pulse-client-score" key={client.id}><div className="pulse-item-title-row"><h4>{client.name}</h4><span className="pulse-pill pulse-pill-cyan">PULSE {score}</span></div><p><strong>Tekući projekti</strong> – {projects.find((project) => project.clientId === String(client.id))?.title ?? '-'}</p><p><strong>Naplata :</strong> u roku</p><button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'client', client, score })}>DETALJI</button></article>)}</div></section>
-      <AdminModal state={modal} clients={clients} projects={projects} tasks={tasks} billing={billing} onClose={() => setModal(null)} onCreateClient={handleCreateClient} onCreateProject={handleCreateProject} onUpdateClient={updateClient} onCreateTask={handleCreateTask} onCreateBillingFromProject={handleCreateBillingFromProject} />
+      <AdminModal state={modal} clients={clients} projects={projects} tasks={tasks} billing={billing} onClose={() => setModal(null)} onCreateClient={handleCreateClient} onCreateProject={handleCreateProject} onUpdateClient={async (clientId, patch) => { await updateClient(clientId, patch) }} onCreateTask={handleCreateTask} onCreateBillingFromProject={handleCreateBillingFromProject} />
     </section>
   )
 }

@@ -25,6 +25,7 @@ export interface CloudWorkspaceMember {
   role: WorkspaceRole
   status: WorkspaceMemberStatus
   hourly_rate: number | null
+  display_name?: string | null
   joined_at?: string | null
   created_at?: string
   profile?: CloudProfile | null
