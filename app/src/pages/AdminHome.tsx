@@ -67,6 +67,36 @@ function daysLate(value?: string | null) {
   return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86400000))
 }
 
+function daysSince(value?: string | null) {
+  if (!value) return 0
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 0
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  date.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86400000))
+}
+
+function isTaskBillableDone(task: Task) {
+  return task.status === 'zavrsen' && task.billingState !== 'sent_to_billing' && task.billingState !== 'billed' && !task.billingId
+}
+
+function taskValue(task: Task) {
+  return (task.laborCost ?? 0) + (task.materialCost ?? 0)
+}
+
+type PulseSignalTone = 'red' | 'yellow' | 'blue'
+
+type PulseSignal = {
+  id: string
+  tone: PulseSignalTone
+  badge: string
+  title: string
+  message: string
+  actionLabel: string
+  action: () => void
+}
+
 function getStageDueDate(stage?: ProjectStage) {
   return stage ? (stage as { dueDate?: string | null }).dueDate : undefined
 }
@@ -265,6 +295,7 @@ function AdminHome() {
   const { tasks, addTask, updateTask } = useTaskStore()
   const { getAllBilling, createBillingForProject } = useBillingStore()
   const [modal, setModal] = useState<ModalState>(null)
+  const [pulseTypingText, setPulseTypingText] = useState('')
   const billing = getAllBilling()
 
   useEffect(() => {
@@ -295,6 +326,24 @@ function AdminHome() {
     }
   }, [activeWorkspace?.id, isConfigured])
 
+  useEffect(() => {
+    const messages = [
+      'PULSE analizira projekte, taskove i naplatu...',
+      'Proveravam završene taskove i vrednost za naplatu...',
+      'Tražim zastoje u projektima i otvorene rokove...',
+      'Slažem prioritete za admin pregled...',
+    ]
+    const message = messages[Math.floor(Math.random() * messages.length)]
+    let index = 0
+    setPulseTypingText('')
+    const timer = window.setInterval(() => {
+      index += 1
+      setPulseTypingText(message.slice(0, index))
+      if (index >= message.length) window.clearInterval(timer)
+    }, 22)
+    return () => window.clearInterval(timer)
+  }, [projects.length, tasks.length, billing.length])
+
   const clientById = useMemo(() => new Map(clients.map((client) => [String(client.id), client])), [clients])
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
   const clientName = (id: string) => clientById.get(String(id))?.name ?? 'Nepoznat klijent'
@@ -307,6 +356,127 @@ function AdminHome() {
   })
   const lateTasks = getLateTasks(tasks).filter((task) => task.clientId && task.projectId && clientById.has(String(task.clientId)) && projectById.has(task.projectId))
   const riskyProjects = projects.filter((project) => Boolean(findOverdueStage(project)))
+  const pulseSignals = useMemo<PulseSignal[]>(() => {
+    const signals: PulseSignal[] = []
+    const activeProjects = projects.filter((project) => project.status !== 'arhiviran')
+
+    urgentBilling.slice(0, 4).forEach((record) => {
+      const lateBy = daysLate(record.dueDate)
+      signals.push({
+        id: `billing-${record.id}`,
+        tone: 'red',
+        badge: 'NAPLATA',
+        title: lateBy ? `Naplata kasni ${lateBy} dana` : 'Naplata čeka reakciju',
+        message: `${clientName(record.clientId)} — ${formatAmount(record)} za projekat ${projectTitle(record.projectId)}`,
+        actionLabel: 'Otvori',
+        action: () => setModal({ type: 'billing', record }),
+      })
+    })
+
+    riskyProjects.slice(0, 4).forEach((project) => {
+      const overdueStage = findOverdueStage(project)
+      const overdueDays = daysLate(getStageDueDate(overdueStage))
+      signals.push({
+        id: `overdue-stage-${project.id}`,
+        tone: 'red',
+        badge: 'PROJEKAT',
+        title: overdueDays ? `Faza kasni ${overdueDays} dana` : 'Projekat traži pažnju',
+        message: `${clientName(project.clientId)} — ${project.title}${overdueStage?.name ? `: ${overdueStage.name}` : ''}`,
+        actionLabel: 'Otvori projekat',
+        action: () => setModal({ type: 'project', project }),
+      })
+    })
+
+    activeProjects.forEach((project) => {
+      const projectTasks = tasks.filter((task) => task.projectId === project.id)
+      if (!projectTasks.length) return
+
+      const completedTasks = projectTasks.filter((task) => task.status === 'zavrsen')
+      const openTasks = projectTasks.filter((task) => task.status !== 'zavrsen' && task.status !== 'naplacen')
+      const unbilledTasks = completedTasks.filter(isTaskBillableDone)
+      const progress = Math.round((completedTasks.length / projectTasks.length) * 100)
+      const pendingValue = unbilledTasks.reduce((sum, task) => sum + taskValue(task), 0)
+      const activityDates = projectTasks
+        .map((task) => task.completedAt || task.updatedAt || task.createdAt)
+        .filter((value): value is string => Boolean(value))
+      const lastActivityDate = activityDates.sort((first, second) => new Date(second).getTime() - new Date(first).getTime())[0]
+      const idleDays = daysSince(lastActivityDate)
+
+      if (unbilledTasks.length && idleDays >= 3) {
+        signals.push({
+          id: `ready-billing-${project.id}`,
+          tone: 'red',
+          badge: 'ZRELO',
+          title: `Završeni taskovi čekaju ${idleDays} dana`,
+          message: `${clientName(project.clientId)} — ${project.title}: ${unbilledTasks.length} taska spremna za naplatu${pendingValue ? ` (${formatAmountValue(pendingValue)})` : ''}`,
+          actionLabel: 'Otvori projekat',
+          action: () => setModal({ type: 'project', project }),
+        })
+      } else if (unbilledTasks.length) {
+        signals.push({
+          id: `fresh-billing-${project.id}`,
+          tone: 'yellow',
+          badge: 'NAPLATA',
+          title: 'Spremno za naplatu',
+          message: `${clientName(project.clientId)} — ${project.title}: ${unbilledTasks.length} završenih taskova`,
+          actionLabel: 'Otvori projekat',
+          action: () => setModal({ type: 'project', project }),
+        })
+      }
+
+      if (openTasks.length && idleDays >= 5) {
+        signals.push({
+          id: `blocked-${project.id}`,
+          tone: 'red',
+          badge: 'BLOKADA',
+          title: `Projekat stoji ${idleDays} dana`,
+          message: `${clientName(project.clientId)} — ${project.title}: ${progress}% završeno, ${openTasks.length} otvorenih taskova`,
+          actionLabel: 'Otvori projekat',
+          action: () => setModal({ type: 'project', project }),
+        })
+      } else if (progress >= 60 && progress < 100) {
+        signals.push({
+          id: `progress-${project.id}`,
+          tone: 'yellow',
+          badge: 'BITNO',
+          title: `Projekat je ${progress}% završen`,
+          message: `${clientName(project.clientId)} — ${project.title}: blizu završetka, proveri sledeći korak`,
+          actionLabel: 'Pogledaj',
+          action: () => setModal({ type: 'project', project }),
+        })
+      }
+
+      if (progress === 100 && unbilledTasks.length) {
+        signals.push({
+          id: `done-unbilled-${project.id}`,
+          tone: 'red',
+          badge: '100%',
+          title: 'Završeno, nije naplaćeno',
+          message: `${clientName(project.clientId)} — ${project.title}: sve završeno, pošalji na naplatu`,
+          actionLabel: 'Naplata',
+          action: () => setModal({ type: 'project', project }),
+        })
+      }
+    })
+
+    lateTasks.slice(0, 4).forEach((task) => {
+      signals.push({
+        id: `late-task-${task.id}`,
+        tone: 'red',
+        badge: 'TASK',
+        title: 'Task kasni',
+        message: `${clientName(String(task.clientId))} — ${projectTitle(task.projectId)}: ${task.title}`,
+        actionLabel: 'Otvori',
+        action: () => setModal({ type: 'task', task }),
+      })
+    })
+
+    const toneWeight: Record<PulseSignalTone, number> = { red: 0, yellow: 1, blue: 2 }
+    const uniqueSignals = Array.from(new Map(signals.map((signal) => [signal.id, signal])).values())
+    return uniqueSignals
+      .sort((first, second) => toneWeight[first.tone] - toneWeight[second.tone])
+      .slice(0, 6)
+  }, [projects, tasks, urgentBilling, riskyProjects, lateTasks, clientById, projectById])
   const validLinkedTasks = tasks.filter((task) => task.clientId && task.projectId && clientById.has(String(task.clientId)) && projectById.has(task.projectId))
   const teamTasks = validLinkedTasks.filter((task) => ['dodeljen', 'u_radu', 'na_cekanju'].includes(task.status))
   const teamTasksByRole = teamTasks.reduce<Record<string, Task[]>>((groups, task) => {
@@ -433,11 +603,8 @@ function AdminHome() {
   return (
     <section className="pulse-phone-screen admin-phone-screen">
       <h2>Pregled poslovanja</h2>
-      <section className="pulse-panel pulse-panel-red"><h3>HITNO – BITNO !!!</h3><div className="pulse-list">
-        {urgentBilling.map((record) => <article className="pulse-item" key={`billing-${record.id}`}><div className="pulse-item-title-row"><h4>Naplati projekat !</h4><span className="pulse-pill pulse-pill-red">KASNI</span></div><dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(record.clientId)}</dd></div><div><dt>Projekat:</dt><dd>{projectTitle(record.projectId)}</dd></div><div><dt>Rok za plaćanje:</dt><dd>{formatDate(record.dueDate)}</dd></div></dl><button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'billing', record })}>OTVORI</button></article>)}
-        {riskyProjects.map((project) => <article className="pulse-item" key={`project-${project.id}`}><div className="pulse-item-title-row"><h4>FAZA KASNI {daysLate(getStageDueDate(findOverdueStage(project)))} DANA !!!</h4></div><dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(project.clientId)}</dd></div><div><dt>Projekat:</dt><dd>{project.title}</dd></div><div><dt>Rok :</dt><dd>{formatDate(getStageDueDate(findOverdueStage(project)))}</dd></div></dl><button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'project', project })}>OTVORI</button></article>)}
-        {lateTasks.map((task) => <article className="pulse-item" key={`task-${task.id}`}><div className="pulse-item-title-row"><h4>{task.title}</h4><span className="pulse-pill pulse-pill-red">ZADATAK</span></div><dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(String(task.clientId))}</dd></div><div><dt>Projekat:</dt><dd>{projectTitle(task.projectId)}</dd></div><div><dt>Rok :</dt><dd>{formatDate(task.dueDate)}</dd></div></dl><button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'task', task })}>OTVORI</button></article>)}
-        {urgentBilling.length + riskyProjects.length + lateTasks.length === 0 ? <p className="pulse-empty">Nema hitnih stavki.</p> : null}
+      <section className="pulse-panel pulse-panel-red pulse-signals-panel"><h3>HITNO – BITNO !!!</h3><div className="pulse-ai-line"><span className="pulse-ai-cursor">▌</span>{pulseTypingText || 'PULSE analizira...'}</div><div className="pulse-list">
+        {pulseSignals.length ? pulseSignals.map((signal) => <article className={`pulse-item pulse-signal-card pulse-signal-${signal.tone}`} key={signal.id}><div className="pulse-item-title-row"><h4>{signal.title}</h4><span className={`pulse-pill ${signal.tone === 'red' ? 'pulse-pill-red' : signal.tone === 'yellow' ? 'pulse-pill-blue' : 'pulse-pill-cyan'}`}>{signal.badge}</span></div><p>{signal.message}</p><button className="pulse-outline-btn pulse-card-open" type="button" onClick={signal.action}>{signal.actionLabel}</button></article>) : <p className="pulse-empty">Sve je pod kontrolom. Nema kritičnih signala trenutno.</p>}
       </div></section>
       <section className="pulse-panel pulse-panel-green"><h3>MOJ TIM – šta ko radi danas</h3><div className="pulse-list">{teamRoleGroups.length ? teamRoleGroups.map(([roleLabel, roleTasks]) => <div className="pulse-team-role-group" key={roleLabel}><h4 className="pulse-team-role-title">{roleLabel}</h4>{roleTasks.map((task) => { const project = projectById.get(task.projectId); return <article className="pulse-item pulse-team-card" key={task.id}><div className="pulse-item-title-row"><h4>{task.title}</h4><button className="pulse-pill pulse-pill-red" type="button" onClick={() => setModal({ type: 'task', task })}>ZADATAK</button></div>{task.source === 'template' ? <p><span className="pulse-pill pulse-pill-blue">AUTO</span>{task.sourceProductTitle ? <> Iz proizvoda: <strong>{task.sourceProductTitle}</strong></> : null}</p> : null}<p><strong>Operativna rola:</strong> {normalizeRoleLabel(task.requiredRole || task.assignedToLabel)}</p><p>{clientName(String(task.clientId))} – {projectTitle(task.projectId)}</p><p><strong>Rok :</strong> {formatDate(task.dueDate)}</p>{project ? <button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'project', project })}>PROJEKAT</button> : null}</article> })}</div>) : <p className="pulse-empty">Nema aktivnih zadataka.</p>}</div></section>
       <section className="pulse-panel pulse-panel-white"><h3>NAPLATA</h3><div className="pulse-list">{sortedBilling.map((record) => <article className="pulse-item pulse-billing-row" key={record.id} onClick={() => setModal({ type: 'billing', record })}><div className="pulse-item-title-row"><h4>{formatAmount(record)}</h4><span className={`pulse-pill ${record.status === 'overdue' ? 'pulse-pill-red' : record.status === 'paid' ? 'pulse-pill-green' : 'pulse-pill-blue'}`}>{BILLING_STATUS_LABELS[record.status]}</span></div><dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(record.clientId)}</dd></div><div><dt>Projekat:</dt><dd>{projectTitle(record.projectId)}</dd></div><div><dt>Rok za plaćanje:</dt><dd>{formatDate(record.dueDate)}</dd></div></dl></article>)}</div></section>

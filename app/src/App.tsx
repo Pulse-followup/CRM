@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { AuthProvider, useAuthStore } from './features/auth/authStore'
@@ -23,6 +24,7 @@ import TemplatesPage from './pages/TemplatesPage'
 import SettingsPage from './pages/SettingsPage'
 import UserHome from './pages/UserHome'
 import UserTasks from './pages/UserTasks'
+import PulseWelcomeGuide, { PULSE_WELCOME_KEY } from './components/PulseWelcomeGuide'
 
 function App() {
   return (
@@ -46,15 +48,30 @@ function AppRoutes() {
   const { currentUser } = useAuthStore()
   const role = currentUser.role
 
+  const [isGuideOpen, setIsGuideOpen] = useState(false)
+
+  useEffect(() => {
+    if (!window.localStorage.getItem(PULSE_WELCOME_KEY)) setIsGuideOpen(true)
+  }, [])
+
+  const openGuide = () => setIsGuideOpen(true)
+
   const layoutElement =
-    role === 'admin' ? <AdminLayout /> : role === 'finance' ? <FinanceLayout /> : <UserLayout />
+    role === 'admin' ? (
+      <AdminLayout onOpenGuide={openGuide} />
+    ) : role === 'finance' ? (
+      <FinanceLayout onOpenGuide={openGuide} />
+    ) : (
+      <UserLayout onOpenGuide={openGuide} />
+    )
 
   const homeElement =
     role === 'admin' ? <AdminHome /> : role === 'finance' ? <FinanceHome /> : <UserHome />
 
   return (
-    <BrowserRouter basename="/CRM">
-      <Routes>
+    <>
+      <BrowserRouter basename="/CRM">
+        <Routes>
         <Route element={layoutElement}>
           <Route path="/" element={homeElement} />
           <Route path="/admin" element={role === 'admin' ? <AdminHome /> : <NoAccessPage />} />
@@ -84,8 +101,10 @@ function AppRoutes() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+      <PulseWelcomeGuide isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
+    </>
   )
 }
 

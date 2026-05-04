@@ -1,10 +1,14 @@
 import { Outlet } from 'react-router-dom'
 import AppTopBar from '../components/AppTopBar'
 
-function UserLayout() {
+type UserLayoutProps = {
+  onOpenGuide?: () => void
+}
+
+function UserLayout({ onOpenGuide }: UserLayoutProps) {
   return (
     <div className="app-shell">
-      <AppTopBar />
+      <AppTopBar onOpenGuide={onOpenGuide} />
       <main className="app-content">
         <Outlet />
       </main>
