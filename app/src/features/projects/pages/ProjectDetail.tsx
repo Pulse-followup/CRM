@@ -76,9 +76,13 @@ function ProjectDetail() {
 
   const stageProgress = useMemo(() => (project ? getProjectStageProgress(project, tasks) : []), [project, tasks])
   const tasksWithoutStage = useMemo(() => getTasksWithoutStage(tasks), [tasks])
+  const projectHasBilling = Boolean(
+    activeBilling ||
+    (project?.billingId && project.billingStatus && project.billingStatus !== 'cancelled')
+  )
   const billableTasks = useMemo(
-    () => tasks.filter((task) => task.status === 'zavrsen' && !task.billingId && task.billingState !== 'sent_to_billing' && task.billingState !== 'billed'),
-    [tasks],
+    () => projectHasBilling ? [] : tasks.filter((task) => task.status === 'zavrsen' && !task.billingId && task.billingState !== 'sent_to_billing' && task.billingState !== 'billed'),
+    [projectHasBilling, tasks],
   )
   const billingPreview = useMemo(() => {
     const totalTimeMinutes = billableTasks.reduce((sum, task) => sum + (task.timeSpentMinutes ?? 0), 0)

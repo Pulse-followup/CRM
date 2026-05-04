@@ -77,8 +77,24 @@ function daysSince(value?: string | null) {
   return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86400000))
 }
 
-function isTaskBillableDone(task: Task) {
-  return task.status === 'zavrsen' && task.billingState !== 'sent_to_billing' && task.billingState !== 'billed' && !task.billingId
+function isCoveredBillingStatus(status?: string | null) {
+  const normalized = String(status || '').toLowerCase()
+  return Boolean(normalized && normalized !== 'cancelled' && normalized !== 'otkazano')
+}
+
+function getProjectBillingRecord(project: Project, billing: BillingRecord[]) {
+  return billing.find((record) => record.projectId === project.id && isCoveredBillingStatus(record.status)) ?? null
+}
+
+function isProjectCoveredByBilling(project: Project, billing: BillingRecord[]) {
+  return Boolean((project.billingId && isCoveredBillingStatus(project.billingStatus)) || getProjectBillingRecord(project, billing))
+}
+
+function isTaskBillableDone(task: Task, project?: Project, billing: BillingRecord[] = []) {
+  if (task.status !== 'zavrsen') return false
+  if (task.billingState === 'sent_to_billing' || task.billingState === 'billed' || task.billingId) return false
+  if (project && isProjectCoveredByBilling(project, billing)) return false
+  return true
 }
 
 function taskValue(task: Task) {
@@ -159,7 +175,7 @@ function ProjectDetailModal({
   onCreateBilling: (project: Project, tasksForBilling: Task[]) => void | Promise<void>
 }) {
   const completedTasks = tasks.filter((task) => task.status === 'zavrsen')
-  const unbilledCompletedTasks = completedTasks.filter((task) => task.billingState !== 'sent_to_billing' && task.billingState !== 'billed' && !task.billingId)
+  const unbilledCompletedTasks = completedTasks.filter((task) => isTaskBillableDone(task, project, activeBilling ? [activeBilling] : []))
   const totalLaborCost = unbilledCompletedTasks.reduce((sum, task) => sum + (task.laborCost ?? 0), 0)
   const totalMaterialCost = unbilledCompletedTasks.reduce((sum, task) => sum + (task.materialCost ?? 0), 0)
   const totalCost = totalLaborCost + totalMaterialCost
@@ -299,6 +315,22 @@ function AdminHome() {
   const billing = getAllBilling()
 
   useEffect(() => {
+    const updates = tasks
+      .map((task) => {
+        const project = projects.find((item) => item.id === task.projectId)
+        if (!project || !isTaskBillableDone(task, project, billing)) return null
+        const projectBilling = getProjectBillingRecord(project, billing)
+        const billingId = project.billingId || projectBilling?.id || null
+        if (!billingId && !project.billingStatus) return null
+        return { ...task, billingState: 'sent_to_billing' as const, billingStatus: 'sent_to_billing', billingId, updatedAt: new Date().toISOString() }
+      })
+      .filter(Boolean) as Task[]
+
+    if (!updates.length) return
+    updates.forEach((task) => void updateTask(task))
+  }, [tasks, projects, billing, updateTask])
+
+  useEffect(() => {
     let isMounted = true
     const workspaceId = activeWorkspace?.id || ''
 
@@ -393,7 +425,7 @@ function AdminHome() {
 
       const completedTasks = projectTasks.filter((task) => task.status === 'zavrsen')
       const openTasks = projectTasks.filter((task) => task.status !== 'zavrsen' && task.status !== 'naplacen')
-      const unbilledTasks = completedTasks.filter(isTaskBillableDone)
+      const unbilledTasks = completedTasks.filter((task) => isTaskBillableDone(task, project, billing))
       const progress = Math.round((completedTasks.length / projectTasks.length) * 100)
       const pendingValue = unbilledTasks.reduce((sum, task) => sum + taskValue(task), 0)
       const activityDates = projectTasks

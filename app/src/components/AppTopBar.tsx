@@ -38,12 +38,14 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
         <img src="/CRM/pulse-header-logo.png" alt="PULSE" className="pulse-logo" />
       </Link>
       <div className="pulse-role">{roleLabel(currentUser.role)}</div>
-      <nav className="pulse-desktop-side-nav" aria-label="Desktop navigacija">
+      <nav className="pulse-desktop-nav" aria-label="Glavni meni">
         <Link to="/">Home</Link>
         <Link to="/settings">Moj nalog</Link>
         {currentUser.role === 'admin' ? <Link to="/products">Moji proizvodi</Link> : null}
         {currentUser.role === 'admin' ? <Link to="/templates">Procesi</Link> : null}
-        <button type="button" onClick={onOpenGuide}>Kako koristiti PULSE</button>
+        <button className="pulse-dropdown-button" type="button" onClick={() => onOpenGuide?.()}>
+          Kako koristiti PULSE
+        </button>
       </nav>
       <div className="pulse-menu" ref={menuRef}>
         <button className="pulse-hamburger" type="button" onClick={() => setIsOpen((v) => !v)} aria-label="Meni">
