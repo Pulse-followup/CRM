@@ -12,6 +12,7 @@ export function startTask(task: Task): Task {
   return {
     ...task,
     status: 'u_radu',
+    activatedAt: task.activatedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
 }

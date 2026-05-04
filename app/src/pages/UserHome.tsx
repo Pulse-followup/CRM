@@ -125,6 +125,7 @@ function TaskModal({
   onComplete: (payload: { timeSpentMinutes: number; materialCost: number; materialDescription: string }) => void
 }) {
   const [isCompleting, setIsCompleting] = useState(false)
+  const isWaitingForPreviousStep = task.status === 'na_cekanju' && Boolean(task.dependsOnTaskId)
 
   return (
     <div className="pulse-modal-backdrop" onMouseDown={onClose}>
@@ -136,7 +137,9 @@ function TaskModal({
         <p><strong>Projekat</strong> - {item?.project ?? '-'}</p>
         <p><strong>Opis:</strong> {task.description || '-'}</p>
         <br />
+        <p>Operativna rola - {task.requiredRole || '-'}</p>
         <p>Dodeljeno - {task.assignedToLabel || '-'}</p>
+        <p>Korak - {task.sequenceOrder || '-'}</p>
         <p>Rok - {formatDate(task.dueDate)}</p>
         <p>Utrošeno vreme - {task.timeSpentMinutes ? `${task.timeSpentMinutes} min` : '-'}</p>
         <p>Trošak materijala - {task.materialCost ?? '-'}</p>
@@ -149,7 +152,8 @@ function TaskModal({
           <div className="pulse-modal-actions">
             {task.status === 'dodeljen' ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onStart}>PREUZMI TASK</button> : null}
             {task.status === 'u_radu' ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onHold}>STAVI NA ČEKANJE</button> : null}
-            {(task.status === 'na_cekanju' || task.status === 'vracen') ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onResume}>NASTAVI RAD</button> : null}
+            {isWaitingForPreviousStep ? <span className="pulse-pill pulse-pill-blue">ČEKA PRETHODNI KORAK</span> : null}
+            {!isWaitingForPreviousStep && (task.status === 'na_cekanju' || task.status === 'vracen') ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onResume}>NASTAVI RAD</button> : null}
             {task.status === 'u_radu' ? <button className="pulse-modal-btn pulse-modal-btn-green" type="button" onClick={() => setIsCompleting(true)}>ZAVRŠI TASK</button> : null}
           </div>
         )}
@@ -201,7 +205,10 @@ function UserHome() {
           onClose={closeModal}
           onStart={() => updateOpenedTask(startTask(opened))}
           onHold={() => updateOpenedTask(pauseTask(opened))}
-          onResume={() => updateOpenedTask(resumeTask(opened))}
+          onResume={() => {
+            if (opened.status === 'na_cekanju' && opened.dependsOnTaskId) return
+            updateOpenedTask(resumeTask(opened))
+          }}
           onComplete={(payload) => {
             const hourlyRate = membership?.hourly_rate ?? 0
             const laborCost = Math.round((payload.timeSpentMinutes / 60) * hourlyRate)

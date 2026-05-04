@@ -24,6 +24,13 @@ function formatDueDate(value?: string) {
   }).format(date)
 }
 
+function formatDurationMinutes(value?: number) {
+  if (!value) return '-'
+  if (value < 60) return `${value} min`
+  const hours = Math.round((value / 60) * 10) / 10
+  return `${hours}h`
+}
+
 function getStatusTone(task: Task) {
   switch (task.status) {
     case 'zavrsen':
@@ -92,6 +99,8 @@ function TaskDetail() {
     return <NoAccessPage />
   }
 
+  const isWaitingForPreviousStep = task.status === 'na_cekanju' && Boolean(task.dependsOnTaskId)
+
   const handleStart = () => {
     if (task.status !== 'dodeljen') return
     updateTask(startTask(task))
@@ -103,7 +112,7 @@ function TaskDetail() {
   }
 
   const handleResume = () => {
-    if (task.status !== 'na_cekanju' && task.status !== 'vracen') return
+    if (isWaitingForPreviousStep || (task.status !== 'na_cekanju' && task.status !== 'vracen')) return
     updateTask(resumeTask(task))
   }
 
@@ -186,6 +195,18 @@ function TaskDetail() {
               <dt>Rok</dt>
               <dd>{formatDueDate(task.dueDate)}</dd>
             </div>
+            {task.sequenceOrder ? (
+              <div>
+                <dt>Korak procesa</dt>
+                <dd>{task.sequenceOrder}</dd>
+              </div>
+            ) : null}
+            {task.estimatedMinutes ? (
+              <div>
+                <dt>Procena trajanja</dt>
+                <dd>{formatDurationMinutes(task.estimatedMinutes)}</dd>
+              </div>
+            ) : null}
             <div>
               <dt>Utrošeno vreme</dt>
               <dd>{typeof task.timeSpentMinutes === 'number' ? `${task.timeSpentMinutes} min` : '-'}</dd>
@@ -230,7 +251,11 @@ function TaskDetail() {
               </>
             ) : null}
 
-            {task.status === 'na_cekanju' || task.status === 'vracen' ? (
+            {isWaitingForPreviousStep ? (
+              <span className="customer-status-badge is-muted">Čeka prethodni korak</span>
+            ) : null}
+
+            {!isWaitingForPreviousStep && (task.status === 'na_cekanju' || task.status === 'vracen') ? (
               <button type="button" className="customer-project-toggle" onClick={handleResume}>
                 Nastavi rad
               </button>

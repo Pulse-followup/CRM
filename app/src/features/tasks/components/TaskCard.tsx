@@ -3,7 +3,8 @@ import { completeTask, pauseTask, resumeTask, startTask } from '../taskActions'
 import { TASK_STATUS_LABELS, TASK_TYPE_LABELS } from '../taskLabels'
 import { readProcessTemplates } from '../../templates/templateStorage'
 import { useAuthStore } from '../../auth/authStore'
-import type { Task } from '../types'
+import { getTaskBlockReason, normalizeOperationalRole } from '../taskStore'
+import type { Task, TaskStatus } from '../types'
 
 export interface TaskCardProps {
   task: Task
@@ -23,8 +24,28 @@ function formatDueDate(value?: string) {
   }).format(date)
 }
 
+function formatDurationMinutes(value?: number) {
+  if (!value) return '-'
+  if (value < 60) return `${value} min`
+  const hours = Math.round((value / 60) * 10) / 10
+  return `${hours}h`
+}
+
+function withTaskUpdate(task: Task, updates: Partial<Task>): Task {
+  const now = new Date().toISOString()
+  return {
+    ...task,
+    ...updates,
+    updatedAt: now,
+  }
+}
+
+function statusLabel(status: TaskStatus) {
+  return TASK_STATUS_LABELS[status] || status
+}
+
 function TaskCard({ task, onTaskChange }: TaskCardProps) {
-  const { users } = useAuthStore()
+  const { users, currentUser } = useAuthStore()
   const processTemplates = readProcessTemplates()
   const templateTitle = task.sourceTemplateTitle || processTemplates.find((template) => template.id === task.sourceTemplateId)?.title || ''
   const [isCompleting, setIsCompleting] = useState(false)
@@ -33,6 +54,11 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
   const [materialDescription, setMaterialDescription] = useState(task.materialDescription ?? '')
   const [isAssigning, setIsAssigning] = useState(false)
   const [selectedAssigneeId, setSelectedAssigneeId] = useState('')
+  const isWaitingForPreviousStep = task.status === 'na_cekanju' && Boolean(task.dependsOnTaskId)
+  const isAdmin = currentUser.role === 'admin'
+  const assignedUser = task.assignedToUserId ? users.find((user) => user.id === task.assignedToUserId) : null
+  const requiredRole = normalizeOperationalRole(task.requiredRole)
+  const blockReason = getTaskBlockReason(task, users)
 
   useEffect(() => {
     setTimeSpentMinutes(String(task.timeSpentMinutes ?? ''))
@@ -57,7 +83,7 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
   }
 
   const handleResume = () => {
-    if (!onTaskChange || (task.status !== 'na_cekanju' && task.status !== 'vracen')) return
+    if (!onTaskChange || isWaitingForPreviousStep || (task.status !== 'na_cekanju' && task.status !== 'vracen')) return
     onTaskChange(resumeTask(task))
   }
 
@@ -93,7 +119,7 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
   }
 
   const handleOpenAssign = () => {
-    setSelectedAssigneeId(users[0]?.id || '')
+    setSelectedAssigneeId(task.assignedToUserId || users[0]?.id || '')
     setIsAssigning(true)
   }
 
@@ -102,21 +128,81 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
     const selectedUser = users.find((user) => user.id === selectedAssigneeId)
     if (!selectedUser) return
 
-    onTaskChange({
-      ...task,
-      assignedToUserId: selectedUser.id,
-      assignedToLabel: selectedUser.name || selectedUser.email,
-      updatedAt: new Date().toISOString(),
-    })
+    onTaskChange(
+      withTaskUpdate(task, {
+        assignedToUserId: selectedUser.id,
+        assignedToLabel: selectedUser.name || selectedUser.email,
+      }),
+    )
     setIsAssigning(false)
+  }
+
+  const handleActivateNow = () => {
+    if (!onTaskChange || !isAdmin) return
+    onTaskChange(
+      withTaskUpdate(task, {
+        status: 'dodeljen',
+        activatedAt: new Date().toISOString(),
+      }),
+    )
+  }
+
+  const handleReturnToWaiting = () => {
+    if (!onTaskChange || !isAdmin) return
+    onTaskChange(
+      withTaskUpdate(task, {
+        status: 'na_cekanju',
+        activatedAt: null,
+      }),
+    )
+  }
+
+  const handleSkipStep = () => {
+    if (!onTaskChange || !isAdmin) return
+    const now = new Date().toISOString()
+    onTaskChange(
+      withTaskUpdate(task, {
+        status: 'zavrsen',
+        completedAt: now,
+        timeSpentMinutes: task.timeSpentMinutes ?? 0,
+        materialCost: task.materialCost ?? 0,
+        materialDescription: task.materialDescription || 'Korak preskočen od strane admina.',
+        billingState: task.billingState || 'not_billable',
+      }),
+    )
+  }
+
+  const handleForceComplete = () => {
+    if (!onTaskChange || !isAdmin) return
+    onTaskChange(
+      withTaskUpdate(task, {
+        status: 'zavrsen',
+        completedAt: new Date().toISOString(),
+      }),
+    )
+  }
+
+  const handleReopen = () => {
+    if (!onTaskChange || !isAdmin) return
+    onTaskChange(
+      withTaskUpdate(task, {
+        status: 'dodeljen',
+        completedAt: null,
+        activatedAt: new Date().toISOString(),
+      }),
+    )
   }
 
   return (
     <article className="customer-task-card">
       <div className="customer-task-card-head">
         <strong>{task.title}</strong>
-        <span className="customer-status-badge is-muted">{TASK_STATUS_LABELS[task.status]}</span>
+        <span className="customer-status-badge is-muted">{statusLabel(task.status)}</span>
       </div>
+
+      {blockReason ? (
+        <p className="customer-source-note">🚫 <strong>BLOKIRANO:</strong> {blockReason}</p>
+      ) : null}
 
       {task.source === 'template' || templateTitle ? (
         <p className="customer-source-note">Iz šablona: <strong>{templateTitle || 'Proces'}</strong>{task.sourceProductTitle ? ` · Proizvod: ${task.sourceProductTitle}` : ''}</p>
@@ -131,18 +217,36 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
         ) : null}
         <div>
           <dt>Operativna rola</dt>
-          <dd>{task.requiredRole || task.assignedToLabel || '-'}</dd>
+          <dd>{requiredRole || task.assignedToLabel || '-'}</dd>
         </div>
         {task.assignedToUserId ? (
           <div>
             <dt>Dodeljeno korisniku</dt>
-            <dd>{task.assignedToLabel || '-'}</dd>
+            <dd>{task.assignedToLabel || assignedUser?.name || '-'}</dd>
+          </div>
+        ) : null}
+        {assignedUser?.productionRole ? (
+          <div>
+            <dt>Rola korisnika</dt>
+            <dd>{normalizeOperationalRole(assignedUser.productionRole)}</dd>
           </div>
         ) : null}
         <div>
           <dt>Rok</dt>
           <dd>{formatDueDate(task.dueDate)}</dd>
         </div>
+        {task.sequenceOrder ? (
+          <div>
+            <dt>Korak</dt>
+            <dd>{task.sequenceOrder}</dd>
+          </div>
+        ) : null}
+        {task.estimatedMinutes ? (
+          <div>
+            <dt>Procena</dt>
+            <dd>{formatDurationMinutes(task.estimatedMinutes)}</dd>
+          </div>
+        ) : null}
         {typeof task.timeSpentMinutes === 'number' && (
           <div>
             <dt>Utrošeno vreme</dt>
@@ -165,6 +269,12 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
             </button>
           ) : null}
 
+          {isAdmin && task.assignedToUserId ? (
+            <button type="button" className="customer-project-toggle" onClick={handleOpenAssign}>
+              Re-dodeli
+            </button>
+          ) : null}
+
           {task.status === 'dodeljen' ? (
             <button type="button" className="customer-project-toggle" onClick={handleStart}>
               Preuzmi
@@ -182,7 +292,11 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
             </>
           ) : null}
 
-          {task.status === 'na_cekanju' || task.status === 'vracen' ? (
+          {isWaitingForPreviousStep ? (
+            <span className="customer-status-badge is-muted">Čeka prethodni korak</span>
+          ) : null}
+
+          {!isWaitingForPreviousStep && (task.status === 'na_cekanju' || task.status === 'vracen') ? (
             <button type="button" className="customer-project-toggle" onClick={handleResume}>
               Vrati u rad
             </button>
@@ -190,6 +304,40 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
 
           {task.status === 'zavrsen' ? (
             <span className="customer-status-badge">{TASK_STATUS_LABELS.zavrsen}</span>
+          ) : null}
+
+          {isAdmin ? (
+            <>
+              {task.status === 'na_cekanju' ? (
+                <button type="button" className="customer-project-toggle" onClick={handleActivateNow}>
+                  Aktiviraj
+                </button>
+              ) : null}
+
+              {task.status === 'dodeljen' || task.status === 'u_radu' ? (
+                <button type="button" className="customer-project-toggle" onClick={handleReturnToWaiting}>
+                  Vrati na čekanje
+                </button>
+              ) : null}
+
+              {task.status !== 'zavrsen' && task.status !== 'naplacen' ? (
+                <button type="button" className="customer-project-toggle" onClick={handleSkipStep}>
+                  Preskoči
+                </button>
+              ) : null}
+
+              {task.status !== 'zavrsen' && task.status !== 'naplacen' ? (
+                <button type="button" className="customer-project-toggle" onClick={handleForceComplete}>
+                  Admin završi
+                </button>
+              ) : null}
+
+              {task.status === 'zavrsen' ? (
+                <button type="button" className="customer-project-toggle" onClick={handleReopen}>
+                  Vrati u aktivno
+                </button>
+              ) : null}
+            </>
           ) : null}
         </div>
       ) : null}
@@ -199,16 +347,17 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
           <label className="customer-task-form-field">
             <span>Dodeli korisniku</span>
             <select value={selectedAssigneeId} onChange={(event) => setSelectedAssigneeId(event.target.value)}>
+              <option value="">-- Izaberi člana --</option>
               {users.map((user) => (
                 <option key={user.id} value={user.id}>
-                  {user.name} {user.productionRole ? `(${user.productionRole})` : ''}
+                  {user.name} {user.productionRole ? `(${normalizeOperationalRole(user.productionRole)})` : '(bez operativne role)'}
                 </option>
               ))}
             </select>
           </label>
-          {task.requiredRole ? <p className="customer-source-note">Potrebna rola: <strong>{task.requiredRole}</strong></p> : null}
+          {requiredRole ? <p className="customer-source-note">Potrebna rola: <strong>{requiredRole}</strong></p> : null}
           <div className="customer-task-actions">
-            <button type="button" className="customer-project-toggle" onClick={handleConfirmAssign}>
+            <button type="button" className="customer-project-toggle" onClick={handleConfirmAssign} disabled={!selectedAssigneeId}>
               Potvrdi dodelu
             </button>
             <button type="button" className="customer-project-toggle" onClick={() => setIsAssigning(false)}>

@@ -82,8 +82,8 @@ function normalizeRoleLabel(role?: string) {
     finance: 'FINANSIJE',
     designer: 'DIZAJNER',
     dizajner: 'DIZAJNER',
-    production: 'PROIZVODNJA',
-    produkcija: 'PROIZVODNJA',
+    production: 'PRODUKCIJA',
+    produkcija: 'PRODUKCIJA',
     logistics: 'LOGISTIKA',
     logistika: 'LOGISTIKA',
   }
@@ -139,18 +139,20 @@ export function buildCatalogJobPayload(draft: CatalogJobDraft, teamMembers: Cata
     })),
   }
 
+  const taskIds = sortedSteps.map(() => safeId('task'))
   const tasks: Task[] = sortedSteps.map((step, index) => {
     const requiredRole = normalizeRoleLabel(step.role)
     const matchedMember = findMemberByProductionRole(requiredRole, teamMembers)
+    const isFirstStep = index === 0
 
     return {
-      id: safeId('task'),
+      id: taskIds[index],
       clientId: draft.clientId,
       projectId,
       title: step.title,
       description: buildTaskDescription(draft, step.title),
       type: 'interni_zadatak',
-      status: 'dodeljen',
+      status: isFirstStep ? 'dodeljen' : 'na_cekanju',
       assignedToUserId: matchedMember?.id,
       assignedToLabel: matchedMember?.name || requiredRole,
       requiredRole,
@@ -166,6 +168,10 @@ export function buildCatalogJobPayload(draft: CatalogJobDraft, teamMembers: Cata
       sourceTemplateId: draft.template.id,
       sourceTemplateTitle: draft.template.title,
       sourceTemplateStepId: step.id,
+      sequenceOrder: index + 1,
+      dependsOnTaskId: isFirstStep ? undefined : taskIds[index - 1],
+      activatedAt: isFirstStep ? timestamp : null,
+      estimatedMinutes: Number(step.estimatedMinutes) || undefined,
     }
   })
 

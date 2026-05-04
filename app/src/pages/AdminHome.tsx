@@ -77,6 +77,57 @@ function daysSince(value?: string | null) {
   return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86400000))
 }
 
+
+const DEFAULT_STEP_ESTIMATE_MINUTES = 8 * 60
+
+function minutesSince(value?: string | null) {
+  if (!value) return 0
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 0
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000))
+}
+
+function formatDurationShort(minutes: number) {
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.round((minutes / 60) * 10) / 10
+  if (hours < 24) return `${hours}h`
+  const days = Math.round((hours / 24) * 10) / 10
+  return `${days} dana`
+}
+
+function getWorkflowSummary(tasks: Task[]) {
+  const workflowTasks = tasks
+    .filter((task) => task.source === 'template' || task.sequenceOrder)
+    .slice()
+    .sort((first, second) => (first.sequenceOrder || 999) - (second.sequenceOrder || 999))
+  const total = workflowTasks.length
+  const completed = workflowTasks.filter((task) => task.status === 'zavrsen' || task.status === 'naplacen').length
+  const activeTask = workflowTasks.find((task) => task.status === 'dodeljen' || task.status === 'u_radu')
+  const progress = total ? Math.round((completed / total) * 100) : 0
+  return { total, completed, activeTask, progress }
+}
+
+function getBlockedStepSignal(projectTasks: Task[]) {
+  const activeTask = projectTasks
+    .filter((task) => (task.status === 'dodeljen' || task.status === 'u_radu') && (task.source === 'template' || task.sequenceOrder))
+    .sort((first, second) => (first.sequenceOrder || 999) - (second.sequenceOrder || 999))[0]
+
+  if (!activeTask) return null
+  const expectedMinutes = Math.max(30, activeTask.estimatedMinutes || DEFAULT_STEP_ESTIMATE_MINUTES)
+  const actualMinutes = minutesSince(activeTask.activatedAt || activeTask.updatedAt || activeTask.createdAt)
+  if (!actualMinutes || actualMinutes < expectedMinutes * 1.5) return null
+
+  const ratio = actualMinutes / expectedMinutes
+  return {
+    task: activeTask,
+    expectedMinutes,
+    actualMinutes,
+    ratio,
+    tone: ratio >= 2 ? 'red' as const : 'yellow' as const,
+    title: ratio >= 3 ? 'Korak kritično kasni' : ratio >= 2 ? 'Korak je blokiran' : 'Korak usporava',
+  }
+}
+
 function isCoveredBillingStatus(status?: string | null) {
   const normalized = String(status || '').toLowerCase()
   return Boolean(normalized && normalized !== 'cancelled' && normalized !== 'otkazano')
@@ -136,8 +187,8 @@ function normalizeRoleLabel(role?: string) {
     finance: 'FINANSIJE',
     designer: 'DIZAJNER',
     dizajner: 'DIZAJNER',
-    production: 'PROIZVODNJA',
-    produkcija: 'PROIZVODNJA',
+    production: 'PRODUKCIJA',
+    produkcija: 'PRODUKCIJA',
     logistics: 'LOGISTIKA',
     logistika: 'LOGISTIKA',
   }
@@ -423,10 +474,24 @@ function AdminHome() {
       const projectTasks = tasks.filter((task) => task.projectId === project.id)
       if (!projectTasks.length) return
 
+      const workflowSummary = getWorkflowSummary(projectTasks)
+      const blockedStep = getBlockedStepSignal(projectTasks)
+      if (blockedStep) {
+        signals.push({
+          id: `blocked-step-${blockedStep.task.id}`,
+          tone: blockedStep.tone,
+          badge: blockedStep.tone === 'red' ? 'BLOKADA' : 'USPORAVA',
+          title: blockedStep.title,
+          message: `${clientName(project.clientId)} — ${project.title}: ${blockedStep.task.requiredRole || blockedStep.task.title} traje ${formatDurationShort(blockedStep.actualMinutes)} / očekivano ${formatDurationShort(blockedStep.expectedMinutes)} (${blockedStep.ratio.toFixed(1)}x)`,
+          actionLabel: 'Otvori task',
+          action: () => setModal({ type: 'task', task: blockedStep.task }),
+        })
+      }
+
       const completedTasks = projectTasks.filter((task) => task.status === 'zavrsen')
-      const openTasks = projectTasks.filter((task) => task.status !== 'zavrsen' && task.status !== 'naplacen')
+      const openTasks = projectTasks.filter((task) => task.status !== 'zavrsen' && task.status !== 'naplacen' && !(task.status === 'na_cekanju' && task.dependsOnTaskId))
       const unbilledTasks = completedTasks.filter((task) => isTaskBillableDone(task, project, billing))
-      const progress = Math.round((completedTasks.length / projectTasks.length) * 100)
+      const progress = workflowSummary.total ? workflowSummary.progress : Math.round((completedTasks.length / projectTasks.length) * 100)
       const pendingValue = unbilledTasks.reduce((sum, task) => sum + taskValue(task), 0)
       const activityDates = projectTasks
         .map((task) => task.completedAt || task.updatedAt || task.createdAt)
@@ -510,7 +575,7 @@ function AdminHome() {
       .slice(0, 6)
   }, [projects, tasks, urgentBilling, riskyProjects, lateTasks, clientById, projectById])
   const validLinkedTasks = tasks.filter((task) => task.clientId && task.projectId && clientById.has(String(task.clientId)) && projectById.has(task.projectId))
-  const teamTasks = validLinkedTasks.filter((task) => ['dodeljen', 'u_radu', 'na_cekanju'].includes(task.status))
+  const teamTasks = validLinkedTasks.filter((task) => ['dodeljen', 'u_radu', 'na_cekanju'].includes(task.status) && !(task.status === 'na_cekanju' && task.dependsOnTaskId))
   const teamTasksByRole = teamTasks.reduce<Record<string, Task[]>>((groups, task) => {
     const roleLabel = normalizeRoleLabel(task.requiredRole || task.assignedToLabel)
     return { ...groups, [roleLabel]: [...(groups[roleLabel] || []), task] }

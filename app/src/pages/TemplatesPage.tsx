@@ -10,6 +10,37 @@ import {
 import type { ProcessTemplate, ProcessTemplateFormValues, ProcessTemplateStep, ProcessTemplateStepFormValues } from '../features/templates/types'
 import { useCloudStore } from '../features/cloud/cloudStore'
 
+const PRODUCTION_ROLES = [
+  'ACCOUNT',
+  'DIZAJNER',
+  'PRODUKCIJA',
+  'LOGISTIKA',
+  'PREPRESS',
+  'MONTAŽA',
+  'FINANCE',
+]
+
+function normalizeProductionRole(role?: string) {
+  const normalized = role?.trim().toLowerCase()
+  const map: Record<string, string> = {
+    account: 'ACCOUNT',
+    dizajner: 'DIZAJNER',
+    designer: 'DIZAJNER',
+    produkcija: 'PRODUKCIJA',
+    proizvodnja: 'PRODUKCIJA',
+    production: 'PRODUKCIJA',
+    logistika: 'LOGISTIKA',
+    logistics: 'LOGISTIKA',
+    prepress: 'PREPRESS',
+    montaza: 'MONTAŽA',
+    'montaža': 'MONTAŽA',
+    finance: 'FINANCE',
+    finansije: 'FINANCE',
+  }
+  if (!normalized) return ''
+  return map[normalized] || role?.trim().toUpperCase() || ''
+}
+
 const emptyTemplateForm: ProcessTemplateFormValues = {
   title: '',
   description: '',
@@ -139,7 +170,7 @@ function TemplatesPage() {
       projectType: template.projectType,
       description: template.description,
     })
-    setFormSteps(template.steps.slice().sort((a, b) => a.order - b.order))
+    setFormSteps(template.steps.slice().sort((a, b) => a.order - b.order).map((step) => ({ ...step, role: normalizeProductionRole(step.role) || step.role })))
     setStepForm(emptyStepForm)
     setFormError('')
     setStepError('')
@@ -156,6 +187,7 @@ function TemplatesPage() {
       steps: template.steps.map((step, index) => ({
         ...step,
         id: createCloudSafeId('step'),
+        role: normalizeProductionRole(step.role) || step.role,
         order: index + 1,
       })),
     }
@@ -187,7 +219,7 @@ function TemplatesPage() {
     event.preventDefault()
 
     const title = stepForm.title.trim()
-    const role = stepForm.role.trim()
+    const role = normalizeProductionRole(stepForm.role)
     const estimatedMinutes = Number(stepForm.estimatedMinutes.replace(',', '.'))
 
     if (!title || !role) {
@@ -252,6 +284,7 @@ function TemplatesPage() {
     const normalizedSteps = formSteps.map((step, index) => ({
       ...step,
       id: step.id,
+      role: normalizeProductionRole(step.role) || step.role,
       order: index + 1,
     }))
 
@@ -416,15 +449,19 @@ function TemplatesPage() {
                 />
               </label>
               <label>
-                Rola
-                <input
+                Operativna rola
+                <select
                   value={stepForm.role}
                   onChange={(event) => {
                     setStepForm((current) => ({ ...current, role: event.target.value }))
                     setStepError('')
                   }}
-                  placeholder="npr. Dizajner"
-                />
+                >
+                  <option value="">-- Izaberi rolu --</option>
+                  {PRODUCTION_ROLES.map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
               </label>
               <label>
                 Vreme min

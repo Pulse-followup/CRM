@@ -29,8 +29,14 @@ export function getTaskById(tasks: Task[], taskId: string) {
   return tasks.find((task) => task.id === taskId) ?? null
 }
 
+export function isWorkflowWaitingTask(task: Task) {
+  return task.status === 'na_cekanju' && Boolean(task.dependsOnTaskId)
+}
+
 export function getTasksByUser(tasks: Task[], userId: string, fallbackName?: string) {
   return tasks.filter((task) => {
+    if (isWorkflowWaitingTask(task)) return false
+
     if (task.assignedToUserId) {
       return task.assignedToUserId === userId
     }
@@ -60,7 +66,7 @@ export function getTasksWithoutStage(tasks: Task[]) {
 }
 
 export function isTaskActive(task: Task) {
-  return ACTIVE_TASK_STATUSES.includes(task.status)
+  return ACTIVE_TASK_STATUSES.includes(task.status) && !isWorkflowWaitingTask(task)
 }
 
 export function isTaskDone(task: Task) {

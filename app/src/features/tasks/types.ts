@@ -53,4 +53,12 @@ export interface Task {
   sourceTemplateId?: string
   sourceTemplateTitle?: string
   sourceTemplateStepId?: string
+  /** Redosled taska u automatskom workflow-u. */
+  sequenceOrder?: number
+  /** Task koji mora biti zavrsen pre aktivacije ovog taska. */
+  dependsOnTaskId?: string
+  /** Kada je task postao aktivan za rad. */
+  activatedAt?: string | null
+  /** Procena trajanja koraka iz sablona. */
+  estimatedMinutes?: number
 }

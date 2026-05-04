@@ -37,6 +37,55 @@ function asString(value: unknown) {
   return typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value)
 }
 
+
+export function normalizeOperationalRole(value?: string | null) {
+  const cleanValue = asString(value)
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (!cleanValue) return ''
+  if (['PROIZVODNJA', 'PRODUCTION', 'RADNIK', 'RADNIK 001'].includes(cleanValue)) return 'PRODUKCIJA'
+  if (['DESIGNER', 'DIZAJN'].includes(cleanValue)) return 'DIZAJNER'
+  if (['LOGISTICS'].includes(cleanValue)) return 'LOGISTIKA'
+  if (['MONTAA', 'MONTAZA'].includes(cleanValue)) return 'MONTAZA'
+  if (['FINANSIJE'].includes(cleanValue)) return 'FINANCE'
+  return cleanValue
+}
+
+export function getTaskBlockReason(
+  task: Task,
+  users: Array<{ id: string; role?: string; productionRole?: string | null; name?: string; email?: string }> = [],
+) {
+  const isActive = task.status === 'dodeljen' || task.status === 'u_radu'
+  if (!isActive) return ''
+
+  const requiredRole = normalizeOperationalRole(task.requiredRole)
+  if (!requiredRole) return ''
+
+  if (!task.assignedToUserId) return 'Nema dodeljenog izvršioca.'
+
+  const assignedUser = users.find((user) => user.id === task.assignedToUserId)
+  if (!assignedUser) return 'Dodeljeni korisnik više ne postoji u timu.'
+
+  const productionRole = normalizeOperationalRole(assignedUser.productionRole)
+  if (!productionRole) return 'Dodeljeni korisnik nema operativnu rolu.'
+
+  if (productionRole !== requiredRole) {
+    return `Pogrešna dodela: potrebna rola je ${requiredRole}, a korisnik ima ${productionRole}.`
+  }
+
+  return ''
+}
+
+export function isTaskLogicallyBlocked(
+  task: Task,
+  users: Array<{ id: string; role?: string; productionRole?: string | null }> = [],
+) {
+  return Boolean(getTaskBlockReason(task, users))
+}
+
 function asUuidOrNull(value: string | undefined) {
   const cleanValue = value || ''
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanValue) ? cleanValue : null
@@ -82,7 +131,7 @@ function mapTaskRowToReact(row: Record<string, unknown>): Task {
     status: normalizeTaskStatus(row.status),
     assignedToUserId: asString(row.assigned_to_user_id || row.assignedToUserId) || undefined,
     assignedToLabel: asString(row.assigned_to_label || row.assignedToLabel) || undefined,
-    requiredRole: asString(row.required_role || row.requiredRole) || undefined,
+    requiredRole: normalizeOperationalRole(asString(row.required_role || row.requiredRole)) || undefined,
     dueDate: asString(row.due_date || row.dueDate) || undefined,
     stageId: asString(row.stage_id || row.stageId) || undefined,
     createdAt,
@@ -99,6 +148,10 @@ function mapTaskRowToReact(row: Record<string, unknown>): Task {
     sourceProductId: asString(row.source_product_id || row.sourceProductId) || undefined,
     sourceTemplateId: asString(row.source_template_id || row.sourceTemplateId) || undefined,
     sourceTemplateStepId: asString(row.source_template_step_id || row.sourceTemplateStepId) || undefined,
+    sequenceOrder: asNumber(row.sequence_order || row.sequenceOrder),
+    dependsOnTaskId: asString(row.depends_on_task_id || row.dependsOnTaskId) || undefined,
+    activatedAt: (row.activated_at as string | null | undefined) ?? (row.activatedAt as string | null | undefined) ?? null,
+    estimatedMinutes: asNumber(row.estimated_minutes || row.estimatedMinutes),
   }
 }
 
@@ -134,8 +187,33 @@ function mapTaskToSupabaseRow(task: Task, workspaceId: string, userId?: string |
     source_product_id: asUuidOrNull(task.sourceProductId),
     source_template_id: asUuidOrNull(task.sourceTemplateId),
     source_template_step_id: asUuidOrNull(task.sourceTemplateStepId),
-    required_role: task.requiredRole || null,
+    required_role: normalizeOperationalRole(task.requiredRole) || null,
     file_link: task.description?.match(/https?:\/\/[^\s]+/)?.[0] || null,
+    sequence_order: task.sequenceOrder || null,
+    depends_on_task_id: task.dependsOnTaskId || null,
+    activated_at: task.activatedAt || null,
+    estimated_minutes: task.estimatedMinutes || null,
+  }
+}
+
+
+function shouldActivateNextTask(updatedTask: Task) {
+  return updatedTask.status === 'zavrsen' && Boolean(updatedTask.projectId)
+}
+
+function activateNextWorkflowTask(updatedTask: Task, allTasks: Task[]) {
+  if (!shouldActivateNextTask(updatedTask)) return null
+  const nextTask = allTasks
+    .filter((task) => task.projectId === updatedTask.projectId && task.dependsOnTaskId === updatedTask.id && task.status === 'na_cekanju')
+    .sort((first, second) => (first.sequenceOrder || 0) - (second.sequenceOrder || 0))[0]
+
+  if (!nextTask) return null
+  const now = new Date().toISOString()
+  return {
+    ...nextTask,
+    status: 'dodeljen' as TaskStatus,
+    activatedAt: now,
+    updatedAt: now,
   }
 }
 
@@ -215,27 +293,52 @@ export function TaskProvider({ children }: PropsWithChildren) {
 
   const updateTask = useCallback(
     async (updatedTask: Task) => {
+      const now = new Date().toISOString()
+      const normalizedTask: Task =
+        (updatedTask.status === 'dodeljen' || updatedTask.status === 'u_radu') && !updatedTask.activatedAt
+          ? { ...updatedTask, activatedAt: now, updatedAt: updatedTask.updatedAt || now }
+          : { ...updatedTask, updatedAt: updatedTask.updatedAt || now }
+
       if (isCloudTaskMode) {
-        if (!activeWorkspace?.id || !isValidCloudLinkedTask(updatedTask)) return
-        setCloudTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
+        if (!activeWorkspace?.id || !isValidCloudLinkedTask(normalizedTask)) return
+        let nextTaskToActivate: Task | null = null
+        setCloudTasks((current) => {
+          nextTaskToActivate = activateNextWorkflowTask(normalizedTask, current)
+          return current.map((task) => {
+            if (task.id === normalizedTask.id) return normalizedTask
+            if (nextTaskToActivate && task.id === nextTaskToActivate.id) return nextTaskToActivate
+            return task
+          })
+        })
         const supabase = getSupabaseClient()
         if (supabase) {
-          const { error } = await supabase
-            .from('tasks')
-            .update(mapTaskToSupabaseRow({ ...updatedTask, updatedAt: new Date().toISOString() }, activeWorkspace.id, user?.id))
-            .eq('id', updatedTask.id)
-            .eq('workspace_id', activeWorkspace.id)
-          if (error) {
-            setCloudReadStatus('error')
-            setCloudReadError(error.message)
+          const taskUpdates = [normalizedTask, nextTaskToActivate].filter(Boolean) as Task[]
+          for (const taskToSave of taskUpdates) {
+            const { error } = await supabase
+              .from('tasks')
+              .update(mapTaskToSupabaseRow({ ...taskToSave, updatedAt: taskToSave.updatedAt || new Date().toISOString() }, activeWorkspace.id, user?.id))
+              .eq('id', taskToSave.id)
+              .eq('workspace_id', activeWorkspace.id)
+            if (error) {
+              setCloudReadStatus('error')
+              setCloudReadError(error.message)
+              break
+            }
           }
         }
         return
       }
 
-      setLocalTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
+      setLocalTasks((current) => {
+        const nextTaskToActivate = activateNextWorkflowTask(normalizedTask, current)
+        return current.map((task) => {
+          if (task.id === normalizedTask.id) return normalizedTask
+          if (nextTaskToActivate && task.id === nextTaskToActivate.id) return nextTaskToActivate
+          return task
+        })
+      })
     },
-    [activeWorkspace?.id, isCloudTaskMode, user?.id],
+    [activeWorkspace?.id, cloudTasks, isCloudTaskMode, user?.id],
   )
 
   const addTask = useCallback(
