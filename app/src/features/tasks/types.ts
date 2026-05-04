@@ -33,6 +33,8 @@ export interface Task {
   status: TaskStatus
   assignedToUserId?: string
   assignedToLabel?: string
+  /** Operativna rola potrebna za task iz šablona. Ovo nije systemRole korisnika. */
+  requiredRole?: string
   dueDate?: string
   stageId?: string
   createdAt: string
@@ -45,4 +47,10 @@ export interface Task {
   billingStatus?: string
   billingState?: TaskBillingState
   billingId?: string | null
+  source?: 'template' | 'manual'
+  sourceProductId?: string
+  sourceProductTitle?: string
+  sourceTemplateId?: string
+  sourceTemplateTitle?: string
+  sourceTemplateStepId?: string
 }

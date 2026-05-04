@@ -25,6 +25,7 @@ export interface CloudWorkspaceMember {
   role: WorkspaceRole
   status: WorkspaceMemberStatus
   hourly_rate: number | null
+  production_role?: string | null
   display_name?: string | null
   joined_at?: string | null
   created_at?: string
@@ -38,6 +39,7 @@ export interface CloudWorkspaceInvite {
   full_name?: string | null
   role: WorkspaceRole
   hourly_rate: number | null
+  production_role?: string | null
   invited_by_user_id: string
   status: WorkspaceInviteStatus
   created_at?: string

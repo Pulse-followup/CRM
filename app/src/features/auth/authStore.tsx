@@ -83,6 +83,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         role: workspaceRoleToAppRole(member.role),
         name: profileName(email, member.display_name || member.profile?.full_name, workspaceRoleToAppRole(member.role)),
         email,
+        productionRole: member.production_role || null,
       }
     })
   }, [cloud.activeWorkspace, cloud.members])
@@ -96,6 +97,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       role: workspaceRoleToAppRole(cloud.membership.role),
       name: profileName(email, cloud.membership?.display_name || cloud.profile?.full_name, workspaceRoleToAppRole(cloud.membership.role)),
       email,
+      productionRole: cloud.membership?.production_role || null,
     }
   }, [cloud.membership, cloud.profile, cloud.user])
 

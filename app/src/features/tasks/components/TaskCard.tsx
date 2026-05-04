@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { completeTask, pauseTask, resumeTask, startTask } from '../taskActions'
 import { TASK_STATUS_LABELS, TASK_TYPE_LABELS } from '../taskLabels'
+import { readProcessTemplates } from '../../templates/templateStorage'
+import { useAuthStore } from '../../auth/authStore'
 import type { Task } from '../types'
 
 export interface TaskCardProps {
@@ -22,10 +24,15 @@ function formatDueDate(value?: string) {
 }
 
 function TaskCard({ task, onTaskChange }: TaskCardProps) {
+  const { users } = useAuthStore()
+  const processTemplates = readProcessTemplates()
+  const templateTitle = task.sourceTemplateTitle || processTemplates.find((template) => template.id === task.sourceTemplateId)?.title || ''
   const [isCompleting, setIsCompleting] = useState(false)
   const [timeSpentMinutes, setTimeSpentMinutes] = useState(String(task.timeSpentMinutes ?? ''))
   const [materialCost, setMaterialCost] = useState(String(task.materialCost ?? 0))
   const [materialDescription, setMaterialDescription] = useState(task.materialDescription ?? '')
+  const [isAssigning, setIsAssigning] = useState(false)
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState('')
 
   useEffect(() => {
     setTimeSpentMinutes(String(task.timeSpentMinutes ?? ''))
@@ -33,6 +40,9 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
     setMaterialDescription(task.materialDescription ?? '')
     if (task.status !== 'u_radu') {
       setIsCompleting(false)
+    }
+    if (task.assignedToUserId) {
+      setIsAssigning(false)
     }
   }, [task])
 
@@ -82,12 +92,35 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
     setIsCompleting(false)
   }
 
+  const handleOpenAssign = () => {
+    setSelectedAssigneeId(users[0]?.id || '')
+    setIsAssigning(true)
+  }
+
+  const handleConfirmAssign = () => {
+    if (!onTaskChange || !selectedAssigneeId) return
+    const selectedUser = users.find((user) => user.id === selectedAssigneeId)
+    if (!selectedUser) return
+
+    onTaskChange({
+      ...task,
+      assignedToUserId: selectedUser.id,
+      assignedToLabel: selectedUser.name || selectedUser.email,
+      updatedAt: new Date().toISOString(),
+    })
+    setIsAssigning(false)
+  }
+
   return (
     <article className="customer-task-card">
       <div className="customer-task-card-head">
         <strong>{task.title}</strong>
         <span className="customer-status-badge is-muted">{TASK_STATUS_LABELS[task.status]}</span>
       </div>
+
+      {task.source === 'template' || templateTitle ? (
+        <p className="customer-source-note">Iz šablona: <strong>{templateTitle || 'Proces'}</strong>{task.sourceProductTitle ? ` · Proizvod: ${task.sourceProductTitle}` : ''}</p>
+      ) : null}
 
       <dl className="customer-task-detail-list">
         {task.type ? (
@@ -97,9 +130,15 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
           </div>
         ) : null}
         <div>
-          <dt>Dodeljeno</dt>
-          <dd>{task.assignedToLabel || '-'}</dd>
+          <dt>Operativna rola</dt>
+          <dd>{task.requiredRole || task.assignedToLabel || '-'}</dd>
         </div>
+        {task.assignedToUserId ? (
+          <div>
+            <dt>Dodeljeno korisniku</dt>
+            <dd>{task.assignedToLabel || '-'}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>Rok</dt>
           <dd>{formatDueDate(task.dueDate)}</dd>
@@ -120,6 +159,12 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
 
       {onTaskChange ? (
         <div className="customer-task-actions">
+          {!task.assignedToUserId ? (
+            <button type="button" className="customer-project-toggle" onClick={handleOpenAssign}>
+              Dodeli
+            </button>
+          ) : null}
+
           {task.status === 'dodeljen' ? (
             <button type="button" className="customer-project-toggle" onClick={handleStart}>
               Preuzmi
@@ -146,6 +191,30 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
           {task.status === 'zavrsen' ? (
             <span className="customer-status-badge">{TASK_STATUS_LABELS.zavrsen}</span>
           ) : null}
+        </div>
+      ) : null}
+
+      {isAssigning ? (
+        <div className="customer-task-complete-form">
+          <label className="customer-task-form-field">
+            <span>Dodeli korisniku</span>
+            <select value={selectedAssigneeId} onChange={(event) => setSelectedAssigneeId(event.target.value)}>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name} {user.productionRole ? `(${user.productionRole})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          {task.requiredRole ? <p className="customer-source-note">Potrebna rola: <strong>{task.requiredRole}</strong></p> : null}
+          <div className="customer-task-actions">
+            <button type="button" className="customer-project-toggle" onClick={handleConfirmAssign}>
+              Potvrdi dodelu
+            </button>
+            <button type="button" className="customer-project-toggle" onClick={() => setIsAssigning(false)}>
+              Otkaži
+            </button>
+          </div>
         </div>
       ) : null}
 

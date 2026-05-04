@@ -42,8 +42,10 @@ function AppTopBar() {
         </button>
         {isOpen ? (
           <div className="pulse-dropdown">
-            <Link to="/settings" onClick={() => setIsOpen(false)}>Podešavanja</Link>
             <Link to="/" onClick={() => setIsOpen(false)}>Home</Link>
+            <Link to="/settings" onClick={() => setIsOpen(false)}>Moj nalog</Link>
+            {currentUser.role === 'admin' ? <Link to="/products" onClick={() => setIsOpen(false)}>Moji proizvodi</Link> : null}
+            {currentUser.role === 'admin' ? <Link to="/templates" onClick={() => setIsOpen(false)}>Procesi</Link> : null}
           </div>
         ) : null}
       </div>

@@ -47,6 +47,11 @@ export interface Project {
   value?: number
   billingId?: string
   billingStatus?: BillingStatus
-  templateId?: ProjectTemplateId
+  templateId?: ProjectTemplateId | string
   stages?: ProjectStage[]
+  source?: 'product' | 'manual'
+  sourceProductId?: string
+  sourceProductTitle?: string
+  sourceTemplateId?: string
+  sourceTemplateTitle?: string
 }

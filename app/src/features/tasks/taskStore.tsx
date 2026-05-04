@@ -37,6 +37,11 @@ function asString(value: unknown) {
   return typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value)
 }
 
+function asUuidOrNull(value: string | undefined) {
+  const cleanValue = value || ''
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanValue) ? cleanValue : null
+}
+
 function asNumber(value: unknown) {
   if (value === undefined || value === null || value === '') return undefined
   const next = Number(value)
@@ -77,6 +82,7 @@ function mapTaskRowToReact(row: Record<string, unknown>): Task {
     status: normalizeTaskStatus(row.status),
     assignedToUserId: asString(row.assigned_to_user_id || row.assignedToUserId) || undefined,
     assignedToLabel: asString(row.assigned_to_label || row.assignedToLabel) || undefined,
+    requiredRole: asString(row.required_role || row.requiredRole) || undefined,
     dueDate: asString(row.due_date || row.dueDate) || undefined,
     stageId: asString(row.stage_id || row.stageId) || undefined,
     createdAt,
@@ -89,6 +95,10 @@ function mapTaskRowToReact(row: Record<string, unknown>): Task {
     billingState: normalizeBillingState(row.billing_state || row.billable_status || row.billingState),
     billingStatus: asString(row.billable_status || row.billing_status || row.billingStatus),
     billingId: asString(row.billing_record_id || row.billing_id || row.billingId) || null,
+    source: asString(row.source_type || row.source) === 'template' ? 'template' : 'manual',
+    sourceProductId: asString(row.source_product_id || row.sourceProductId) || undefined,
+    sourceTemplateId: asString(row.source_template_id || row.sourceTemplateId) || undefined,
+    sourceTemplateStepId: asString(row.source_template_step_id || row.sourceTemplateStepId) || undefined,
   }
 }
 
@@ -120,6 +130,12 @@ function mapTaskToSupabaseRow(task: Task, workspaceId: string, userId?: string |
     updated_at: task.updatedAt || new Date().toISOString(),
     completed_at: task.completedAt || null,
     stage_id: task.stageId || null,
+    source_type: task.source || 'manual',
+    source_product_id: asUuidOrNull(task.sourceProductId),
+    source_template_id: asUuidOrNull(task.sourceTemplateId),
+    source_template_step_id: asUuidOrNull(task.sourceTemplateStepId),
+    required_role: task.requiredRole || null,
+    file_link: task.description?.match(/https?:\/\/[^\s]+/)?.[0] || null,
   }
 }
 

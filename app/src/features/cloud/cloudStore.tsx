@@ -36,6 +36,7 @@ interface InviteMemberPayload {
   fullName?: string
   role: WorkspaceRole
   hourlyRate?: number | null
+  productionRole?: string | null
 }
 
 interface CloudStoreValue {
@@ -61,6 +62,7 @@ interface CloudStoreValue {
   acceptInvite: (inviteId?: string) => Promise<void>
   buildInviteLink: (invite: CloudWorkspaceInvite) => string
   updateMemberHourlyRate: (memberId: string, hourlyRate: number | null) => Promise<void>
+  updateMemberProductionRole: (memberId: string, productionRole: string | null) => Promise<void>
   updateProfileName: (fullName: string) => Promise<void>
 }
 
@@ -129,6 +131,11 @@ function normalizeRole(role: string): WorkspaceRole {
 function normalizeRate(value: number | null | undefined) {
   if (value === undefined || value === null || Number.isNaN(value)) return null
   return Number(value)
+}
+
+function normalizeProductionRole(value: string | null | undefined) {
+  const cleanValue = (value || '').trim()
+  return cleanValue ? cleanValue.toUpperCase() : null
 }
 
 export function CloudProvider({ children }: PropsWithChildren) {
@@ -393,6 +400,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
         role: 'admin',
         status: 'active',
         hourly_rate: null,
+        production_role: 'ACCOUNT',
         joined_at: new Date().toISOString(),
       })
 
@@ -416,7 +424,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
   )
 
   const inviteMember = useCallback(
-    async ({ email, fullName, role, hourlyRate }: InviteMemberPayload) => {
+    async ({ email, fullName, role, hourlyRate, productionRole }: InviteMemberPayload) => {
       if (!supabase || !user || !activeWorkspace || membership?.role !== 'admin') {
         throw new Error('Samo admin workspace-a moze da poziva clanove.')
       }
@@ -433,6 +441,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
         full_name: cleanFullName,
         role: normalizeRole(role),
         hourly_rate: normalizeRate(hourlyRate),
+        production_role: normalizeProductionRole(productionRole),
         invited_by_user_id: user.id,
         status: 'pending',
       }
@@ -498,6 +507,22 @@ export function CloudProvider({ children }: PropsWithChildren) {
     [loadWorkspaceContext, membership?.role, supabase, user],
   )
 
+  const updateMemberProductionRole = useCallback(
+    async (memberId: string, productionRole: string | null) => {
+      if (!supabase || !user || membership?.role !== 'admin') throw new Error('Samo admin moze da menja operativnu rolu.')
+      const { error: updateError } = await supabase
+        .from('workspace_members')
+        .update({ production_role: normalizeProductionRole(productionRole) })
+        .eq('id', memberId)
+      if (updateError) {
+        setError(updateError.message)
+        throw updateError
+      }
+      await loadWorkspaceContext(user)
+    },
+    [loadWorkspaceContext, membership?.role, supabase, user],
+  )
+
   const updateProfileName = useCallback(
     async (fullName: string) => {
       if (!supabase || !user) throw new Error('Moras biti ulogovan.')
@@ -549,6 +574,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
       acceptInvite,
       buildInviteLink,
       updateMemberHourlyRate,
+      updateMemberProductionRole,
     }),
     [
       acceptInvite,
@@ -574,6 +600,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
       workspaces,
       inviteMember,
       updateMemberHourlyRate,
+      updateMemberProductionRole,
     ],
   )
 

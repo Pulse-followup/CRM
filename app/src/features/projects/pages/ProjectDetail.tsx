@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import BillingCard from '../../billing/components/BillingCard'
 import { BILLING_STATUS_LABELS } from '../../billing/billingLabels'
 import { useBillingStore } from '../../billing/billingStore'
+import { readProducts } from '../../products/productStorage'
+import { readProcessTemplates } from '../../templates/templateStorage'
 import { useCloudStore } from '../../cloud/cloudStore'
 import { getSupabaseClient } from '../../../lib/supabaseClient'
 import '../../clients/pages/client-detail.css'
@@ -67,6 +69,10 @@ function ProjectDetail() {
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [isCreatingBilling, setIsCreatingBilling] = useState(false)
   const [marginPercent, setMarginPercent] = useState('30')
+  const products = readProducts()
+  const processTemplates = readProcessTemplates()
+  const projectSourceProductTitle = project?.sourceProductTitle || products.find((product) => product.id === project?.sourceProductId)?.title || ''
+  const projectSourceTemplateTitle = project?.sourceTemplateTitle || processTemplates.find((template) => template.id === project?.sourceTemplateId)?.title || ''
 
   const stageProgress = useMemo(() => (project ? getProjectStageProgress(project, tasks) : []), [project, tasks])
   const tasksWithoutStage = useMemo(() => getTasksWithoutStage(tasks), [tasks])
@@ -185,7 +191,7 @@ function ProjectDetail() {
   return (
     <section className="page-card client-detail-shell">
       <button type="button" className="secondary-link-button" onClick={() => navigate("/")}>Nazad na dashboard</button>
-      <header className="customer-card-header"><div><h2 className="customer-card-title">{project.title}</h2><p className="customer-card-subtitle">Projekat</p></div><div className="customer-project-badges"><span className="customer-status-badge">{PROJECT_STATUS_LABELS[project.status]}</span><span className={`customer-status-badge is-${projectHealth.tone}`}>{projectHealth.label}</span></div></header>
+      <header className="customer-card-header"><div><h2 className="customer-card-title">{project.title}</h2><p className="customer-card-subtitle">Projekat</p>{projectSourceProductTitle ? <p className="customer-source-note">Kreirano iz proizvoda: <strong>{projectSourceProductTitle}</strong>{projectSourceTemplateTitle ? ` · Šablon: ${projectSourceTemplateTitle}` : ''}</p> : null}</div><div className="customer-project-badges"><span className="customer-status-badge">{PROJECT_STATUS_LABELS[project.status]}</span><span className={`customer-status-badge is-${projectHealth.tone}`}>{projectHealth.label}</span>{projectSourceProductTitle ? <span className="customer-status-badge is-info">IZ PROIZVODA</span> : null}</div></header>
 
       <section className="customer-card-section"><div className="customer-card-section-head"><h3>Osnovni podaci</h3></div><div className="customer-card-group"><dl className="customer-card-detail-list"><div><dt>Status</dt><dd>{PROJECT_STATUS_LABELS[project.status]}</dd></div><div><dt>Tip</dt><dd>{project.type ? PROJECT_TYPE_LABELS[project.type] : '-'}</dd></div><div><dt>Frekvencija</dt><dd>{project.frequency ? PROJECT_FREQUENCY_LABELS[project.frequency] : '-'}</dd></div><div><dt>Vrednost</dt><dd>{project.value ? `${project.value} RSD` : '-'}</dd></div><div><dt>Billing status</dt><dd>{project.billingStatus ? BILLING_STATUS_LABELS[project.billingStatus] : '-'}</dd></div></dl></div></section>
 

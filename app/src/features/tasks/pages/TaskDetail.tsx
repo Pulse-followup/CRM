@@ -173,9 +173,15 @@ function TaskDetail() {
               <dd>{task.description?.trim() ? task.description : '-'}</dd>
             </div>
             <div>
-              <dt>Dodeljeno</dt>
-              <dd>{task.assignedToLabel || '-'}</dd>
+              <dt>Operativna rola</dt>
+              <dd>{task.requiredRole || task.assignedToLabel || '-'}</dd>
             </div>
+            {task.assignedToUserId ? (
+              <div>
+                <dt>Dodeljeno korisniku</dt>
+                <dd>{task.assignedToLabel || '-'}</dd>
+              </div>
+            ) : null}
             <div>
               <dt>Rok</dt>
               <dd>{formatDueDate(task.dueDate)}</dd>

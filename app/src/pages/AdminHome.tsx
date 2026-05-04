@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BILLING_STATUS_LABELS } from '../features/billing/billingLabels'
 import { useBillingStore } from '../features/billing/billingStore'
 import type { BillingRecord } from '../features/billing/types'
@@ -6,14 +6,15 @@ import { useClientStore } from '../features/clients/clientStore'
 import type { Client } from '../features/clients/types'
 import ClientCreateForm, { type ClientCreateFormValues } from '../features/clients/components/ClientCreateForm'
 import ClientEditForm, { type ClientEditFormPatch } from '../features/clients/components/ClientEditForm'
-import ClientInfoSection from '../features/clients/components/ClientInfoSection'
-import ClientContactsSection from '../features/clients/components/ClientContactsSection'
-import ClientCommercialSection from '../features/clients/components/ClientCommercialSection'
-import ClientProjectsSection from '../features/clients/components/ClientProjectsSection'
+import ClientCardSections from '../features/clients/components/ClientCardSections'
+import CatalogJobForm, { type CatalogJobFormValues } from '../features/clients/components/CatalogJobForm'
 import { useProjectStore } from '../features/projects/projectStore'
+import { isProductVisibleForClient, readProducts, readProductsFromSupabase, saveProducts } from '../features/products/productStorage'
 import type { Project, ProjectStage } from '../features/projects/types'
 import ProjectForm, { type ProjectFormValues } from '../features/projects/components/ProjectForm'
 import { buildStagesFromTemplate, getTemplateIdForProjectType } from '../features/projects/projectTemplates'
+import { readProcessTemplates, readProcessTemplatesFromSupabase, saveProcessTemplates } from '../features/templates/templateStorage'
+import { buildCatalogJobPayload } from '../features/workflows/createJobFromProduct'
 import { calculateClientScore } from '../features/scoring/scoringEngine'
 import { TASK_STATUS_LABELS } from '../features/tasks/taskLabels'
 import { getLateTasks } from '../features/tasks/taskSelectors'
@@ -77,6 +78,28 @@ function findOverdueStage(project: Project) {
   })
 }
 
+
+function normalizeRoleLabel(role?: string) {
+  const value = role?.trim()
+  if (!value) return 'BEZ DODELE'
+
+  const roleMap: Record<string, string> = {
+    admin: 'ADMIN',
+    account: 'ACCOUNT',
+    user: 'OPERATIVA',
+    finance: 'FINANSIJE',
+    designer: 'DIZAJNER',
+    dizajner: 'DIZAJNER',
+    production: 'PROIZVODNJA',
+    produkcija: 'PROIZVODNJA',
+    logistics: 'LOGISTIKA',
+    logistika: 'LOGISTIKA',
+  }
+
+  const normalizedKey = value.toLowerCase()
+  return roleMap[normalizedKey] || value.toUpperCase()
+}
+
 function ProjectCreateModal({ clients, initialClientId, onCancel, onSubmit }: { clients: Client[]; initialClientId?: string; onCancel: () => void; onSubmit: (clientId: string, values: ProjectFormValues) => void }) {
   const [clientId, setClientId] = useState(initialClientId ?? String(clients[0]?.id ?? ''))
   return (
@@ -95,11 +118,13 @@ function ProjectCreateModal({ clients, initialClientId, onCancel, onSubmit }: { 
 function ProjectDetailModal({
   project,
   tasks,
+  clientName,
   activeBilling,
   onCreateBilling,
 }: {
   project: Project
   tasks: Task[]
+  clientName: string
   activeBilling: BillingRecord | null
   onCreateBilling: (project: Project, tasksForBilling: Task[]) => void | Promise<void>
 }) {
@@ -113,6 +138,8 @@ function ProjectDetailModal({
     <>
       <h3>Detalji projekta</h3>
       <p><strong>{project.title}</strong></p>
+      <p>Klijent - {clientName}</p>
+      {project.source === 'product' ? <p><span className="pulse-pill pulse-pill-blue">IZ PROIZVODA</span> {project.sourceProductTitle || '-'}</p> : null}
       <p>Status - {project.status}</p>
       <p>Tip - {project.type || '-'}</p>
       <p>Frekvencija - {project.frequency || '-'}</p>
@@ -148,10 +175,15 @@ function ProjectDetailModal({
   )
 }
 
-function ClientCardDrawer({ client, score, projects, onClose, onUpdateClient, onCreateProject, onCreateTask }: { client: Client; score: number; projects: Project[]; onClose: () => void; onUpdateClient: (patch: ClientEditFormPatch) => void; onCreateProject: (values: ProjectFormValues) => void | Promise<void>; onCreateTask: (values: CreateTaskFormValues) => void | Promise<void> }) {
+function ClientCardDrawer({ client, score, projects, tasks, billing, onClose, onUpdateClient, onCreateProject, onCreateTask, onCreateJobFromCatalog }: { client: Client; score: number; projects: Project[]; tasks: Task[]; billing: BillingRecord[]; onClose: () => void; onUpdateClient: (patch: ClientEditFormPatch) => void; onCreateProject: (values: ProjectFormValues) => void | Promise<void>; onCreateTask: (values: CreateTaskFormValues) => void | Promise<void>; onCreateJobFromCatalog: (clientId: string, values: CatalogJobFormValues) => void | Promise<void> }) {
   const [isEditingClient, setIsEditingClient] = useState(false)
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [isCreatingActivity, setIsCreatingActivity] = useState(false)
+  const [isChoosingJob, setIsChoosingJob] = useState(false)
+  const [isCreatingFromCatalog, setIsCreatingFromCatalog] = useState(false)
+  const [catalogJobMessage, setCatalogJobMessage] = useState('')
+  const products = readProducts()
+  const processTemplates = readProcessTemplates()
 
   return (
     <div className="pulse-client-drawer-content">
@@ -160,23 +192,52 @@ function ClientCardDrawer({ client, score, projects, onClose, onUpdateClient, on
         <span className="pulse-pill pulse-pill-cyan">PULSE {score}</span>
       </div>
       <div className="pulse-client-drawer-actions">
-        <button type="button" className="customer-project-toggle" onClick={() => setIsEditingClient((value) => !value)}>Izmeni podatke</button>
         <button type="button" className="customer-project-toggle" onClick={() => setIsCreatingActivity((value) => !value)}>Nova aktivnost</button>
-        <button type="button" className="customer-project-toggle" onClick={() => setIsCreatingProject((value) => !value)}>Novi projekat</button>
+        <button type="button" className="customer-project-toggle" onClick={() => setIsChoosingJob((value) => !value)}>Novi posao</button>
       </div>
+      {isChoosingJob ? (
+        <div className="customer-job-choice">
+          <button type="button" className="customer-project-action-button" onClick={() => { setIsCreatingProject(true); setIsCreatingFromCatalog(false); setCatalogJobMessage('') }}>Prazan projekat</button>
+          <button type="button" className="customer-project-action-button customer-project-action-button-secondary" onClick={() => { setIsCreatingFromCatalog(true); setIsCreatingProject(false); setIsCreatingActivity(false); setCatalogJobMessage('') }}>Iz kataloga</button>
+        </div>
+      ) : null}
       {isEditingClient ? <ClientEditForm client={client} onCancel={() => setIsEditingClient(false)} onSubmit={(patch) => { onUpdateClient(patch); setIsEditingClient(false) }} /> : null}
-      {isCreatingProject ? <ProjectForm onCancel={() => setIsCreatingProject(false)} onSubmit={async (values) => { await onCreateProject(values); setIsCreatingProject(false) }} /> : null}
+      {isCreatingProject ? <ProjectForm onCancel={() => setIsCreatingProject(false)} onSubmit={async (values) => { await onCreateProject(values); setIsCreatingProject(false); setIsChoosingJob(false) }} /> : null}
+      {isCreatingFromCatalog ? (
+        <CatalogJobForm
+          clientId={String(client.id)}
+          products={products}
+          templates={processTemplates}
+          onCancel={() => setIsCreatingFromCatalog(false)}
+          onSubmit={async (values) => {
+            await onCreateJobFromCatalog(String(client.id), values)
+            setIsCreatingFromCatalog(false)
+            setIsChoosingJob(false)
+            setCatalogJobMessage('Posao je kreiran iz kataloga.')
+          }}
+        />
+      ) : null}
+      {catalogJobMessage ? <p className="customer-catalog-job-message">{catalogJobMessage}</p> : null}
       {isCreatingActivity ? <CreateTaskForm onCancel={() => setIsCreatingActivity(false)} onSubmit={(values) => { onCreateTask(values); setIsCreatingActivity(false) }} requireProjectSelection projectOptions={projects.map((project) => ({ id: project.id, label: project.title, stages: project.stages }))} /> : null}
-      <ClientInfoSection name={client.name} city={client.city} address={client.address} />
-      <ClientContactsSection contacts={client.contacts} />
-      <ClientCommercialSection {...client.commercial} />
-      <ClientProjectsSection projects={projects} />
+      <ClientCardSections
+        clientId={String(client.id)}
+        clientName={client.name}
+        clientCity={client.city}
+        clientAddress={client.address}
+        contacts={client.contacts}
+        commercial={client.commercial}
+        projects={projects}
+        tasks={tasks}
+        billing={billing}
+        onEditClient={() => setIsEditingClient((value) => !value)}
+        onAddFromCatalog={() => { setIsCreatingFromCatalog(true); setIsCreatingProject(false); setIsCreatingActivity(false); setIsChoosingJob(false); setCatalogJobMessage('') }}
+      />
       <div className="pulse-modal-actions"><button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={onClose}>Zatvori</button></div>
     </div>
   )
 }
 
-function AdminModal({ state, clients, projects, tasks, billing, onClose, onCreateClient, onCreateProject, onUpdateClient, onCreateTask, onCreateBillingFromProject }: { state: ModalState; clients: Client[]; projects: Project[]; tasks: Task[]; billing: BillingRecord[]; onClose: () => void; onCreateClient: (values: ClientCreateFormValues) => void | Promise<void>; onCreateProject: (clientId: string, values: ProjectFormValues) => void | Promise<void>; onUpdateClient: (clientId: string, patch: ClientEditFormPatch) => void | Promise<void>; onCreateTask: (clientId: string, values: CreateTaskFormValues) => void | Promise<void>; onCreateBillingFromProject: (project: Project, tasksForBilling: Task[]) => void | Promise<void> }) {
+function AdminModal({ state, clients, projects, tasks, billing, onClose, onCreateClient, onCreateProject, onUpdateClient, onCreateTask, onCreateJobFromCatalog, onCreateBillingFromProject }: { state: ModalState; clients: Client[]; projects: Project[]; tasks: Task[]; billing: BillingRecord[]; onClose: () => void; onCreateClient: (values: ClientCreateFormValues) => void | Promise<void>; onCreateProject: (clientId: string, values: ProjectFormValues) => void | Promise<void>; onUpdateClient: (clientId: string, patch: ClientEditFormPatch) => void | Promise<void>; onCreateTask: (clientId: string, values: CreateTaskFormValues) => void | Promise<void>; onCreateJobFromCatalog: (clientId: string, values: CatalogJobFormValues) => void | Promise<void>; onCreateBillingFromProject: (project: Project, tasksForBilling: Task[]) => void | Promise<void> }) {
   if (!state) return null
   const clientProjects = state.type === 'client' ? projects.filter((project) => project.clientId === String(state.client.id)) : []
   const projectTasks = state.type === 'project' ? tasks.filter((task) => task.projectId === state.project.id) : []
@@ -187,9 +248,9 @@ function AdminModal({ state, clients, projects, tasks, billing, onClose, onCreat
       <div className={`pulse-modal ${state.type === 'client' ? 'pulse-client-drawer' : ''} ${state.type === 'create-client' ? 'pulse-create-client-modal' : ''} ${state.type === 'create-project' ? 'pulse-create-project-modal' : ''}`} onMouseDown={(event) => event.stopPropagation()}>
         <button className="pulse-modal-x" type="button" onClick={onClose}>x</button>
         {state.type === 'billing' ? <><h3>Detalji naplatnog naloga</h3><p><strong>Iznos</strong> - {formatAmount(state.record)}</p><p><strong>Opis</strong> - {state.record.description}</p><p><strong>Rok</strong> - {formatDate(state.record.dueDate)}</p><p><strong>Status</strong> - {BILLING_STATUS_LABELS[state.record.status]}</p><p><strong>Faktura</strong> - {state.record.invoiceNumber || '-'}</p></> : null}
-        {state.type === 'task' ? <><h3>Detalji zadatka</h3><p><strong>{state.task.title}</strong></p><p>Tip - {state.task.type || '-'}</p><p>Status - {TASK_STATUS_LABELS[state.task.status] ?? state.task.status}</p><p>Rok - {formatDate(state.task.dueDate)}</p><p>Dodeljeno - {state.task.assignedToLabel || '-'}</p><p>Opis - {state.task.description || '-'}</p><p>Vreme - {state.task.timeSpentMinutes ?? 0} min</p><p>Materijal - {formatAmountValue(state.task.materialCost ?? 0)}</p></> : null}
-        {state.type === 'project' ? <ProjectDetailModal project={state.project} tasks={projectTasks} activeBilling={activeBilling} onCreateBilling={onCreateBillingFromProject} /> : null}
-        {state.type === 'client' ? <ClientCardDrawer client={state.client} score={state.score} projects={clientProjects} onClose={onClose} onUpdateClient={(patch) => onUpdateClient(String(state.client.id), patch)} onCreateProject={(values) => onCreateProject(String(state.client.id), values)} onCreateTask={(values) => onCreateTask(String(state.client.id), values)} /> : null}
+        {state.type === 'task' ? <><h3>Detalji zadatka</h3><p><strong>{state.task.title}</strong></p><p>Klijent - {clients.find((client) => String(client.id) === String(state.task.clientId))?.name ?? 'Nepoznat klijent'}</p><p>Projekat - {projects.find((project) => project.id === state.task.projectId)?.title ?? 'Nepoznat projekat'}</p>{state.task.source === 'template' ? <p><span className="pulse-pill pulse-pill-blue">AUTO</span> {state.task.sourceTemplateTitle ? <>Iz šablona: <strong>{state.task.sourceTemplateTitle}</strong></> : 'Iz šablona'}</p> : null}<p>Tip - {state.task.type || '-'}</p><p>Status - {TASK_STATUS_LABELS[state.task.status] ?? state.task.status}</p><p>Rok - {formatDate(state.task.dueDate)}</p><p>Operativna rola - {normalizeRoleLabel(state.task.requiredRole || state.task.assignedToLabel)}</p>{state.task.assignedToUserId ? <p>Dodeljeno korisniku - {state.task.assignedToLabel || '-'}</p> : null}<p>Opis - {state.task.description || '-'}</p><p>Vreme - {state.task.timeSpentMinutes ?? 0} min</p><p>Materijal - {formatAmountValue(state.task.materialCost ?? 0)}</p></> : null}
+        {state.type === 'project' ? <ProjectDetailModal project={state.project} tasks={projectTasks} clientName={clients.find((client) => String(client.id) === String(state.project.clientId))?.name ?? 'Nepoznat klijent'} activeBilling={activeBilling} onCreateBilling={onCreateBillingFromProject} /> : null}
+        {state.type === 'client' ? <ClientCardDrawer client={state.client} score={state.score} projects={clientProjects} tasks={tasks} billing={billing} onClose={onClose} onUpdateClient={(patch) => onUpdateClient(String(state.client.id), patch)} onCreateProject={(values) => onCreateProject(String(state.client.id), values)} onCreateTask={(values) => onCreateTask(String(state.client.id), values)} onCreateJobFromCatalog={onCreateJobFromCatalog} /> : null}
         {state.type === 'create-client' ? <><h3>+ Novi klijent</h3><ClientCreateForm onCancel={onClose} onSubmit={onCreateClient} /></> : null}
         {state.type === 'create-project' ? <><h3>+ Novi projekat</h3><ProjectCreateModal clients={clients} initialClientId={state.clientId} onCancel={onClose} onSubmit={onCreateProject} /></> : null}
       </div>
@@ -198,13 +259,41 @@ function AdminModal({ state, clients, projects, tasks, billing, onClose, onCreat
 }
 
 function AdminHome() {
-  const { activeWorkspace, members } = useCloudStore()
+  const { activeWorkspace, members, isConfigured } = useCloudStore()
   const { clients, addClient, updateClient } = useClientStore()
   const { projects, addProject } = useProjectStore()
   const { tasks, addTask, updateTask } = useTaskStore()
   const { getAllBilling, createBillingForProject } = useBillingStore()
   const [modal, setModal] = useState<ModalState>(null)
   const billing = getAllBilling()
+
+  useEffect(() => {
+    let isMounted = true
+    const workspaceId = activeWorkspace?.id || ''
+
+    async function preloadCatalogFromCloud() {
+      if (!isConfigured || !workspaceId) return
+
+      try {
+        const [cloudProducts, cloudTemplates] = await Promise.all([
+          readProductsFromSupabase(workspaceId),
+          readProcessTemplatesFromSupabase(workspaceId),
+        ])
+
+        if (!isMounted) return
+        if (cloudProducts.length) saveProducts(cloudProducts)
+        if (cloudTemplates.length) saveProcessTemplates(cloudTemplates)
+      } catch {
+        // Catalog cloud preload is best-effort; localStorage remains fallback.
+      }
+    }
+
+    void preloadCatalogFromCloud()
+
+    return () => {
+      isMounted = false
+    }
+  }, [activeWorkspace?.id, isConfigured])
 
   const clientById = useMemo(() => new Map(clients.map((client) => [String(client.id), client])), [clients])
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
@@ -220,6 +309,11 @@ function AdminHome() {
   const riskyProjects = projects.filter((project) => Boolean(findOverdueStage(project)))
   const validLinkedTasks = tasks.filter((task) => task.clientId && task.projectId && clientById.has(String(task.clientId)) && projectById.has(task.projectId))
   const teamTasks = validLinkedTasks.filter((task) => ['dodeljen', 'u_radu', 'na_cekanju'].includes(task.status))
+  const teamTasksByRole = teamTasks.reduce<Record<string, Task[]>>((groups, task) => {
+    const roleLabel = normalizeRoleLabel(task.requiredRole || task.assignedToLabel)
+    return { ...groups, [roleLabel]: [...(groups[roleLabel] || []), task] }
+  }, {})
+  const teamRoleGroups = Object.entries(teamTasksByRole).sort(([firstRole], [secondRole]) => firstRole.localeCompare(secondRole, 'sr'))
   const sortedBilling = [...billing].sort((a, b) => (a.status === 'overdue' ? -1 : 0) - (b.status === 'overdue' ? -1 : 0))
   const clientScores = clients.map((client) => ({ client, score: calculateClientScore(String(client.id), { clients, projects, tasks, billing }).total }))
 
@@ -244,6 +338,38 @@ function AdminHome() {
     const timestamp = new Date().toISOString()
     const taskId = `task-${crypto.randomUUID?.() || Date.now()}`
     await addTask({ id: taskId, clientId, projectId: values.projectId, title: values.title.trim() || 'Nova aktivnost', description: values.description.trim(), type: values.type || undefined, assignedToUserId: values.assignedToUserId, assignedToLabel: values.assignedToLabel.trim(), dueDate: values.dueDate || undefined, stageId: values.stageId || undefined, status: 'dodeljen', createdAt: timestamp, updatedAt: timestamp, completedAt: null, billingState: 'not_billable' })
+  }
+
+  const handleCreateJobFromCatalog = async (clientId: string, values: CatalogJobFormValues) => {
+    const products = readProducts()
+    const templates = readProcessTemplates()
+    const product = products.find((item) => item.id === values.productId && item.status === 'active' && isProductVisibleForClient(item, clientId))
+    const template = product?.processTemplateId
+      ? templates.find((item) => item.id === product.processTemplateId)
+      : undefined
+    const quantity = Number(values.quantity.replace(',', '.'))
+
+    if (!product || !template || !template.steps.length || !Number.isFinite(quantity) || quantity <= 0) return
+
+    const payload = buildCatalogJobPayload({
+      clientId,
+      product,
+      template,
+      title: values.title,
+      dueDate: values.dueDate || undefined,
+      quantity,
+      fileLink: values.fileLink,
+      note: values.note,
+    }, members.map((member) => ({
+      id: member.user_id,
+      name: member.display_name || member.profile?.full_name || member.profile?.email || member.user_id,
+      productionRole: member.production_role || null,
+    })))
+
+    const savedProject = await addProject(payload.project)
+    if (!savedProject) return
+
+    await Promise.all(payload.tasks.map((task) => addTask({ ...task, projectId: savedProject.id })))
   }
 
   const handleCreateBillingFromProject = async (project: Project, tasksForBilling: Task[]) => {
@@ -313,10 +439,10 @@ function AdminHome() {
         {lateTasks.map((task) => <article className="pulse-item" key={`task-${task.id}`}><div className="pulse-item-title-row"><h4>{task.title}</h4><span className="pulse-pill pulse-pill-red">ZADATAK</span></div><dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(String(task.clientId))}</dd></div><div><dt>Projekat:</dt><dd>{projectTitle(task.projectId)}</dd></div><div><dt>Rok :</dt><dd>{formatDate(task.dueDate)}</dd></div></dl><button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'task', task })}>OTVORI</button></article>)}
         {urgentBilling.length + riskyProjects.length + lateTasks.length === 0 ? <p className="pulse-empty">Nema hitnih stavki.</p> : null}
       </div></section>
-      <section className="pulse-panel pulse-panel-green"><h3>MOJ TIM – šta ko radi danas</h3><div className="pulse-list">{teamTasks.length ? teamTasks.map((task) => { const project = projectById.get(task.projectId); return <article className="pulse-item pulse-team-card" key={task.id}><div className="pulse-item-title-row"><h4>{task.assignedToLabel || 'Bez dodele'}</h4><button className="pulse-pill pulse-pill-red" type="button" onClick={() => setModal({ type: 'task', task })}>ZADATAK</button></div><p>{clientName(String(task.clientId))} – {projectTitle(task.projectId)}</p><p><strong>Rok :</strong> {formatDate(task.dueDate)}</p>{project ? <button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'project', project })}>PROJEKAT</button> : null}</article> }) : <p className="pulse-empty">Nema aktivnih zadataka.</p>}</div></section>
+      <section className="pulse-panel pulse-panel-green"><h3>MOJ TIM – šta ko radi danas</h3><div className="pulse-list">{teamRoleGroups.length ? teamRoleGroups.map(([roleLabel, roleTasks]) => <div className="pulse-team-role-group" key={roleLabel}><h4 className="pulse-team-role-title">{roleLabel}</h4>{roleTasks.map((task) => { const project = projectById.get(task.projectId); return <article className="pulse-item pulse-team-card" key={task.id}><div className="pulse-item-title-row"><h4>{task.title}</h4><button className="pulse-pill pulse-pill-red" type="button" onClick={() => setModal({ type: 'task', task })}>ZADATAK</button></div>{task.source === 'template' ? <p><span className="pulse-pill pulse-pill-blue">AUTO</span>{task.sourceProductTitle ? <> Iz proizvoda: <strong>{task.sourceProductTitle}</strong></> : null}</p> : null}<p><strong>Operativna rola:</strong> {normalizeRoleLabel(task.requiredRole || task.assignedToLabel)}</p><p>{clientName(String(task.clientId))} – {projectTitle(task.projectId)}</p><p><strong>Rok :</strong> {formatDate(task.dueDate)}</p>{project ? <button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'project', project })}>PROJEKAT</button> : null}</article> })}</div>) : <p className="pulse-empty">Nema aktivnih zadataka.</p>}</div></section>
       <section className="pulse-panel pulse-panel-white"><h3>NAPLATA</h3><div className="pulse-list">{sortedBilling.map((record) => <article className="pulse-item pulse-billing-row" key={record.id} onClick={() => setModal({ type: 'billing', record })}><div className="pulse-item-title-row"><h4>{formatAmount(record)}</h4><span className={`pulse-pill ${record.status === 'overdue' ? 'pulse-pill-red' : record.status === 'paid' ? 'pulse-pill-green' : 'pulse-pill-blue'}`}>{BILLING_STATUS_LABELS[record.status]}</span></div><dl className="pulse-mini-dl"><div><dt>Klijent :</dt><dd>{clientName(record.clientId)}</dd></div><div><dt>Projekat:</dt><dd>{projectTitle(record.projectId)}</dd></div><div><dt>Rok za plaćanje:</dt><dd>{formatDate(record.dueDate)}</dd></div></dl></article>)}</div></section>
       <section className="pulse-panel pulse-panel-blue"><h3>KLIJENTI – score card</h3><input className="pulse-search" placeholder="PRETRAGA" /><div className="pulse-create-row"><button className="pulse-outline-btn" onClick={() => setModal({ type: 'create-client' })}>+ NOVI KLIJENT</button><button className="pulse-outline-btn" onClick={() => setModal({ type: 'create-project' })}>+ NOVI PROJEKAT</button></div><div className="pulse-list">{clientScores.map(({ client, score }) => <article className="pulse-item pulse-client-score" key={client.id}><div className="pulse-item-title-row"><h4>{client.name}</h4><span className="pulse-pill pulse-pill-cyan">PULSE {score}</span></div><p><strong>Tekući projekti</strong> – {projects.find((project) => project.clientId === String(client.id))?.title ?? '-'}</p><p><strong>Naplata :</strong> u roku</p><button className="pulse-outline-btn pulse-card-open" type="button" onClick={() => setModal({ type: 'client', client, score })}>DETALJI</button></article>)}</div></section>
-      <AdminModal state={modal} clients={clients} projects={projects} tasks={tasks} billing={billing} onClose={() => setModal(null)} onCreateClient={handleCreateClient} onCreateProject={handleCreateProject} onUpdateClient={async (clientId, patch) => { await updateClient(clientId, patch) }} onCreateTask={handleCreateTask} onCreateBillingFromProject={handleCreateBillingFromProject} />
+      <AdminModal state={modal} clients={clients} projects={projects} tasks={tasks} billing={billing} onClose={() => setModal(null)} onCreateClient={handleCreateClient} onCreateProject={handleCreateProject} onUpdateClient={async (clientId, patch) => { await updateClient(clientId, patch) }} onCreateTask={handleCreateTask} onCreateJobFromCatalog={handleCreateJobFromCatalog} onCreateBillingFromProject={handleCreateBillingFromProject} />
     </section>
   )
 }

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useCloudStore } from '../features/cloud/cloudStore'
 import { useClientStore } from '../features/clients/clientStore'
 import { useProjectStore } from '../features/projects/projectStore'
@@ -8,6 +7,17 @@ import { useBillingStore } from '../features/billing/billingStore'
 import type { CloudWorkspaceMember, WorkspaceRole } from '../features/cloud/types'
 
 const STORAGE_KEYS = ['pulse.clients.v1', 'pulse.projects.v1', 'pulse.tasks.v1', 'pulse.billing.v1']
+
+
+const PRODUCTION_ROLES = [
+  'ACCOUNT',
+  'DIZAJNER',
+  'PRODUKCIJA',
+  'LOGISTIKA',
+  'PREPRESS',
+  'MONTAŽA',
+  'FINANCE',
+]
 
 function roleLabel(role?: string | null) {
   if (role === 'admin') return 'Admin'
@@ -42,9 +52,11 @@ function SettingsPage() {
   const [inviteName, setInviteName] = useState('')
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>('member')
   const [inviteRate, setInviteRate] = useState('')
+  const [inviteProductionRole, setInviteProductionRole] = useState('')
   const [lastInviteLink, setLastInviteLink] = useState('')
   const [message, setMessage] = useState('')
   const [editingRates, setEditingRates] = useState<Record<string, string>>({})
+  const [editingProductionRoles, setEditingProductionRoles] = useState<Record<string, string>>({})
 
   const isAdmin = cloud.membership?.role === 'admin'
   const cloudConnected = cloud.isConfigured && Boolean(cloud.user && cloud.activeWorkspace)
@@ -91,11 +103,13 @@ function SettingsPage() {
         fullName: inviteName,
         role: inviteRole,
         hourlyRate: inviteRate.trim() ? Number(inviteRate) : null,
+        productionRole: inviteProductionRole.trim() ? inviteProductionRole.trim().toUpperCase() : null,
       })
       if (invite) setLastInviteLink(cloud.buildInviteLink(invite))
       setInviteEmail('')
       setInviteName('')
       setInviteRate('')
+      setInviteProductionRole('')
     }, 'Poziv je kreiran.')
   }
 
@@ -117,6 +131,13 @@ function SettingsPage() {
     await runAction(async () => {
       await cloud.updateMemberHourlyRate(memberId, rawRate?.trim() ? Number(rawRate) : null)
     }, 'Satnica je sacuvana.')
+  }
+
+  const handleUpdateProductionRole = async (memberId: string) => {
+    const rawRole = editingProductionRoles[memberId]
+    await runAction(async () => {
+      await cloud.updateMemberProductionRole(memberId, rawRole?.trim() ? rawRole.trim().toUpperCase() : null)
+    }, 'Operativna rola je sacuvana.')
   }
 
   const handleExportData = () => {
@@ -152,7 +173,6 @@ function SettingsPage() {
   return (
     <section className="page-card settings-page-shell account-page-shell">
       <div className="account-page-head">
-        <Link className="settings-home-link" to="/">Home</Link>
         <h2>Moj nalog</h2>
       </div>
 
@@ -220,8 +240,10 @@ function SettingsPage() {
                     <div key={member.id || member.user_id} className="settings-team-row account-team-row">
                       <span><b>{readableName(member)}</b><small>{member.profile?.email || ''}</small></span>
                       <strong>{roleLabel(member.role)}</strong>
+                      <select className="settings-rate-input" value={editingProductionRoles[member.id] ?? String(member.production_role ?? '')} onChange={(event) => setEditingProductionRoles((current) => ({ ...current, [member.id]: event.target.value }))} aria-label="Operativna rola"><option value="">Bez operativne role</option>{PRODUCTION_ROLES.map((productionRole) => <option key={productionRole} value={productionRole}>{productionRole}</option>)}</select>
+                      <button type="button" className="settings-secondary-button" onClick={() => void handleUpdateProductionRole(member.id)}>Sacuvaj rolu</button>
                       <input className="settings-rate-input" value={editingRates[member.id] ?? String(member.hourly_rate ?? '')} onChange={(event) => setEditingRates((current) => ({ ...current, [member.id]: event.target.value }))} placeholder="RSD/h" />
-                      <button type="button" className="settings-secondary-button" onClick={() => void handleUpdateRate(member.id)}>Sacuvaj</button>
+                      <button type="button" className="settings-secondary-button" onClick={() => void handleUpdateRate(member.id)}>Sacuvaj satnicu</button>
                     </div>
                   ))}
                 </div>
@@ -235,6 +257,7 @@ function SettingsPage() {
               <label><span>Ime clana</span><input value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="npr. Marko Markovic" /></label>
               <label><span>Email clana</span><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} /></label>
               <label><span>Rola</span><select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as WorkspaceRole)}><option value="member">User</option><option value="finance">Finance</option><option value="admin">Admin</option></select></label>
+              <label><span>Operativna rola</span><select value={inviteProductionRole} onChange={(event) => setInviteProductionRole(event.target.value)}><option value="">-- Izaberi rolu --</option>{PRODUCTION_ROLES.map((productionRole) => <option key={productionRole} value={productionRole}>{productionRole}</option>)}</select></label>
               <label><span>Vrednost radnog sata</span><input value={inviteRate} onChange={(event) => setInviteRate(event.target.value)} placeholder="npr. 1800" /></label>
               <button type="button" className="settings-secondary-button" onClick={() => void handleInviteMember()}>Kreiraj invite link</button>
               {lastInviteLink ? <div className="settings-invite-link"><span>Invite link</span><input readOnly value={lastInviteLink} onFocus={(event) => event.currentTarget.select()} /></div> : null}
@@ -244,7 +267,7 @@ function SettingsPage() {
           <details className="account-collapsible">
             <summary>Pozivi</summary>
             <div className="settings-team-list">
-              {cloud.invites.length ? cloud.invites.map((invite) => <div key={invite.id} className="settings-team-row account-team-row"><span><b>{invite.full_name || invite.email}</b><small>{invite.full_name ? invite.email : ''}</small></span><strong>{roleLabel(invite.role)}</strong><em>{invite.hourly_rate ? `${invite.hourly_rate} RSD/h` : 'bez satnice'}</em><em>{invite.status}</em></div>) : <p className="settings-muted-line">Nema aktivnih poziva.</p>}
+              {cloud.invites.length ? cloud.invites.map((invite) => <div key={invite.id} className="settings-team-row account-team-row"><span><b>{invite.full_name || invite.email}</b><small>{invite.full_name ? invite.email : ''}</small></span><strong>{roleLabel(invite.role)}</strong><em>{invite.production_role || 'bez operativne role'}</em><em>{invite.hourly_rate ? `${invite.hourly_rate} RSD/h` : 'bez satnice'}</em><em>{invite.status}</em></div>) : <p className="settings-muted-line">Nema aktivnih poziva.</p>}
             </div>
           </details>
         </details>

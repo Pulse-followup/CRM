@@ -18,6 +18,8 @@ import ClientsPage from './pages/ClientsPage'
 import FinanceHome from './pages/FinanceHome'
 import NoAccessPage from './pages/NoAccessPage'
 import ProjectsPage from './pages/ProjectsPage'
+import ProductsPage from './pages/ProductsPage'
+import TemplatesPage from './pages/TemplatesPage'
 import SettingsPage from './pages/SettingsPage'
 import UserHome from './pages/UserHome'
 import UserTasks from './pages/UserTasks'
@@ -72,6 +74,8 @@ function AppRoutes() {
             element={role === 'admin' ? <ClientDetail /> : <NoAccessPage />}
           />
           <Route path="/projects" element={role === 'admin' ? <ProjectsPage /> : <NoAccessPage />} />
+          <Route path="/products" element={role === 'admin' ? <ProductsPage /> : <NoAccessPage />} />
+          <Route path="/templates" element={role === 'admin' ? <TemplatesPage /> : <NoAccessPage />} />
           <Route
             path="/projects/:id"
             element={role === 'admin' ? <ProjectDetail /> : <NoAccessPage />}

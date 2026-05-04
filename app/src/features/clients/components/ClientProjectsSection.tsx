@@ -7,6 +7,8 @@ import {
 } from '../../projects/projectLabels'
 import { getProjectHealth } from '../../projects/projectHealth'
 import { useProjectStore } from '../../projects/projectStore'
+import { readProducts } from '../../products/productStorage'
+import { readProcessTemplates } from '../../templates/templateStorage'
 import type { Project } from '../../projects/types'
 import TaskList from '../../tasks/components/TaskList'
 import {
@@ -18,15 +20,31 @@ import { useTaskStore } from '../../tasks/taskStore'
 
 export interface ClientProjectsSectionProps {
   projects: Project[]
+  title?: string
+  emptyText?: string
+  hideArchived?: boolean
 }
 
-function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
+function ClientProjectsSection({ projects, title = 'Projekti', emptyText = 'Nema projekata', hideArchived = false }: ClientProjectsSectionProps) {
   const navigate = useNavigate()
   const { archiveProject, restoreProject } = useProjectStore()
   const { tasks } = useTaskStore()
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([])
-  const activeProjects = projects.filter((project) => project.status !== 'arhiviran')
-  const archivedProjects = projects.filter((project) => project.status === 'arhiviran')
+  const activeProjects = hideArchived ? projects : projects.filter((project) => project.status !== 'arhiviran')
+  const archivedProjects = hideArchived ? [] : projects.filter((project) => project.status === 'arhiviran')
+  const products = readProducts()
+  const processTemplates = readProcessTemplates()
+
+  const getProjectSourceLabel = (project: Project) => {
+    if (project.source !== 'product' && !project.sourceProductId) return ''
+    const productTitle = project.sourceProductTitle || products.find((product) => product.id === project.sourceProductId)?.title || 'proizvoda'
+    return `IZ: ${productTitle}`
+  }
+
+  const getProjectTemplateLabel = (project: Project) => {
+    if (!project.sourceTemplateId && !project.sourceTemplateTitle) return ''
+    return project.sourceTemplateTitle || processTemplates.find((template) => template.id === project.sourceTemplateId)?.title || ''
+  }
 
   const toggleProjectTasks = (projectId: string) => {
     setExpandedProjectIds((current) =>
@@ -61,8 +79,15 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
             <span className={`customer-status-badge is-${projectHealth.tone}`}>
               {projectHealth.label}
             </span>
+            {getProjectSourceLabel(project) ? (
+              <span className="customer-status-badge is-info">{getProjectSourceLabel(project)}</span>
+            ) : null}
           </div>
         </div>
+
+        {getProjectTemplateLabel(project) ? (
+          <p className="customer-source-note">Šablon procesa: <strong>{getProjectTemplateLabel(project)}</strong></p>
+        ) : null}
 
         <div className="customer-project-summary-grid">
           <div className="customer-project-summary-item">
@@ -109,18 +134,18 @@ function ClientProjectsSection({ projects }: ClientProjectsSectionProps) {
   return (
     <details className="customer-card-section customer-card-collapsible">
       <summary className="customer-card-section-head">
-        <h3>Projekti</h3>
+        <h3>{title}</h3>
         <span className="customer-collapse-icon" aria-hidden="true">▾</span>
       </summary>
 
       <div className="customer-card-section-body">
         {activeProjects.length ? (
-          <div className="customer-card-stack">{activeProjects.map((project) => renderProjectCard(project))}</div>
+          <div className="customer-card-stack">{activeProjects.map((project) => renderProjectCard(project, project.status === 'arhiviran'))}</div>
         ) : (
-          <div className="customer-card-empty">Nema projekata</div>
+          <div className="customer-card-empty">{emptyText}</div>
         )}
 
-        {archivedProjects.length > 0 && (
+        {!hideArchived && archivedProjects.length > 0 && (
           <details className="customer-archived-projects">
             <summary>Arhivirani projekti</summary>
             <div className="customer-card-stack">

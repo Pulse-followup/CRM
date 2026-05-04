@@ -32,6 +32,11 @@ function asString(value: unknown) {
   return typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value)
 }
 
+function asUuidOrNull(value: string | undefined) {
+  const cleanValue = value || ''
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanValue) ? cleanValue : null
+}
+
 function asNumber(value: unknown) {
   if (value === undefined || value === null || value === '') return undefined
   const next = Number(value)
@@ -71,6 +76,9 @@ function mapProjectRowToReact(row: Record<string, unknown>): Project {
     value: asNumber(row.estimated_value || row.value),
     billingId: asString(row.billing_id || row.billingId) || undefined,
     billingStatus: (asString(row.billing_status || row.billingStatus) || undefined) as Project['billingStatus'],
+    source: asString(row.source_type || row.source) === 'product' ? 'product' : 'manual',
+    sourceProductId: asString(row.source_product_id || row.sourceProductId) || undefined,
+    sourceTemplateId: asString(row.source_template_id || row.sourceTemplateId) || undefined,
   }
 }
 
@@ -86,6 +94,9 @@ function mapProjectToSupabaseRow(project: Project, workspaceId: string) {
     status: project.status || 'aktivan',
     billing_id: project.billingId || null,
     billing_status: project.billingStatus || null,
+    source_type: project.source || 'manual',
+    source_product_id: asUuidOrNull(project.sourceProductId),
+    source_template_id: asUuidOrNull(project.sourceTemplateId),
     archived: project.status === 'arhiviran',
     archived_at: project.status === 'arhiviran' ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),

@@ -5,4 +5,5 @@ export interface AppUser {
   name: string
   email: string
   role: Role
+  productionRole?: string | null
 }
