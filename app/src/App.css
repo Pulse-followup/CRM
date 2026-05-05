@@ -3927,3 +3927,365 @@
     grid-template-columns:1fr;
   }
 }
+
+/* 8.4 — Product polish pass: mobile readability, workspace cleanup, menu polish */
+.pulse-menu-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:45;
+  border:0;
+  background:rgba(2,6,23,.42);
+  backdrop-filter:blur(8px);
+  cursor:pointer;
+}
+.pulse-dropdown{
+  z-index:60 !important;
+  box-shadow:0 24px 70px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08);
+  animation:pulseMenuIn .16s ease-out;
+}
+.pulse-hamburger.is-open span:nth-child(1){transform:translateY(15px) rotate(45deg)}
+.pulse-hamburger.is-open span:nth-child(2){opacity:0}
+.pulse-hamburger.is-open span:nth-child(3){transform:translateY(-15px) rotate(-45deg)}
+.pulse-hamburger span{transition:transform .16s ease, opacity .16s ease}
+@keyframes pulseMenuIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+.account-info-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.account-info-grid > div{
+  display:grid;
+  gap:5px;
+  min-width:0;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:16px;
+  background:rgba(5,13,28,.45);
+  padding:13px 14px;
+}
+.account-info-grid span{
+  color:#9fb1cf;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.account-info-grid strong{
+  color:#f8fafc;
+  font-size:15px;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+
+.pulse-team-member-id{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  min-width:0;
+}
+.pulse-team-avatar{
+  width:40px;
+  height:40px;
+  display:grid;
+  place-items:center;
+  flex:0 0 40px;
+  border-radius:50%;
+  border:1px solid rgba(64,224,208,.36);
+  background:linear-gradient(135deg, rgba(10,153,212,.34), rgba(37,215,77,.13));
+  color:#f8fafc;
+  font-weight:1000;
+  font-size:13px;
+  letter-spacing:.04em;
+}
+.pulse-team-member-id h4{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  max-width:220px;
+}
+.pulse-team-member-card{
+  transition:transform .16s ease, border-color .16s ease, background .16s ease;
+}
+.pulse-team-member-card:hover .pulse-team-avatar{
+  border-color:rgba(64,224,208,.72);
+}
+
+.clients-empty-state{
+  display:grid;
+  place-items:center;
+  gap:10px;
+  min-height:210px;
+  max-width:760px;
+  margin:0 auto;
+  border-color:rgba(148,163,184,.18) !important;
+  background:rgba(8,16,34,.34);
+}
+.clients-empty-state::before{
+  content:'—';
+  width:46px;
+  height:46px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  border:1px dashed rgba(147,197,253,.42);
+  color:#93c5fd;
+  font-size:30px;
+  line-height:1;
+}
+.clients-empty-state h2{
+  margin:0 !important;
+  max-width:440px;
+  font-size:clamp(22px,4vw,34px) !important;
+  line-height:1.16;
+}
+.clients-empty-state p{
+  margin:0;
+  color:#aebcdf;
+  font-weight:800;
+}
+
+.workspace-page-shell .settings-dev-tools-head p,
+.account-page-shell .settings-dev-tools-head p{
+  line-height:1.35;
+}
+.workspace-team-row span b,
+.account-team-row span b{
+  display:block;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.workspace-team-row span small,
+.account-team-row span small{
+  display:block;
+  margin-top:3px;
+  color:#93a3c2;
+  font-size:12px;
+  font-weight:800;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.workspace-team-row > strong,
+.workspace-team-row > em,
+.account-team-row > strong,
+.account-team-row > em{
+  justify-self:start;
+  border-radius:999px;
+  background:rgba(255,255,255,.06);
+  padding:6px 9px;
+}
+.workspace-team-row .settings-secondary-button{
+  min-height:42px;
+  padding:10px 13px;
+  white-space:normal;
+  line-height:1.15;
+}
+.workspace-team-row .settings-rate-input,
+.settings-form-grid input,
+.settings-form-grid select{
+  font-size:16px;
+}
+
+@media (min-width: 900px){
+  .workspace-team-row{
+    grid-template-columns:minmax(180px,1.25fr) auto auto minmax(110px,.6fr) minmax(150px,.8fr) auto minmax(120px,.55fr) auto !important;
+    gap:10px !important;
+    padding:14px !important;
+  }
+  .workspace-team-row .settings-secondary-button{
+    max-width:130px;
+  }
+  .workspace-team-row > em:nth-of-type(2){
+    background:transparent;
+    padding:0;
+  }
+}
+
+@media (max-width: 760px){
+  .pulse-dropdown{
+    right:18px !important;
+    top:82px !important;
+    width:min(360px, calc(100vw - 48px)) !important;
+    padding:28px 34px !important;
+    border-radius:28px !important;
+  }
+  .pulse-dropdown a,
+  .pulse-dropdown .pulse-dropdown-button{
+    min-height:50px;
+    font-size:24px !important;
+    line-height:1.15;
+    padding:10px 16px !important;
+  }
+  .pulse-phone-screen h2{
+    font-size:clamp(34px, 10vw, 58px) !important;
+    letter-spacing:-.03em;
+  }
+  .pulse-panel h3{
+    font-size:clamp(28px, 7vw, 42px) !important;
+  }
+  .pulse-team-bubbles{
+    gap:10px;
+  }
+  .pulse-team-bubble{
+    padding:10px 17px;
+    font-size:20px;
+  }
+  .pulse-team-member-card{
+    padding:20px !important;
+    border-radius:24px !important;
+  }
+  .pulse-team-member-head{
+    align-items:center;
+  }
+  .pulse-team-avatar{
+    width:52px;
+    height:52px;
+    flex-basis:52px;
+    font-size:17px;
+  }
+  .pulse-team-member-id h4{
+    max-width:200px;
+    font-size:31px !important;
+  }
+  .pulse-team-member-id p{
+    font-size:18px !important;
+    letter-spacing:.14em !important;
+  }
+  .pulse-team-member-stats span{
+    padding:11px 14px !important;
+    border-radius:18px !important;
+    font-size:22px !important;
+  }
+  .pulse-team-tasks-button{
+    min-height:52px;
+    padding:0 24px !important;
+    font-size:20px !important;
+  }
+  .admin-billing-summary-grid{
+    grid-template-columns:1fr !important;
+  }
+  .admin-billing-summary-card{
+    min-height:150px;
+    border-radius:24px !important;
+    padding:24px !important;
+  }
+  .admin-billing-summary-amount{
+    font-size:38px !important;
+  }
+  .admin-billing-summary-label{
+    font-size:25px !important;
+  }
+  .admin-billing-summary-count{
+    font-size:19px !important;
+  }
+  .account-info-grid{
+    grid-template-columns:1fr;
+    gap:14px;
+  }
+  .account-info-grid > div{
+    padding:17px 18px;
+    border-radius:20px;
+  }
+  .account-info-grid span{
+    font-size:13px;
+  }
+  .account-info-grid strong{
+    font-size:22px;
+  }
+  .workspace-team-row,
+  .settings-team-row.account-team-row{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    gap:12px !important;
+    padding:20px !important;
+    border-radius:24px !important;
+    overflow:hidden;
+  }
+  .workspace-team-row span b,
+  .account-team-row span b{
+    font-size:27px;
+  }
+  .workspace-team-row span small,
+  .account-team-row span small{
+    font-size:15px;
+  }
+  .workspace-team-row > strong,
+  .workspace-team-row > em,
+  .account-team-row > strong,
+  .account-team-row > em{
+    width:fit-content;
+    max-width:100%;
+    font-size:17px !important;
+    padding:8px 11px;
+  }
+  .workspace-team-row .settings-rate-input,
+  .workspace-team-row select.settings-rate-input,
+  .workspace-team-row input.settings-rate-input{
+    width:100% !important;
+    min-height:56px;
+    border-radius:18px;
+    font-size:18px;
+  }
+  .workspace-team-row .settings-secondary-button{
+    width:100% !important;
+    max-width:none !important;
+    min-height:56px;
+    border-radius:18px;
+    font-size:19px;
+  }
+  .settings-form-grid label span{
+    font-size:18px;
+  }
+  .settings-form-grid input,
+  .settings-form-grid select,
+  .settings-invite-link input{
+    min-height:58px;
+    border-radius:18px;
+    font-size:20px;
+  }
+  .settings-form-grid .settings-secondary-button,
+  .settings-button-row .settings-secondary-button,
+  .settings-danger-button{
+    width:100%;
+    min-height:62px;
+    border-radius:20px;
+    justify-content:center;
+    font-size:22px;
+  }
+  .projects-page-shell{
+    padding:28px 24px !important;
+  }
+  .project-filter-bubble{
+    font-size:22px;
+    padding:13px 20px;
+  }
+  .clients-empty-state{
+    min-height:290px;
+    padding:34px 24px;
+  }
+  .clients-empty-state h2{
+    font-size:36px !important;
+  }
+  .clients-empty-state p{
+    font-size:22px;
+    line-height:1.3;
+  }
+}
+
+@media (max-width: 420px){
+  .pulse-dropdown{
+    right:10px !important;
+    width:calc(100vw - 28px) !important;
+    padding:22px 24px !important;
+  }
+  .pulse-dropdown a,
+  .pulse-dropdown .pulse-dropdown-button{
+    font-size:21px !important;
+  }
+  .pulse-team-member-id h4{
+    max-width:160px;
+    font-size:28px !important;
+  }
+}

@@ -114,12 +114,17 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
         {menuItems.map((item) => renderMenuItem(item))}
       </nav>
       <div className="pulse-menu" ref={menuRef}>
-        <button className="pulse-hamburger" type="button" onClick={() => setIsOpen((v) => !v)} aria-label="Meni">
+        <button className={`pulse-hamburger${isOpen ? ' is-open' : ''}`} type="button" onClick={() => setIsOpen((v) => !v)} aria-label="Meni" aria-expanded={isOpen}>
           <span />
           <span />
           <span />
         </button>
-        {isOpen ? <div className="pulse-dropdown">{menuItems.map((item) => renderMenuItem(item, true))}</div> : null}
+        {isOpen ? (
+          <>
+            <button className="pulse-menu-backdrop" type="button" aria-label="Zatvori meni" onClick={() => setIsOpen(false)} />
+            <div className="pulse-dropdown">{menuItems.map((item) => renderMenuItem(item, true))}</div>
+          </>
+        ) : null}
       </div>
     </header>
   )

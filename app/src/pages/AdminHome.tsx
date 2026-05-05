@@ -211,6 +211,14 @@ function memberDisplayName(member: CloudWorkspaceMember) {
   return member.user_id || 'Član tima'
 }
 
+function memberInitials(member: CloudWorkspaceMember) {
+  const name = memberDisplayName(member)
+  const clean = name.includes('@') ? name.split('@')[0] : name
+  const parts = clean.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+  return clean.slice(0, 2).toUpperCase() || 'ČT'
+}
+
 function memberOperationalRole(member: CloudWorkspaceMember) {
   return normalizeRoleLabel(member.production_role || (member.role === 'admin' ? 'ADMIN' : member.role === 'finance' ? 'FINANSIJE' : ''))
 }
@@ -863,9 +871,12 @@ function AdminHome() {
               return (
                 <article className={`pulse-team-member-card ${lateMemberTasks.length ? 'has-late' : ''}`} key={member.id || member.user_id} onClick={() => openWorkspaceMember(member.user_id)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') openWorkspaceMember(member.user_id) }}>
                   <div className="pulse-team-member-head">
-                    <div>
-                      <h4>{memberDisplayName(member)}</h4>
-                      <p>{memberOperationalRole(member)}</p>
+                    <div className="pulse-team-member-id">
+                      <span className="pulse-team-avatar">{memberInitials(member)}</span>
+                      <div>
+                        <h4>{memberDisplayName(member)}</h4>
+                        <p>{memberOperationalRole(member)}</p>
+                      </div>
                     </div>
                     <span className={lateMemberTasks.length ? 'pulse-team-status is-late' : 'pulse-team-status'}>{lateMemberTasks.length ? `${lateMemberTasks.length} kasni` : 'OK'}</span>
                   </div>
