@@ -116,14 +116,9 @@ function findMemberByProductionRole(role: string, members: CatalogJobTeamMember[
 }
 
 function buildTaskDescription(draft: CatalogJobDraft, stepTitle: string) {
-  const lines = [
-    `Proizvod: ${draft.product.title}`,
-    `Korak procesa: ${stepTitle}`,
-    `Količina: ${draft.quantity}`,
-    `Procena iz šablona: ${formatTemplateEstimate(draft.template) || '-'}`,
-  ]
+  const lines = [`${stepTitle} za proizvod: ${draft.product.title}${draft.quantity ? ` · količina: ${draft.quantity}` : ''}.`]
 
-  if (draft.fileLink?.trim()) lines.push(`Link ka fajlu: ${draft.fileLink.trim()}`)
+  if (draft.fileLink?.trim()) lines.push(`Fajl: ${draft.fileLink.trim()}`)
   if (draft.note?.trim()) lines.push(`Napomena: ${draft.note.trim()}`)
 
   return lines.join('\n')

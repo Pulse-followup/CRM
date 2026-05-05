@@ -18,20 +18,6 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
 }
 
-function typeLabel(type?: string) {
-  const labels: Record<string, string> = {
-    poziv: 'Poziv',
-    mail: 'Mail',
-    sastanak: 'Sastanak',
-    follow_up: 'Follow-up',
-    ponuda: 'Ponuda',
-    naplata: 'Naplata',
-    interni_zadatak: 'Interni zadatak',
-    drugo: 'Drugo',
-  }
-  return type ? labels[type] ?? type : '-'
-}
-
 function TaskCard({ item, onOpen }: { item: Item; onOpen: (task: Task) => void }) {
   return (
     <article className="pulse-item pulse-task-card">
@@ -132,19 +118,11 @@ function TaskModal({
       <div className="pulse-modal" onMouseDown={(e) => e.stopPropagation()}>
         <button className="pulse-modal-x" type="button" onClick={onClose}>x</button>
         <h3>{task.title}</h3>
-        <p><strong>Tip</strong> - {typeLabel(task.type)}</p>
-        <p><strong>Klijent</strong> - {item?.client ?? '-'}</p>
-        <p><strong>Projekat</strong> - {item?.project ?? '-'}</p>
-        <p><strong>Opis:</strong> {task.description || '-'}</p>
-        <br />
-        <p>Operativna rola - {task.requiredRole || '-'}</p>
-        <p>Dodeljeno - {task.assignedToLabel || '-'}</p>
-        <p>Korak - {task.sequenceOrder || '-'}</p>
-        <p>Rok - {formatDate(task.dueDate)}</p>
-        <p>Utrošeno vreme - {task.timeSpentMinutes ? `${task.timeSpentMinutes} min` : '-'}</p>
-        <p>Trošak materijala - {task.materialCost ?? '-'}</p>
-        <p>Opis materijala:</p>
-        <p>{task.materialDescription || '-'}</p>
+        <div className="pulse-task-order">
+          <p><strong>Klijent</strong> - {item?.client ?? '-'}</p>
+          <p><strong>Opis:</strong> {task.description || '-'}</p>
+          <p><strong>Rok</strong> - {formatDate(task.dueDate)}</p>
+        </div>
 
         {isCompleting ? (
           <CompletionForm onCancel={() => setIsCompleting(false)} onSubmit={onComplete} />
