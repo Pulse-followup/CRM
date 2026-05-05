@@ -5,7 +5,7 @@ import type { Project } from '../projects/types'
 import type { Task } from '../tasks/types'
 import type { ClientScore, ScoreBreakdown, ScorePriority, ScoringState } from './scoringTypes'
 
-const ACTIVE_TASK_STATUSES = new Set(['dodeljen', 'u_radu', 'na_cekanju', 'vracen'])
+const ACTIVE_TASK_STATUSES = new Set(['dodeljen', 'u_radu', 'vracen'])
 const COMPLETED_TASK_STATUSES = new Set(['zavrsen', 'poslat_na_naplatu', 'naplacen'])
 
 function clampScore(value: number, max: number) {
@@ -210,7 +210,7 @@ function calculateProjectScore(projects: Project[], tasks: Task[], positives: st
 }
 
 function calculateTaskScore(tasks: Task[], positives: string[], risks: string[]) {
-  const activeTasks = tasks.filter((task) => ACTIVE_TASK_STATUSES.has(task.status))
+  const activeTasks = tasks.filter((task) => ACTIVE_TASK_STATUSES.has(task.status) || (task.status === 'na_cekanju' && !task.dependsOnTaskId))
   const completedTasks = tasks.filter((task) => COMPLETED_TASK_STATUSES.has(task.status))
   const lateTasks = activeTasks.filter((task) => isPastDue(task.dueDate))
   const recentActivityTasks = tasks.filter((task) => typeof task.timeSpentMinutes === 'number' && task.timeSpentMinutes > 0)

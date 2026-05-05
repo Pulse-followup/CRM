@@ -9,7 +9,7 @@ export interface ProjectHealth {
   tone: ProjectHealthTone
 }
 
-const ACTIVE_STATUSES: TaskStatus[] = ['dodeljen', 'u_radu', 'na_cekanju', 'vracen']
+const ACTIVE_STATUSES: TaskStatus[] = ['dodeljen', 'u_radu', 'vracen']
 
 function isPastDue(value?: string) {
   if (!value) return false
@@ -55,7 +55,7 @@ export function getProjectHealth(projectId: string, tasks: Task[]): ProjectHealt
     }
   }
 
-  const hasWaitingTask = projectTasks.some((task) => task.status === 'na_cekanju')
+  const hasWaitingTask = projectTasks.some((task) => task.status === 'na_cekanju' && !task.dependsOnTaskId)
 
   if (hasWaitingTask) {
     return {

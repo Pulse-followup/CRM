@@ -117,7 +117,7 @@ function CatalogJobForm({ clientId, products, templates, initialProductId, onCan
     <form className="customer-task-create-form customer-catalog-job-form" onSubmit={handleSubmit}>
       <div className="customer-card-section-head">
         <h3>Iz kataloga</h3>
-        <span className="customer-status-badge is-info">FAZA 1</span>
+        <span className="customer-status-badge is-info">POSAO</span>
       </div>
 
       <label className="customer-task-form-field">
@@ -175,23 +175,15 @@ function CatalogJobForm({ clientId, products, templates, initialProductId, onCan
       </label>
 
       {selectedTemplate ? (
-        <div className="customer-project-workflow-preview customer-catalog-job-steps">
+        <div className="customer-project-workflow-preview customer-catalog-job-steps customer-catalog-job-steps-compact">
           <div className="customer-card-section-head">
-            <h3>Taskovi koji će biti kreirani</h3>
-            <span>{selectedTemplate.steps.length} · {selectedTemplateEstimate}</span>
+            <h3>Proces</h3>
+            <span>{selectedTemplate.steps.length} koraka · {selectedTemplateEstimate}</span>
           </div>
-          <div className="customer-workflow-list">
-            {[...selectedTemplate.steps]
-              .sort((firstStep, secondStep) => firstStep.order - secondStep.order)
-              .map((step) => (
-                <div className="customer-workflow-stage" key={step.id}>
-                  <div>
-                    <strong>{step.order}. {step.title}</strong>
-                    <p>Rola: {step.role} · {step.estimatedMinutes} min</p>
-                  </div>
-                </div>
-              ))}
-          </div>
+          <p className="customer-catalog-job-summary">
+            Role: {[...new Set(selectedTemplate.steps.map((step) => step.role).filter(Boolean))].join(' / ') || '-'}
+          </p>
+          <small>Detalji procesa se vode kroz tab „Procesi“. Ovde samo pokrećeš posao i količinu.</small>
         </div>
       ) : null}
 

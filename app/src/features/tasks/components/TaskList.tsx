@@ -4,9 +4,10 @@ import type { Task } from '../types'
 export interface TaskListProps {
   tasks: Task[]
   onTaskChange?: (task: Task) => void
+  compact?: boolean
 }
 
-function TaskList({ tasks, onTaskChange }: TaskListProps) {
+function TaskList({ tasks, onTaskChange, compact = false }: TaskListProps) {
   if (!tasks.length) {
     return <div className="customer-task-empty">Nema taskova</div>
   }
@@ -21,7 +22,7 @@ function TaskList({ tasks, onTaskChange }: TaskListProps) {
   return (
     <div className="customer-task-list">
       {sortedTasks.map((task) => (
-        <TaskCard key={task.id} task={task} onTaskChange={onTaskChange} />
+        <TaskCard key={task.id} task={task} onTaskChange={onTaskChange} compact={compact} />
       ))}
     </div>
   )

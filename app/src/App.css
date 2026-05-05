@@ -3129,3 +3129,801 @@
     grid-column:1 / -1 !important;
   }
 }
+
+/* FAZA 4.1.1 / 4.1.2 – Klijenti i aktivni projekti cleanup */
+.page-kicker {
+  margin: 0 0 6px;
+  color: #60a5fa;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.clients-page-shell,
+.projects-page-shell {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(14px);
+}
+
+.client-list-card {
+  min-height: 92px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.82), rgba(30, 41, 59, 0.46));
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 18px 44px rgba(2, 6, 23, 0.22);
+}
+
+.client-list-card:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.62));
+}
+
+.client-list-card strong {
+  font-size: clamp(18px, 2vw, 24px);
+}
+
+.client-list-score-value {
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.customer-overview-link {
+  appearance: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.customer-overview-link:hover,
+.customer-active-projects-entry:hover,
+.project-wide-card:hover {
+  border-color: rgba(96, 165, 250, 0.5);
+  transform: translateY(-1px);
+}
+
+.customer-overview-link em {
+  display: block;
+  margin-top: 8px;
+  color: #93c5fd;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.customer-active-projects-entry {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 18px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #dbeafe;
+  padding: 16px 18px;
+  text-align: left;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.projects-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.projects-page-head h2 {
+  margin: 0;
+}
+
+.projects-page-count {
+  min-width: 104px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  padding: 13px 16px;
+  text-align: right;
+}
+
+.projects-page-count span,
+.project-wide-stats span,
+.project-wide-client {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.projects-page-count strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 28px;
+}
+
+.project-client-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 8px;
+}
+
+.project-filter-bubble {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.62);
+  color: #cbd5e1;
+  padding: 10px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.project-filter-bubble span {
+  margin-left: 8px;
+  color: #93c5fd;
+}
+
+.project-filter-bubble.is-active {
+  background: rgba(37, 99, 235, 0.28);
+  color: #eff6ff;
+  border-color: rgba(96, 165, 250, 0.6);
+}
+
+.projects-wide-list {
+  display: grid;
+  gap: 12px;
+}
+
+.project-wide-card {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto minmax(180px, 0.5fr);
+  align-items: center;
+  gap: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.82), rgba(30, 41, 59, 0.48));
+  color: #e2e8f0;
+  padding: 18px 20px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 18px 44px rgba(2, 6, 23, 0.2);
+}
+
+.project-wide-main strong {
+  display: block;
+  margin-top: 4px;
+  color: #f8fafc;
+  font-size: clamp(18px, 2vw, 24px);
+}
+
+.project-wide-main p {
+  margin: 6px 0 0;
+  color: #94a3b8;
+}
+
+.project-wide-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-wide-stats {
+  justify-self: end;
+  text-align: right;
+}
+
+.project-wide-stats strong {
+  display: block;
+  margin-top: 5px;
+  color: #f8fafc;
+}
+
+@media (max-width: 760px) {
+  .projects-page-head,
+  .client-list-card-head {
+    flex-direction: column;
+  }
+
+  .project-wide-card {
+    grid-template-columns: 1fr;
+  }
+
+  .project-wide-status,
+  .project-wide-stats,
+  .client-list-score {
+    justify-self: stretch;
+    justify-content: flex-start;
+    justify-items: start;
+    text-align: left;
+  }
+}
+
+/* FAZA 4.1.2 FIX — ujednačavanje Klijenti/Projekti sa ostatkom PULSE desktop UI */
+.clients-page-shell,
+.projects-page-shell {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  background: #111827 !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.clients-control-bar {
+  width: 100%;
+}
+
+.clients-search-input,
+.projects-page-shell input,
+.projects-page-shell select {
+  background: #0f172a !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  color: #e2e8f0 !important;
+}
+
+.client-list-card,
+.project-wide-card {
+  background: #0f172a !important;
+  border: 1px solid rgba(148, 163, 184, 0.16) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.client-list-card:hover,
+.project-wide-card:hover {
+  background: #111c33 !important;
+  border-color: rgba(96, 165, 250, 0.45) !important;
+  transform: none !important;
+}
+
+.projects-page-head {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  padding-bottom: 18px;
+}
+
+.project-filter-bubble {
+  background: #0f172a !important;
+}
+
+.project-filter-bubble.is-active {
+  background: rgba(59, 130, 246, 0.18) !important;
+}
+
+.customer-active-projects-entry {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(59, 130, 246, 0.12) !important;
+  border: 1px solid rgba(96, 165, 250, 0.32) !important;
+  color: #e2e8f0 !important;
+}
+
+.customer-active-projects-entry span {
+  color: #bfdbfe;
+  font-weight: 900;
+}
+
+.customer-active-projects-entry strong {
+  color: #f8fafc;
+  font-size: 13px;
+}
+
+/* FAZA 4.1.3: Procesi form polish - keep buttons/dropdowns aligned with PULSE dark UI. */
+.templates-form .pulse-primary-btn,
+.templates-step-form .pulse-primary-btn,
+.templates-page-shell .pulse-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  width: auto;
+  border: 2px solid rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(28, 82, 145, 0.96), rgba(21, 50, 94, 0.96));
+  color: #f8fafc;
+  padding: 10px 18px;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), 0 10px 22px rgba(0,0,0,0.16);
+}
+
+.templates-form .pulse-primary-btn:hover,
+.templates-step-form .pulse-primary-btn:hover,
+.templates-page-shell .pulse-primary-btn:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, rgba(36, 103, 178, 0.98), rgba(24, 61, 112, 0.98));
+}
+
+.templates-form > form > .pulse-primary-btn {
+  margin-top: 14px;
+}
+
+.templates-step-form {
+  grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr) minmax(120px, 0.4fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.templates-step-form select,
+.templates-step-form input,
+.templates-form input,
+.templates-form textarea,
+.templates-toolbar input {
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(4, 11, 24, 0.78);
+  color: #f8fafc;
+  padding: 10px 14px;
+  font-weight: 800;
+  outline: none;
+}
+
+.templates-step-form select {
+  width: 100%;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #dbeafe 50%), linear-gradient(135deg, #dbeafe 50%, transparent 50%);
+  background-position: calc(100% - 18px) 19px, calc(100% - 12px) 19px;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 36px;
+}
+
+.templates-step-form select:focus,
+.templates-step-form input:focus,
+.templates-form input:focus,
+.templates-form textarea:focus,
+.templates-toolbar input:focus {
+  border-color: rgba(37, 211, 102, 0.68);
+  box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.12);
+}
+
+.templates-step-form .templates-error-text {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+@media (max-width: 980px) {
+  .templates-step-form {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .templates-step-form .pulse-primary-btn {
+    width: 100%;
+  }
+}
+
+/* FAZA 4.1.4 — compact task flow review */
+.pulse-signals-panel .pulse-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.pulse-signals-panel .pulse-signal-card {
+  min-height: 112px;
+  padding: 14px;
+}
+
+.pulse-signals-panel .pulse-signal-card p {
+  margin: 8px 0 12px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.pulse-task-review-modal {
+  display: grid;
+  gap: 12px;
+}
+
+.pulse-task-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pulse-compact-dl {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 16px;
+  background: rgba(255,255,255,.04);
+}
+
+.pulse-compact-dl div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.pulse-compact-dl dt {
+  color: #9fb3d8;
+  font-size: 12px;
+}
+
+.pulse-compact-dl dd {
+  margin: 0;
+  color: #fff;
+  font-weight: 800;
+  text-align: right;
+}
+
+.pulse-task-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 204, 51, .35);
+  background: rgba(255, 204, 51, .08);
+  color: #ffe28a;
+  font-weight: 800;
+}
+
+.pulse-assignment-field select {
+  min-height: 44px;
+}
+
+/* FAZA 4.1.5 – Project lifecycle engine / Projekti filter cleanup */
+.project-status-filter {
+  margin-top: 0 !important;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.project-lifecycle-card .project-commercial-mini {
+  margin-top: 8px;
+  color: #dbeafe;
+  font-weight: 900;
+}
+
+.project-wide-stats em {
+  display: block;
+  margin-top: 4px;
+  color: #93c5fd;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+/* FAZA 6.1 — Admin team overview / workspace users view */
+.pulse-team-overview-panel {
+  gap: 14px;
+}
+
+.pulse-team-bubbles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 16px 4px;
+}
+
+.pulse-team-bubble {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dce7ff;
+  padding: 7px 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.pulse-team-bubble.is-active,
+.pulse-team-bubble:hover {
+  border-color: rgba(64, 224, 208, 0.55);
+  background: rgba(64, 224, 208, 0.14);
+  color: #ffffff;
+}
+
+.pulse-team-grid {
+  display: grid;
+  gap: 12px;
+  margin: 0 16px 16px;
+}
+
+.pulse-team-member-card {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 18px;
+  background: rgba(8, 16, 34, 0.78);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.22);
+  padding: 14px;
+  cursor: pointer;
+}
+
+.pulse-team-member-card:hover {
+  border-color: rgba(64, 224, 208, 0.42);
+  transform: translateY(-1px);
+}
+
+.pulse-team-member-card.has-late {
+  border-color: rgba(255, 91, 91, 0.5);
+}
+
+.pulse-team-member-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pulse-team-member-head h4 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 16px;
+}
+
+.pulse-team-member-head p {
+  margin: 4px 0 0;
+  color: #aebcdf;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.pulse-team-status {
+  border-radius: 999px;
+  background: rgba(81, 228, 118, 0.13);
+  color: #b8ffc8;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 1000;
+  white-space: nowrap;
+}
+
+.pulse-team-status.is-late {
+  background: rgba(255, 91, 91, 0.14);
+  color: #ffb8b8;
+}
+
+.pulse-team-member-stats {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  color: #dce7ff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pulse-team-member-stats span {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 7px 9px;
+}
+
+.pulse-team-member-stats strong {
+  color: #ffffff;
+}
+
+.pulse-team-tasks-button {
+  margin-top: 12px;
+  width: auto;
+}
+
+.pulse-team-task-peek {
+  margin-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 10px;
+  display: grid;
+  gap: 7px;
+}
+
+.pulse-team-task-peek p {
+  margin: 0;
+  color: #aebcdf;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pulse-team-task-row {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+
+.pulse-team-task-row span {
+  font-weight: 900;
+}
+
+.pulse-team-task-row small {
+  color: #aebcdf;
+  font-weight: 800;
+}
+
+.pulse-team-more {
+  color: #dce7ff !important;
+}
+
+.account-team-row.is-highlighted {
+  border-color: rgba(64, 224, 208, 0.65);
+  background: rgba(64, 224, 208, 0.11);
+  box-shadow: 0 0 0 2px rgba(64, 224, 208, 0.1);
+}
+
+@media (min-width: 900px) {
+  .pulse-team-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 7.1 Account / Workspace / Data separation */
+.pulse-user-block{
+  display:grid;
+  gap:6px;
+  justify-items:center;
+  color:#e7eef7;
+  font-weight:900;
+  text-align:center;
+  min-width:0;
+}
+.pulse-user-block strong{
+  max-width:160px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:15px;
+  letter-spacing:.01em;
+}
+.pulse-sync-button{
+  border:2px solid rgba(37,215,77,.85);
+  border-radius:999px;
+  background:rgba(37,215,77,.12);
+  color:#f3fff6;
+  padding:6px 12px;
+  font-size:11px;
+  line-height:1;
+  font-weight:900;
+  cursor:pointer;
+}
+.pulse-sync-button:disabled{
+  opacity:.65;
+  cursor:default;
+}
+.workspace-page-shell .settings-team-row,
+.data-page-shell .settings-dev-tools,
+.account-page-shell .settings-dev-tools{
+  background:rgba(16,24,36,.32);
+}
+.workspace-team-row.is-highlighted,
+.account-team-row.is-highlighted{
+  border-color:rgba(37,215,77,.95) !important;
+  box-shadow:0 0 0 2px rgba(37,215,77,.18), 0 14px 28px rgba(0,0,0,.22);
+}
+.workspace-member-list{
+  display:grid;
+  gap:12px;
+}
+.workspace-team-row{
+  align-items:center;
+}
+.workspace-team-row .settings-rate-input{
+  min-width:110px;
+}
+.settings-muted-line{
+  color:#c8cfda;
+  opacity:.82;
+}
+@media (min-width:900px){
+  .pulse-user-block{
+    justify-items:start !important;
+    padding:8px 0 14px !important;
+    border-bottom:1px solid rgba(10,153,212,.32) !important;
+  }
+  .pulse-user-block strong{
+    max-width:220px !important;
+    font-size:17px !important;
+  }
+}
+
+/* 8.0 Smart onboarding modal */
+.pulse-onboarding-form{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+  margin-top:22px;
+  max-width:660px;
+}
+
+.pulse-onboarding-form label{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  color:#dbeafe;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+
+.pulse-onboarding-form input{
+  width:100%;
+  min-height:48px;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:18px;
+  background:rgba(255,255,255,.08);
+  color:#fff;
+  padding:0 15px;
+  font-size:15px;
+  font-weight:750;
+  outline:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+
+.pulse-onboarding-form input::placeholder{
+  color:rgba(226,232,240,.48);
+}
+
+.pulse-onboarding-form input:focus{
+  border-color:rgba(37,215,77,.68);
+  box-shadow:0 0 0 4px rgba(37,215,77,.12), inset 0 1px 0 rgba(255,255,255,.06);
+}
+
+.pulse-guide-onboarding-lead{
+  min-height:auto;
+  margin-top:18px;
+}
+
+.pulse-onboarding-hints{
+  display:flex;
+  flex-wrap:wrap;
+  gap:9px;
+  margin-top:18px;
+}
+
+.pulse-onboarding-hints span{
+  border:1px solid rgba(96,165,250,.34);
+  border-radius:999px;
+  background:rgba(96,165,250,.1);
+  color:#bfdbfe;
+  padding:7px 11px;
+  font-size:12px;
+  font-weight:900;
+}
+
+.pulse-onboarding-message{
+  max-width:660px;
+  margin:16px 0 0;
+  border:1px solid rgba(37,215,77,.28);
+  border-radius:18px;
+  background:rgba(37,215,77,.08);
+  color:#d1fae5;
+  padding:12px 14px;
+  font-weight:800;
+}
+
+.pulse-guide-primary:disabled,
+.pulse-guide-secondary:disabled{
+  opacity:.62;
+  cursor:not-allowed;
+}
+
+@media (max-width: 760px){
+  .pulse-onboarding-form{
+    grid-template-columns:1fr;
+  }
+}

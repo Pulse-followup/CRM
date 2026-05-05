@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { AuthProvider, useAuthStore } from './features/auth/authStore'
-import { CloudProvider } from './features/cloud/cloudStore'
+import { CloudProvider, useCloudStore } from './features/cloud/cloudStore'
 import { BillingProvider } from './features/billing/billingStore'
 import { ClientProvider } from './features/clients/clientStore'
 import { ProjectProvider } from './features/projects/projectStore'
@@ -22,6 +22,8 @@ import ProjectsPage from './pages/ProjectsPage'
 import ProductsPage from './pages/ProductsPage'
 import TemplatesPage from './pages/TemplatesPage'
 import SettingsPage from './pages/SettingsPage'
+import WorkspacePage from './pages/WorkspacePage'
+import DataPage from './pages/DataPage'
 import UserHome from './pages/UserHome'
 import UserTasks from './pages/UserTasks'
 import PulseWelcomeGuide, { PULSE_WELCOME_KEY } from './components/PulseWelcomeGuide'
@@ -46,6 +48,7 @@ function App() {
 
 function AppRoutes() {
   const { currentUser } = useAuthStore()
+  const cloud = useCloudStore()
   const role = currentUser.role
 
   const [isGuideOpen, setIsGuideOpen] = useState(false)
@@ -53,6 +56,10 @@ function AppRoutes() {
   useEffect(() => {
     if (!window.localStorage.getItem(PULSE_WELCOME_KEY)) setIsGuideOpen(true)
   }, [])
+
+  useEffect(() => {
+    if (cloud.rememberedInviteId && !cloud.activeWorkspace) setIsGuideOpen(true)
+  }, [cloud.activeWorkspace, cloud.rememberedInviteId])
 
   const openGuide = () => setIsGuideOpen(true)
 
@@ -98,6 +105,8 @@ function AppRoutes() {
             element={role === 'admin' ? <ProjectDetail /> : <NoAccessPage />}
           />
           <Route path="/billing" element={role === 'user' ? <NoAccessPage /> : <BillingPage />} />
+          <Route path="/workspace" element={role === 'admin' ? <WorkspacePage /> : <NoAccessPage />} />
+          <Route path="/data" element={role === 'admin' ? <DataPage /> : <NoAccessPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

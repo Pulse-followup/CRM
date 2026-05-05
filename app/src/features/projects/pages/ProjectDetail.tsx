@@ -2,48 +2,24 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import BillingCard from '../../billing/components/BillingCard'
 import { BILLING_STATUS_LABELS } from '../../billing/billingLabels'
+import { getBillingGateMessage, getBillableTasksForProject } from '../../billing/billingGate'
 import { useBillingStore } from '../../billing/billingStore'
 import { readProducts } from '../../products/productStorage'
-import { readProcessTemplates } from '../../templates/templateStorage'
 import { useCloudStore } from '../../cloud/cloudStore'
 import { getSupabaseClient } from '../../../lib/supabaseClient'
 import '../../clients/pages/client-detail.css'
 import CreateTaskForm from '../../tasks/components/CreateTaskForm'
 import type { CreateTaskFormValues } from '../../tasks/components/CreateTaskForm'
-import TaskList from '../../tasks/components/TaskList'
-import {
-  getCompletedTasks,
-  getTasksByProject as selectTasksByProject,
-  getTasksByStage,
-  getTasksWithoutStage,
-} from '../../tasks/taskSelectors'
+import { getTasksByProject as selectTasksByProject } from '../../tasks/taskSelectors'
 import { useTaskStore } from '../../tasks/taskStore'
+import { TASK_STATUS_LABELS } from '../../tasks/taskLabels'
 import type { Task } from '../../tasks/types'
 import {
-  PROJECT_FREQUENCY_LABELS,
   PROJECT_STATUS_LABELS,
   PROJECT_TYPE_LABELS,
 } from '../projectLabels'
-import { getProjectHealth } from '../projectHealth'
+import { getProjectLifecycle } from '../projectLifecycle'
 import { useProjectStore } from '../projectStore'
-import { PROJECT_STAGE_ROLE_LABELS } from '../projectTemplates'
-import { getProjectStageProgress } from '../projectWorkflow'
-
-function getStageTone(status: 'locked' | 'active' | 'done') {
-  switch (status) {
-    case 'done': return 'success'
-    case 'active': return 'info'
-    default: return 'muted'
-  }
-}
-
-function getStageLabel(status: 'locked' | 'active' | 'done') {
-  switch (status) {
-    case 'done': return 'Done'
-    case 'active': return 'Active'
-    default: return 'Locked'
-  }
-}
 
 function makeId(prefix: string) {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return `${prefix}-${crypto.randomUUID()}`
@@ -52,6 +28,55 @@ function makeId(prefix: string) {
 
 function formatMoney(value: number) {
   return `${Math.round(value).toLocaleString('sr-RS')} RSD`
+}
+
+function formatDueDate(value?: string) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
+}
+
+
+function formatShortDate(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('sr-RS', { day: '2-digit', month: '2-digit' }).format(date)
+}
+
+function getTaskRoleLabel(task: Task) {
+  const rawLabel = task.requiredRole || task.assignedToLabel || 'Rola nije dodeljena'
+  return String(rawLabel)
+    .replace(/\s*·?\s*potrebna dodela.*$/i, '')
+    .replace(/\s*·?\s*bez dodele.*$/i, '')
+    .trim() || 'Rola nije dodeljena'
+}
+
+function getTaskDoneLabel(task: Task) {
+  if (task.status === 'zavrsen' || task.status === 'poslat_na_naplatu' || task.status === 'naplacen') {
+    return `Urađeno ${formatShortDate(task.completedAt || task.updatedAt)} · ${getTaskRoleLabel(task)}`
+  }
+  if (task.needsAssignment || String(task.assignedToLabel || '').toLowerCase().includes('potrebna dodela')) {
+    return `Potrebna dodela · ${getTaskRoleLabel(task)}`
+  }
+  return `${TASK_STATUS_LABELS[task.status]} · ${getTaskRoleLabel(task)}`
+}
+
+function getTaskTimelineTone(task: Task) {
+  if (task.status === 'zavrsen' || task.status === 'poslat_na_naplatu' || task.status === 'naplacen') return 'done'
+  if (task.needsAssignment || String(task.assignedToLabel || '').toLowerCase().includes('potrebna dodela')) return 'warning'
+  if (task.status === 'u_radu' || task.status === 'dodeljen') return 'active'
+  return 'muted'
+}
+
+function getProjectDueDate(projectDueDate: string | undefined, tasks: Task[]) {
+  if (projectDueDate) return projectDueDate
+  const datedTasks = tasks
+    .map((task) => task.dueDate)
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+  return datedTasks[0]
 }
 
 
@@ -67,13 +92,6 @@ function getWorkflowSummary(tasks: Task[]) {
   return { total, completed, activeTask, progress }
 }
 
-function getEffectiveStageStatus(_stageId: string, stageTasks: Task[]) {
-  if (!stageTasks.length) return 'locked' as const
-  if (stageTasks.every((task) => task.status === 'zavrsen' || task.status === 'naplacen')) return 'done' as const
-  if (stageTasks.some((task) => task.status === 'dodeljen' || task.status === 'u_radu')) return 'active' as const
-  return 'locked' as const
-}
-
 function ProjectDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -82,29 +100,31 @@ function ProjectDetail() {
   const { activeWorkspace, members } = useCloudStore()
   const project = getProjectById(projectId)
   const { tasks: allTasks, updateTask, addTask } = useTaskStore()
-  const { getActiveBillingByProjectId, createBillingForProject } = useBillingStore()
+  const { getActiveBillingByProjectId, createBillingForProject, billing } = useBillingStore()
   const tasks = selectTasksByProject(allTasks, projectId)
-  const projectHealth = getProjectHealth(projectId, tasks)
   const activeBilling = getActiveBillingByProjectId(projectId)
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [isCreatingBilling, setIsCreatingBilling] = useState(false)
   const [marginPercent, setMarginPercent] = useState('30')
   const products = readProducts()
-  const processTemplates = readProcessTemplates()
-  const projectSourceProductTitle = project?.sourceProductTitle || products.find((product) => product.id === project?.sourceProductId)?.title || ''
-  const projectSourceTemplateTitle = project?.sourceTemplateTitle || processTemplates.find((template) => template.id === project?.sourceTemplateId)?.title || ''
+  const sourceProduct = products.find((product) => product.id === project?.sourceProductId)
+  const projectSourceProductTitle = project?.sourceProductTitle || sourceProduct?.title || ''
   const workflowSummary = useMemo(() => getWorkflowSummary(tasks), [tasks])
-
-  const stageProgress = useMemo(() => (project ? getProjectStageProgress(project, tasks) : []), [project, tasks])
-  const tasksWithoutStage = useMemo(() => getTasksWithoutStage(tasks), [tasks])
+  const lifecycle = project ? getProjectLifecycle(project, tasks, billing) : null
+  const projectDueDate = getProjectDueDate(project?.dueDate, tasks)
+  const projectUnitPrice = project?.unitPrice || sourceProduct?.price || 0
+  const projectQuantity = project?.quantity || (projectUnitPrice && project?.value ? Math.round(project.value / projectUnitPrice) : 0)
+  const projectTotalValue = project?.value || (projectUnitPrice && projectQuantity ? projectUnitPrice * projectQuantity : 0)
+  const projectCategory = project?.sourceProductCategory || sourceProduct?.category || (project?.type ? PROJECT_TYPE_LABELS[project.type] : '')
   const projectHasBilling = Boolean(
     activeBilling ||
     (project?.billingId && project.billingStatus && project.billingStatus !== 'cancelled')
   )
   const billableTasks = useMemo(
-    () => projectHasBilling ? [] : tasks.filter((task) => task.status === 'zavrsen' && !task.billingId && task.billingState !== 'sent_to_billing' && task.billingState !== 'billed'),
-    [projectHasBilling, tasks],
+    () => project && !projectHasBilling ? getBillableTasksForProject(project, tasks, activeBilling ? [activeBilling] : []) : [],
+    [activeBilling, project, projectHasBilling, tasks],
   )
+  const billingGateMessage = project ? getBillingGateMessage(project, tasks) : ''
   const billingPreview = useMemo(() => {
     const totalTimeMinutes = billableTasks.reduce((sum, task) => sum + (task.timeSpentMinutes ?? 0), 0)
     const totalLaborCost = billableTasks.reduce((sum, task) => sum + (task.laborCost ?? 0), 0)
@@ -114,8 +134,6 @@ function ProjectDetail() {
     const suggestedAmount = Number.isFinite(margin) ? Math.round(netAmount * (1 + margin / 100)) : netAmount
     return { taskCount: billableTasks.length, totalTimeMinutes, totalLaborCost, totalMaterialCost, netAmount, suggestedAmount, marginPercent: Number.isFinite(margin) ? margin : 0 }
   }, [billableTasks, marginPercent])
-
-  const handleTaskChange = (updatedTask: Task) => { updateTask(updatedTask) }
 
   const handleCreateTask = (values: CreateTaskFormValues) => {
     if (!project) return
@@ -214,17 +232,76 @@ function ProjectDetail() {
   }
 
   return (
-    <section className="page-card client-detail-shell">
-      <button type="button" className="secondary-link-button" onClick={() => navigate("/")}>Nazad na dashboard</button>
-      <header className="customer-card-header"><div><h2 className="customer-card-title">{project.title}</h2><p className="customer-card-subtitle">Projekat</p>{projectSourceProductTitle ? <p className="customer-source-note">Kreirano iz proizvoda: <strong>{projectSourceProductTitle}</strong>{projectSourceTemplateTitle ? ` · Šablon: ${projectSourceTemplateTitle}` : ''}</p> : null}{workflowSummary.total ? <p className="customer-source-note">Proces: <strong>{workflowSummary.completed}/{workflowSummary.total}</strong> · {workflowSummary.progress}%{workflowSummary.activeTask ? ` · Trenutni korak: ${workflowSummary.activeTask.requiredRole || workflowSummary.activeTask.title}` : ''}</p> : null}</div><div className="customer-project-badges"><span className="customer-status-badge">{PROJECT_STATUS_LABELS[project.status]}</span><span className={`customer-status-badge is-${projectHealth.tone}`}>{projectHealth.label}</span>{projectSourceProductTitle ? <span className="customer-status-badge is-info">IZ PROIZVODA</span> : null}</div></header>
+    <section className="page-card client-detail-shell project-detail-clean">
+      <button type="button" className="secondary-link-button" onClick={() => navigate('/projects')}>Nazad na projekte</button>
 
-      <section className="customer-card-section"><div className="customer-card-section-head"><h3>Osnovni podaci</h3></div><div className="customer-card-group"><dl className="customer-card-detail-list"><div><dt>Status</dt><dd>{PROJECT_STATUS_LABELS[project.status]}</dd></div><div><dt>Tip</dt><dd>{project.type ? PROJECT_TYPE_LABELS[project.type] : '-'}</dd></div><div><dt>Frekvencija</dt><dd>{project.frequency ? PROJECT_FREQUENCY_LABELS[project.frequency] : '-'}</dd></div><div><dt>Vrednost</dt><dd>{project.value ? `${project.value} RSD` : '-'}</dd></div><div><dt>Billing status</dt><dd>{project.billingStatus ? BILLING_STATUS_LABELS[project.billingStatus] : '-'}</dd></div></dl></div></section>
+      <header className="customer-card-header project-detail-header-clean">
+        <div>
+          <p className="project-detail-eyebrow">{projectCategory || 'Projekat'}</p>
+          <h2 className="customer-card-title">{project.title}</h2>
+          <p className="customer-card-subtitle">
+            Proizvod: <strong>{projectSourceProductTitle || project.title}</strong>
+            {projectQuantity ? ` · Količina: ${projectQuantity} kom` : ''}
+          </p>
+          <p className="customer-source-note">
+            Rok: <strong>{formatDueDate(projectDueDate)}</strong>
+            {workflowSummary.activeTask ? ` · Trenutni korak: ${workflowSummary.activeTask.title}` : ''}
+          </p>
+        </div>
+        <div className="customer-project-badges">
+          <span className={`customer-status-badge is-${lifecycle?.tone || 'muted'}`}>{lifecycle?.label || PROJECT_STATUS_LABELS[project.status]}</span>
+          {projectTotalValue ? <span className="customer-status-badge is-info">{formatMoney(projectTotalValue)}</span> : null}
+        </div>
+      </header>
 
-      <section className="customer-card-section"><div className="customer-card-section-head"><h3>Workflow projekta</h3></div>{project.stages?.length ? <div className="customer-workflow-list">{project.stages.slice().sort((l, r) => l.order - r.order).map((stage) => { const progress = stageProgress.find((item) => item.stageId === stage.id); const stageTasks = getTasksByStage(tasks, stage.id); const roleLabel = stage.defaultRole ? PROJECT_STAGE_ROLE_LABELS[stage.defaultRole as keyof typeof PROJECT_STAGE_ROLE_LABELS] ?? stage.defaultRole : null; const effectiveStatus = getEffectiveStageStatus(stage.id, stageTasks); return <div className="customer-workflow-stage customer-workflow-stage-block" key={stage.id}><div className="customer-workflow-stage-top"><div><strong>{stage.order}. {stage.name}</strong>{roleLabel ? <p>Preporucena rola: {roleLabel}</p> : null}</div><span className={`customer-status-badge is-${getStageTone(effectiveStatus)}`}>{getStageLabel(effectiveStatus)}</span></div><div className="customer-workflow-stage-metrics"><span>Taskovi: {progress?.totalTasks ?? 0}</span><span>Zavrseni: {progress?.completedTasks ?? 0}</span><span>Aktivni: {progress?.activeTasks ?? 0}</span></div>{stageTasks.length ? <TaskList tasks={stageTasks} onTaskChange={handleTaskChange} /> : <div className="customer-task-empty">Nema taskova u ovoj fazi</div>}</div> })}{tasksWithoutStage.length ? <div className="customer-workflow-stage customer-workflow-stage-block"><div className="customer-workflow-stage-top"><div><strong>Bez faze</strong><p>Taskovi koji jos nisu vezani za workflow fazu.</p></div><span className="customer-status-badge is-muted">Neutral</span></div><div className="customer-workflow-stage-metrics"><span>Taskovi: {tasksWithoutStage.length}</span><span>Zavrseni: {getCompletedTasks(tasksWithoutStage).length}</span></div><TaskList tasks={tasksWithoutStage} onTaskChange={handleTaskChange} /></div> : null}</div> : <div className="customer-card-empty">Workflow jos nije definisan za ovaj projekat.</div>}</section>
+      <section className="project-info-strip" aria-label="Osnovni podaci projekta">
+        <div><span>Status</span><strong>{lifecycle?.label || PROJECT_STATUS_LABELS[project.status]}</strong></div>
+        <div><span>Tip</span><strong>{project.type ? PROJECT_TYPE_LABELS[project.type] : '-'}</strong></div>
+        <div><span>Rok</span><strong>{formatDueDate(projectDueDate)}</strong></div>
+        <div><span>Vrednost</span><strong>{projectTotalValue ? formatMoney(projectTotalValue) : '-'}</strong></div>
+        <div><span>Naplata</span><strong>{activeBilling ? BILLING_STATUS_LABELS[activeBilling.status] : project.billingStatus ? BILLING_STATUS_LABELS[project.billingStatus] : 'Nije poslato'}</strong></div>
+      </section>
 
-      <section className="customer-card-section"><div className="customer-card-section-head"><h3>Naplata</h3>{!activeBilling ? <button type="button" className="customer-project-toggle" onClick={() => setIsCreatingBilling((current) => !current)}>{isCreatingBilling ? 'Sakrij nalog' : 'Kreiraj nalog za naplatu'}</button> : null}</div>{!activeBilling && isCreatingBilling ? <div className="customer-card-group"><h4>Predlog naloga za naplatu</h4><dl className="customer-card-detail-list"><div><dt>Broj taskova</dt><dd>{billingPreview.taskCount}</dd></div><div><dt>Ukupno vreme</dt><dd>{billingPreview.totalTimeMinutes} min</dd></div><div><dt>Rad / satnice</dt><dd>{formatMoney(billingPreview.totalLaborCost)}</dd></div><div><dt>Materijal</dt><dd>{formatMoney(billingPreview.totalMaterialCost)}</dd></div><div><dt>Neto interno</dt><dd>{formatMoney(billingPreview.netAmount)}</dd></div></dl><label className="pulse-form-field"><span>Marza / korekcija (%)</span><input type="number" value={marginPercent} onChange={(event) => setMarginPercent(event.target.value)} /></label><p><strong>Predlog iznosa za Finance:</strong> {formatMoney(billingPreview.suggestedAmount)}</p><div className="pulse-modal-actions"><button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={handleCreateBilling} disabled={billingPreview.taskCount === 0}>POŠALJI NA FAKTURISANJE</button><button className="pulse-modal-btn pulse-modal-btn-red" type="button" onClick={() => setIsCreatingBilling(false)}>OTKAŽI</button></div></div> : null}{activeBilling ? <BillingCard record={activeBilling} projectTitle={project.title} /> : !isCreatingBilling ? <div className="customer-card-empty">Nema billing naloga za ovaj projekat.</div> : null}</section>
+      <section className="customer-card-section project-progress-section">
+        <div className="customer-card-section-head">
+          <h3>Koraci projekta</h3>
+          <span className="customer-status-badge is-muted">{workflowSummary.completed}/{workflowSummary.total || tasks.length} završeno · {workflowSummary.progress}%</span>
+        </div>
+        <div className="project-progress-bar" aria-hidden="true"><span style={{ width: `${workflowSummary.progress}%` }} /></div>
+        {tasks.some((task) => task.needsAssignment || String(task.assignedToLabel || '').toLowerCase().includes('potrebna dodela')) ? <p className="customer-source-note">⚠ Proces ima korake koji traže ručnu dodelu role.</p> : null}
+      </section>
 
-      <section className="customer-card-section"><div className="customer-card-section-head"><h3>Taskovi</h3><button type="button" className="customer-project-toggle" onClick={() => setIsCreatingTask((current) => !current)}>{isCreatingTask ? 'Sakrij formu' : 'Novi task'}</button></div>{isCreatingTask ? <CreateTaskForm onCancel={() => setIsCreatingTask(false)} onSubmit={handleCreateTask} requireProjectSelection={false} initialProjectId={project.id} projectOptions={[{ id: project.id, label: project.title, stages: project.stages }]} /> : null}<TaskList tasks={tasks} onTaskChange={handleTaskChange} /></section>
+      <section className="customer-card-section project-billing-strip">
+        <div className="customer-card-section-head">
+          <h3>Naplata</h3>
+          {!activeBilling && !billingGateMessage ? <button type="button" className="customer-project-toggle" onClick={() => setIsCreatingBilling((current) => !current)}>{isCreatingBilling ? 'Sakrij nalog' : 'Kreiraj nalog za naplatu'}</button> : null}
+        </div>
+        {billingGateMessage ? <div className="project-billing-empty"><span>{billingGateMessage}</span>{projectTotalValue ? <strong>Komercijalna vrednost: {formatMoney(projectTotalValue)}</strong> : null}</div> : null}
+        {!activeBilling && !billingGateMessage && isCreatingBilling ? <div className="customer-card-group"><h4>Predlog naloga za naplatu</h4><dl className="customer-card-detail-list"><div><dt>Broj taskova</dt><dd>{billingPreview.taskCount}</dd></div><div><dt>Ukupno vreme</dt><dd>{billingPreview.totalTimeMinutes} min</dd></div><div><dt>Rad / satnice</dt><dd>{formatMoney(billingPreview.totalLaborCost)}</dd></div><div><dt>Materijal</dt><dd>{formatMoney(billingPreview.totalMaterialCost)}</dd></div><div><dt>Neto interno</dt><dd>{formatMoney(billingPreview.netAmount)}</dd></div></dl><label className="pulse-form-field"><span>Marza / korekcija (%)</span><input type="number" value={marginPercent} onChange={(event) => setMarginPercent(event.target.value)} /></label><p><strong>Predlog iznosa za Finance:</strong> {formatMoney(billingPreview.suggestedAmount)}</p><div className="pulse-modal-actions"><button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={handleCreateBilling} disabled={billingPreview.taskCount === 0}>POŠALJI NA FAKTURISANJE</button><button className="pulse-modal-btn pulse-modal-btn-red" type="button" onClick={() => setIsCreatingBilling(false)}>OTKAŽI</button></div></div> : null}
+        {activeBilling ? <BillingCard record={activeBilling} projectTitle={project.title} /> : !billingGateMessage && !isCreatingBilling ? <div className="project-billing-empty"><span>Nalog za naplatu nije kreiran.</span>{projectTotalValue ? <strong>Komercijalna vrednost: {formatMoney(projectTotalValue)}</strong> : null}</div> : null}
+      </section>
+
+      <section className="customer-card-section project-tasks-section project-task-timeline-section">
+        <div className="customer-card-section-head"><h3>Taskovi</h3><button type="button" className="customer-project-toggle" onClick={() => setIsCreatingTask((current) => !current)}>{isCreatingTask ? 'Sakrij formu' : 'Novi task'}</button></div>
+        {isCreatingTask ? <CreateTaskForm onCancel={() => setIsCreatingTask(false)} onSubmit={handleCreateTask} requireProjectSelection={false} initialProjectId={project.id} projectOptions={[{ id: project.id, label: project.title, stages: project.stages }]} /> : null}
+        <div className="project-task-timeline">
+          {tasks
+            .slice()
+            .sort((first, second) => (first.sequenceOrder || 999) - (second.sequenceOrder || 999))
+            .map((task, index) => (
+              <button
+                key={task.id}
+                type="button"
+                className={`project-task-line is-${getTaskTimelineTone(task)}`}
+                onClick={() => navigate(`/tasks/${task.id}`)}
+              >
+                <span className="project-task-line-index">{task.sequenceOrder || index + 1}.</span>
+                <span className="project-task-line-title">{task.title}</span>
+                <span className="project-task-line-meta">{getTaskDoneLabel(task)}</span>
+              </button>
+            ))}
+        </div>
+      </section>
     </section>
   )
 }

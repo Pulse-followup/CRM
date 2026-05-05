@@ -92,9 +92,27 @@ function normalizeRoleLabel(role?: string) {
   return roleMap[normalizedKey] || value.toUpperCase()
 }
 
+function isAdminMember(member: CatalogJobTeamMember) {
+  return normalizeRoleLabel(member.productionRole || '') === 'ADMIN' || member.name.toLowerCase().includes('admin')
+}
+
 function findMemberByProductionRole(role: string, members: CatalogJobTeamMember[] = []) {
   const normalizedRole = normalizeRoleLabel(role)
-  return members.find((member) => normalizeRoleLabel(member.productionRole || '') === normalizedRole) || null
+  const activeMembers = members.filter((member) => member.id)
+
+  const exactMatch = activeMembers.find((member) => normalizeRoleLabel(member.productionRole || '') === normalizedRole)
+  if (exactMatch) return { member: exactMatch, needsAssignment: false }
+
+  // Član bez operativne role je wildcard i može privremeno da primi bilo koji korak procesa.
+  const wildcardMatch = activeMembers.find((member) => {
+    const rawRole = member.productionRole?.trim()
+    return !rawRole
+  })
+  if (wildcardMatch) return { member: wildcardMatch, needsAssignment: true }
+
+  // MVP fallback: ako nema tražene role ni wildcard člana, task ide Adminu da proces ne ostane mrtav.
+  const adminMatch = activeMembers.find(isAdminMember) || activeMembers[0] || null
+  return { member: adminMatch, needsAssignment: true }
 }
 
 function buildTaskDescription(draft: CatalogJobDraft, stepTitle: string) {
@@ -123,6 +141,10 @@ export function buildCatalogJobPayload(draft: CatalogJobDraft, teamMembers: Cata
     type: 'prodaja',
     frequency: 'jednokratno',
     value: draft.product.price * draft.quantity,
+    unitPrice: draft.product.price,
+    quantity: draft.quantity,
+    dueDate: draft.dueDate || calculateDefaultDueDate(draft.template) || undefined,
+    sourceProductCategory: draft.product.category,
     status: 'aktivan',
     source: 'product',
     sourceProductId: draft.product.id,
@@ -142,8 +164,10 @@ export function buildCatalogJobPayload(draft: CatalogJobDraft, teamMembers: Cata
   const taskIds = sortedSteps.map(() => safeId('task'))
   const tasks: Task[] = sortedSteps.map((step, index) => {
     const requiredRole = normalizeRoleLabel(step.role)
-    const matchedMember = findMemberByProductionRole(requiredRole, teamMembers)
+    const assignment = findMemberByProductionRole(requiredRole, teamMembers)
+    const matchedMember = assignment.member
     const isFirstStep = index === 0
+    const assignmentLabel = matchedMember?.name || 'ADMIN fallback'
 
     return {
       id: taskIds[index],
@@ -154,8 +178,9 @@ export function buildCatalogJobPayload(draft: CatalogJobDraft, teamMembers: Cata
       type: 'interni_zadatak',
       status: isFirstStep ? 'dodeljen' : 'na_cekanju',
       assignedToUserId: matchedMember?.id,
-      assignedToLabel: matchedMember?.name || requiredRole,
+      assignedToLabel: assignment.needsAssignment ? `${assignmentLabel} · potrebna dodela (${requiredRole})` : assignmentLabel,
       requiredRole,
+      needsAssignment: assignment.needsAssignment,
       dueDate: calculateStepDueDate(draft.template, index) || draft.dueDate || undefined,
       stageId: project.stages?.[index]?.id,
       createdAt: timestamp,

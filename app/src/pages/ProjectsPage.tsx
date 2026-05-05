@@ -1,11 +1,179 @@
-import { useAuthStore } from '../features/auth/authStore'
+import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useClientStore } from '../features/clients/clientStore'
+import {
+  PROJECT_FREQUENCY_LABELS,
+  PROJECT_TYPE_LABELS,
+} from '../features/projects/projectLabels'
+import { useProjectStore } from '../features/projects/projectStore'
+import { getProjectLifecycle, type ProjectLifecycleStatus } from '../features/projects/projectLifecycle'
+import { useTaskStore } from '../features/tasks/taskStore'
+import { getTasksByProject } from '../features/tasks/taskSelectors'
+import { useBillingStore } from '../features/billing/billingStore'
+import { BILLING_STATUS_LABELS } from '../features/billing/billingLabels'
 
 function ProjectsPage() {
-  const { currentUser } = useAuthStore()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { getAllClients } = useClientStore()
+  const { projects } = useProjectStore()
+  const { tasks } = useTaskStore()
+  const { billing } = useBillingStore()
+  const clients = getAllClients()
+  const initialClientId = searchParams.get('clientId') || 'all'
+  const initialStatus = (searchParams.get('status') as ProjectLifecycleStatus | null) || 'active'
+  const [selectedClientId, setSelectedClientId] = useState(initialClientId)
+  const [selectedStatus, setSelectedStatus] = useState<ProjectLifecycleStatus>(
+    ['active', 'billing', 'completed'].includes(initialStatus) ? initialStatus : 'active',
+  )
+
+  const clientById = useMemo(
+    () => new Map(clients.map((client) => [String(client.id), client])),
+    [clients],
+  )
+
+  const nonArchivedProjects = useMemo(
+    () => projects.filter((project) => project.status !== 'arhiviran'),
+    [projects],
+  )
+
+  const projectsWithLifecycle = useMemo(
+    () => nonArchivedProjects.map((project) => ({
+      project,
+      lifecycle: getProjectLifecycle(project, tasks, billing),
+    })),
+    [billing, nonArchivedProjects, tasks],
+  )
+
+  const statusCounts = useMemo(
+    () => ({
+      active: projectsWithLifecycle.filter((item) => item.lifecycle.status === 'active').length,
+      billing: projectsWithLifecycle.filter((item) => item.lifecycle.status === 'billing').length,
+      completed: projectsWithLifecycle.filter((item) => item.lifecycle.status === 'completed').length,
+    }),
+    [projectsWithLifecycle],
+  )
+
+  const visibleProjects = useMemo(() => {
+    return projectsWithLifecycle.filter(({ project, lifecycle }) => {
+      const clientMatch = selectedClientId === 'all' || String(project.clientId) === selectedClientId
+      return clientMatch && lifecycle.status === selectedStatus
+    })
+  }, [projectsWithLifecycle, selectedClientId, selectedStatus])
+
+  const writeFiltersToUrl = (clientId: string, status: ProjectLifecycleStatus) => {
+    const next: Record<string, string> = {}
+    if (clientId !== 'all') next.clientId = clientId
+    if (status !== 'active') next.status = status
+    setSearchParams(next)
+  }
+
+  const changeClient = (clientId: string) => {
+    setSelectedClientId(clientId)
+    writeFiltersToUrl(clientId, selectedStatus)
+  }
+
+  const changeStatus = (status: ProjectLifecycleStatus) => {
+    setSelectedStatus(status)
+    writeFiltersToUrl(selectedClientId, status)
+  }
 
   return (
-    <section className="page-card">
-      <h2>{currentUser.role === 'user' ? 'Moji projekti' : 'Projekti'}</h2>
+    <section className="page-card projects-page-shell">
+      <div className="project-client-filter project-status-filter" aria-label="Filter po statusu projekta">
+        <button
+          type="button"
+          className={`project-filter-bubble${selectedStatus === 'active' ? ' is-active' : ''}`}
+          onClick={() => changeStatus('active')}
+        >
+          Aktivni <span>{statusCounts.active}</span>
+        </button>
+        <button
+          type="button"
+          className={`project-filter-bubble${selectedStatus === 'billing' ? ' is-active' : ''}`}
+          onClick={() => changeStatus('billing')}
+        >
+          Na naplati <span>{statusCounts.billing}</span>
+        </button>
+        <button
+          type="button"
+          className={`project-filter-bubble${selectedStatus === 'completed' ? ' is-active' : ''}`}
+          onClick={() => changeStatus('completed')}
+        >
+          Završeni <span>{statusCounts.completed}</span>
+        </button>
+      </div>
+
+      <div className="project-client-filter" aria-label="Filter po klijentu">
+        <button
+          type="button"
+          className={`project-filter-bubble${selectedClientId === 'all' ? ' is-active' : ''}`}
+          onClick={() => changeClient('all')}
+        >
+          Svi
+        </button>
+        {clients.map((client) => {
+          const id = String(client.id)
+          const count = projectsWithLifecycle.filter((item) => item.lifecycle.status === selectedStatus && String(item.project.clientId) === id).length
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`project-filter-bubble${selectedClientId === id ? ' is-active' : ''}`}
+              onClick={() => changeClient(id)}
+            >
+              {client.name}
+              <span>{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {visibleProjects.length ? (
+        <div className="projects-wide-list">
+          {visibleProjects.map(({ project, lifecycle }) => {
+            const projectTasks = getTasksByProject(tasks, project.id)
+            const client = clientById.get(String(project.clientId))
+            const projectValue = project.value || (project.unitPrice && project.quantity ? project.unitPrice * project.quantity : 0)
+            const commercialLine = project.unitPrice && project.quantity
+              ? `${project.quantity} kom × ${Math.round(project.unitPrice).toLocaleString('sr-RS')} RSD = ${Math.round(projectValue).toLocaleString('sr-RS')} RSD`
+              : projectValue ? `${Math.round(projectValue).toLocaleString('sr-RS')} RSD` : ''
+
+            return (
+              <button
+                key={project.id}
+                type="button"
+                className="project-wide-card project-lifecycle-card"
+                onClick={() => navigate(`/projects/${project.id}`)}
+              >
+                <div className="project-wide-main">
+                  <span className="project-wide-client">{client?.name || 'Nepoznat klijent'}</span>
+                  <strong>{project.title}</strong>
+                  <p>
+                    {project.type ? PROJECT_TYPE_LABELS[project.type] : 'Bez tipa'} ·{' '}
+                    {project.frequency ? PROJECT_FREQUENCY_LABELS[project.frequency] : 'Bez frekvencije'}
+                  </p>
+                  {commercialLine ? <p className="project-commercial-mini">{commercialLine}</p> : null}
+                </div>
+                <div className="project-wide-status">
+                  <span className={`customer-status-badge is-${lifecycle.tone}`}>{lifecycle.label}</span>
+                  {lifecycle.billingStatus ? <span className="customer-status-badge is-muted">Naplata: {BILLING_STATUS_LABELS[lifecycle.billingStatus]}</span> : null}
+                </div>
+                <div className="project-wide-stats">
+                  <span>Koraci</span>
+                  <strong>{lifecycle.completedTaskCount}/{lifecycle.totalTaskCount || projectTasks.length} završeno</strong>
+                  {lifecycle.status === 'active' ? <em>{lifecycle.activeTaskCount} aktivno</em> : null}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="clients-empty-state">
+          <h2>Nema projekata za izabrani filter</h2>
+          <p>Promeni status ili filter po klijentu.</p>
+        </div>
+      )}
     </section>
   )
 }

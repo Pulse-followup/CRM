@@ -35,6 +35,8 @@ export interface Task {
   assignedToLabel?: string
   /** Operativna rola potrebna za task iz šablona. Ovo nije systemRole korisnika. */
   requiredRole?: string
+  /** Task je automatski stavljen na admin fallback jer u workspace-u nema trazene operativne role. */
+  needsAssignment?: boolean
   dueDate?: string
   stageId?: string
   createdAt: string

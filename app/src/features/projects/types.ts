@@ -45,6 +45,10 @@ export interface Project {
   type?: ProjectType
   frequency?: ProjectFrequency
   value?: number
+  unitPrice?: number
+  quantity?: number
+  dueDate?: string
+  sourceProductCategory?: string
   billingId?: string
   billingStatus?: BillingStatus
   templateId?: ProjectTemplateId | string

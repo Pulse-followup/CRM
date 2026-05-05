@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { BillingRecord } from '../../billing/types'
 import ClientCommercialSection from './ClientCommercialSection'
 import ClientContactsSection from './ClientContactsSection'
@@ -43,6 +44,7 @@ function ClientCardSections({
   onAddFromCatalog,
   catalogNotice,
 }: ClientCardSectionsProps) {
+  const navigate = useNavigate()
   const activeProjects = projects.filter((project) => project.status !== 'arhiviran')
   const archivedProjects = projects.filter((project) => project.status === 'arhiviran')
   const activeProjectIds = new Set(activeProjects.map((project) => project.id))
@@ -69,10 +71,15 @@ function ClientCardSections({
         </summary>
         <div className="customer-card-section-body">
           <div className="customer-overview-grid">
-            <div className="customer-overview-item">
+            <button
+              type="button"
+              className="customer-overview-item customer-overview-link"
+              onClick={() => navigate(clientId ? `/projects?clientId=${clientId}` : '/projects')}
+            >
               <span>Aktivni projekti</span>
               <strong>{activeProjects.length}</strong>
-            </div>
+              <em>Otvori listu projekata →</em>
+            </button>
             <div className="customer-overview-item">
               <span>Otvoreni taskovi</span>
               <strong>{activeTasks.length}</strong>
@@ -82,7 +89,14 @@ function ClientCardSections({
               <strong>{openBilling.length ? `${openBilling.length} otvoreno` : 'u roku'}</strong>
             </div>
           </div>
-          <ClientProjectsSection projects={activeProjects} title="Aktivni projekti" emptyText="Nema aktivnih projekata" hideArchived />
+          <button
+            type="button"
+            className="customer-active-projects-entry"
+            onClick={() => navigate(clientId ? `/projects?clientId=${clientId}` : '/projects')}
+          >
+            <span>Aktivni projekti</span>
+            <strong>Otvori aktivne projekte →</strong>
+          </button>
         </div>
       </details>
 

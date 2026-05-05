@@ -9,6 +9,7 @@ import type { Task, TaskStatus } from '../types'
 export interface TaskCardProps {
   task: Task
   onTaskChange?: (task: Task) => void
+  compact?: boolean
 }
 
 function formatDueDate(value?: string) {
@@ -44,7 +45,7 @@ function statusLabel(status: TaskStatus) {
   return TASK_STATUS_LABELS[status] || status
 }
 
-function TaskCard({ task, onTaskChange }: TaskCardProps) {
+function TaskCard({ task, onTaskChange, compact = false }: TaskCardProps) {
   const { users, currentUser } = useAuthStore()
   const processTemplates = readProcessTemplates()
   const templateTitle = task.sourceTemplateTitle || processTemplates.find((template) => template.id === task.sourceTemplateId)?.title || ''
@@ -132,6 +133,7 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
       withTaskUpdate(task, {
         assignedToUserId: selectedUser.id,
         assignedToLabel: selectedUser.name || selectedUser.email,
+        needsAssignment: false,
       }),
     )
     setIsAssigning(false)
@@ -190,6 +192,67 @@ function TaskCard({ task, onTaskChange }: TaskCardProps) {
         completedAt: null,
         activatedAt: new Date().toISOString(),
       }),
+    )
+  }
+
+  const assigneeLabel = task.assignedToLabel || assignedUser?.name || 'Nije dodeljeno'
+  const compactMeta = [
+    requiredRole || task.assignedToLabel || '',
+    assigneeLabel,
+    `Rok ${formatDueDate(task.dueDate)}`,
+    task.estimatedMinutes ? `Procena ${formatDurationMinutes(task.estimatedMinutes)}` : '',
+  ].filter(Boolean).join(' · ')
+
+  if (compact) {
+    return (
+      <article className="customer-task-card customer-task-card-compact">
+        <div className="customer-task-compact-main">
+          <div>
+            <strong>{task.sequenceOrder ? `${task.sequenceOrder}. ` : ''}{task.title}</strong>
+            <p>{compactMeta}</p>
+            {blockReason ? <p className="customer-source-note">🚫 <strong>BLOKIRANO:</strong> {blockReason}</p> : null}
+          </div>
+          <span className="customer-status-badge is-muted">{statusLabel(task.status)}</span>
+        </div>
+
+        {onTaskChange ? (
+          <div className="customer-task-actions customer-task-actions-compact">
+            {!task.assignedToUserId ? <button type="button" className="customer-project-toggle" onClick={handleOpenAssign}>Dodeli</button> : null}
+            {isAdmin && task.assignedToUserId ? <button type="button" className="customer-project-toggle" onClick={handleOpenAssign}>Re-dodeli</button> : null}
+            {task.status === 'dodeljen' ? <button type="button" className="customer-project-toggle" onClick={handleStart}>Preuzmi</button> : null}
+            {task.status === 'u_radu' ? <><button type="button" className="customer-project-toggle" onClick={handlePause}>Na čekanju</button><button type="button" className="customer-project-toggle" onClick={handleOpenComplete}>Završi</button></> : null}
+            {isWaitingForPreviousStep ? <span className="customer-status-badge is-muted">Čeka prethodni korak</span> : null}
+            {!isWaitingForPreviousStep && (task.status === 'na_cekanju' || task.status === 'vracen') ? <button type="button" className="customer-project-toggle" onClick={handleResume}>Vrati u rad</button> : null}
+            {task.status === 'zavrsen' ? <span className="customer-status-badge">{TASK_STATUS_LABELS.zavrsen}</span> : null}
+            {isAdmin ? <>
+              {task.status === 'na_cekanju' ? <button type="button" className="customer-project-toggle" onClick={handleActivateNow}>Aktiviraj</button> : null}
+              {task.status === 'dodeljen' || task.status === 'u_radu' ? <button type="button" className="customer-project-toggle" onClick={handleReturnToWaiting}>Vrati na čekanje</button> : null}
+              {task.status !== 'zavrsen' && task.status !== 'naplacen' ? <button type="button" className="customer-project-toggle" onClick={handleSkipStep}>Preskoči</button> : null}
+              {task.status !== 'zavrsen' && task.status !== 'naplacen' ? <button type="button" className="customer-project-toggle" onClick={handleForceComplete}>Admin završi</button> : null}
+              {task.status === 'zavrsen' ? <button type="button" className="customer-project-toggle" onClick={handleReopen}>Vrati u aktivno</button> : null}
+            </> : null}
+          </div>
+        ) : null}
+
+        {task.needsAssignment ? <p className="customer-source-note task-needs-assignment-note">⚠ Potrebna je ručna dodela role pre rada.</p> : null}
+
+        {isAssigning ? (
+          <div className="customer-task-complete-form">
+            <label className="customer-task-form-field"><span>Dodeli korisniku</span><select value={selectedAssigneeId} onChange={(event) => setSelectedAssigneeId(event.target.value)}><option value="">-- Izaberi člana --</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name} {user.productionRole ? `(${normalizeOperationalRole(user.productionRole)})` : '(bez operativne role)'}</option>)}</select></label>
+            {requiredRole ? <p className="customer-source-note">Potrebna rola: <strong>{requiredRole}</strong></p> : null}
+            <div className="customer-task-actions"><button type="button" className="customer-project-toggle" onClick={handleConfirmAssign} disabled={!selectedAssigneeId}>Potvrdi dodelu</button><button type="button" className="customer-project-toggle" onClick={() => setIsAssigning(false)}>Otkaži</button></div>
+          </div>
+        ) : null}
+
+        {isCompleting ? (
+          <div className="customer-task-complete-form">
+            <label className="customer-task-form-field"><span>Utrošeno vreme (min)</span><input type="number" min="0" value={timeSpentMinutes} onChange={(event) => setTimeSpentMinutes(event.target.value)} /></label>
+            <label className="customer-task-form-field"><span>Trošak materijala (RSD)</span><input type="number" min="0" value={materialCost} onChange={(event) => setMaterialCost(event.target.value)} /></label>
+            <label className="customer-task-form-field"><span>Opis materijala</span><input type="text" value={materialDescription} onChange={(event) => setMaterialDescription(event.target.value)} /></label>
+            <div className="customer-task-actions"><button type="button" className="customer-project-toggle" onClick={handleConfirmComplete}>Potvrdi završetak</button><button type="button" className="customer-project-toggle" onClick={handleCancelComplete}>Otkaži</button></div>
+          </div>
+        ) : null}
+      </article>
     )
   }
 

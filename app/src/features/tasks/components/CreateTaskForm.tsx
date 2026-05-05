@@ -94,7 +94,9 @@ function CreateTaskForm({
   })
   const [errors, setErrors] = useState<FormErrors>({})
   const { users, isCloudUser } = useAuthStore()
-  const assignableUsers = users.filter((user) => user.role !== 'admin')
+  // FAZA 4.1.2: svako kome task može biti dodeljen mora imati pravo da ga otvori i obradi.
+  // Admin ostaje u listi, jer u malom biznisu vlasnik/admin često jeste izvršilac taska.
+  const assignableUsers = users
 
   const selectedProject = useMemo(
     () => projectOptions.find((project) => project.id === values.projectId),

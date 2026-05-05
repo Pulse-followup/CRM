@@ -64,13 +64,16 @@ export function getTaskBlockReason(
   const requiredRole = normalizeOperationalRole(task.requiredRole)
   if (!requiredRole) return ''
 
+  if (task.needsAssignment) return `Potrebna je dodela izvršioca za rolu ${requiredRole || task.requiredRole || 'koraka'}.`
   if (!task.assignedToUserId) return 'Nema dodeljenog izvršioca.'
 
   const assignedUser = users.find((user) => user.id === task.assignedToUserId)
   if (!assignedUser) return 'Dodeljeni korisnik više ne postoji u timu.'
 
   const productionRole = normalizeOperationalRole(assignedUser.productionRole)
-  if (!productionRole) return 'Dodeljeni korisnik nema operativnu rolu.'
+
+  // Korisnik bez operativne role je wildcard izvršilac: može da preuzme bilo koju funkciju/rolu.
+  if (!productionRole) return ''
 
   if (productionRole !== requiredRole) {
     return `Pogrešna dodela: potrebna rola je ${requiredRole}, a korisnik ima ${productionRole}.`
@@ -132,6 +135,7 @@ function mapTaskRowToReact(row: Record<string, unknown>): Task {
     assignedToUserId: asString(row.assigned_to_user_id || row.assignedToUserId) || undefined,
     assignedToLabel: asString(row.assigned_to_label || row.assignedToLabel) || undefined,
     requiredRole: normalizeOperationalRole(asString(row.required_role || row.requiredRole)) || undefined,
+    needsAssignment: asString(row.assigned_to_label || row.assignedToLabel).toLowerCase().includes('potrebna dodela'),
     dueDate: asString(row.due_date || row.dueDate) || undefined,
     stageId: asString(row.stage_id || row.stageId) || undefined,
     createdAt,

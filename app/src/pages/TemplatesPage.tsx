@@ -117,6 +117,20 @@ function TemplatesPage() {
   }, [isCloudTemplatesMode, workspaceId])
 
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? templates[0]
+  const workspaceProductionRoles = useMemo(() => {
+    const roles = cloud.members
+      .map((member) => normalizeProductionRole(member.production_role || ''))
+      .filter(Boolean)
+    return Array.from(new Set(roles))
+  }, [cloud.members])
+  const hasWildcardMember = useMemo(
+    () => cloud.members.some((member) => !normalizeProductionRole(member.production_role || '')),
+    [cloud.members],
+  )
+  const availableProductionRoles = useMemo(() => {
+    if (!isCloudTemplatesMode || !cloud.members.length || hasWildcardMember) return PRODUCTION_ROLES
+    return PRODUCTION_ROLES.filter((role) => workspaceProductionRoles.includes(normalizeProductionRole(role)))
+  }, [cloud.members.length, hasWildcardMember, isCloudTemplatesMode, workspaceProductionRoles])
 
   const filteredTemplates = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -227,6 +241,11 @@ function TemplatesPage() {
       return
     }
 
+    if (!availableProductionRoles.includes(role)) {
+      setStepError('Ova operativna rola ne postoji u workspace-u. Dodaj člana sa tom rolom ili koristi člana bez operativne role.')
+      return
+    }
+
     if (!Number.isFinite(estimatedMinutes) || estimatedMinutes <= 0) {
       setStepError('Procena vremena mora biti broj veći od nule.')
       return
@@ -287,6 +306,13 @@ function TemplatesPage() {
       role: normalizeProductionRole(step.role) || step.role,
       order: index + 1,
     }))
+
+    const invalidRoles = Array.from(new Set(normalizedSteps.map((step) => step.role).filter((role) => !availableProductionRoles.includes(role))))
+
+    if (invalidRoles.length) {
+      setFormError(`Proces nije sačuvan. Role ne postoje u workspace-u: ${invalidRoles.join(', ')}.`)
+      return
+    }
 
     if (editingTemplateId) {
       const nextTemplates = templates.map((template) =>
@@ -458,7 +484,7 @@ function TemplatesPage() {
                   }}
                 >
                   <option value="">-- Izaberi rolu --</option>
-                  {PRODUCTION_ROLES.map((role) => (
+                  {availableProductionRoles.map((role) => (
                     <option key={role} value={role}>{role}</option>
                   ))}
                 </select>
