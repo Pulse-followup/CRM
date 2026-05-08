@@ -4289,3 +4289,234 @@
     font-size:28px !important;
   }
 }
+
+/* Mobile polish pass: keyboard overlap, modal scroll, touch targets, sticky footer, iOS safe area */
+.modal-backdrop,
+.pulse-modal-backdrop {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.shared-modal,
+.pulse-modal {
+  -webkit-overflow-scrolling: touch;
+}
+
+.pulse-modal-actions .pulse-modal-btn,
+.pulse-outline-btn,
+.pulse-date-pill,
+.customer-project-toggle,
+.billing-filter-bubble,
+.modal-close,
+.pulse-modal-x {
+  touch-action: manipulation;
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    min-height: 100dvh;
+    padding-bottom: max(16px, var(--app-safe-bottom));
+  }
+
+  .app-content {
+    min-height: 0;
+  }
+
+  .pulse-phone-screen,
+  .admin-phone-screen {
+    min-height: calc(100dvh - 128px);
+    padding-bottom: calc(28px + var(--app-safe-bottom));
+  }
+
+  .pulse-panel,
+  .customer-card-section,
+  .customer-card-group,
+  .billing-clean-card,
+  .customer-project-card,
+  .customer-task-card,
+  .project-info-strip {
+    scroll-margin-top: 14px;
+    scroll-margin-bottom: 110px;
+  }
+
+  .modal-backdrop,
+  .pulse-modal-backdrop {
+    align-items: start;
+    justify-items: stretch;
+    overflow-y: auto;
+    padding:
+      max(12px, var(--app-safe-top))
+      max(12px, var(--app-safe-right))
+      max(12px, var(--app-safe-bottom))
+      max(12px, var(--app-safe-left));
+  }
+
+  .shared-modal,
+  .pulse-modal {
+    width: min(100%, 100%);
+    max-width: 100%;
+    max-height: calc(100dvh - var(--app-safe-top) - var(--app-safe-bottom) - 24px);
+    margin: auto 0;
+    border-radius: 24px;
+  }
+
+  .shared-modal {
+    display: flex;
+    flex-direction: column;
+    padding: 18px 18px calc(18px + var(--app-safe-bottom));
+  }
+
+  .shared-modal-body {
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .shared-modal-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-bottom: 12px;
+    margin-bottom: 10px;
+    background: inherit;
+  }
+
+  .pulse-modal {
+    padding: 22px 18px calc(18px + var(--app-safe-bottom));
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .pulse-modal.pulse-client-drawer {
+    width: min(100%, 100%);
+    max-height: calc(100dvh - var(--app-safe-top) - var(--app-safe-bottom) - 24px);
+    border-radius: 22px;
+    padding: 18px 16px calc(18px + var(--app-safe-bottom));
+  }
+
+  .pulse-modal h3,
+  .shared-modal-head h3 {
+    margin-right: 56px;
+  }
+
+  .pulse-modal-x,
+  .modal-close {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    top: 14px;
+    right: 14px;
+  }
+
+  .pulse-modal-btn,
+  .pulse-outline-btn,
+  .billing-filter-bubble,
+  .customer-project-action-button,
+  .customer-btn,
+  .customer-mini-action {
+    min-height: 44px;
+  }
+
+  .customer-project-toggle {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .pulse-modal-actions,
+  .customer-task-actions,
+  .customer-project-actions,
+  .customer-inline-actions,
+  .customer-job-choice,
+  .billing-clean-actions {
+    gap: 10px;
+  }
+
+  .pulse-modal-actions {
+    position: sticky;
+    bottom: calc(-18px - var(--app-safe-bottom));
+    z-index: 2;
+    margin:
+      20px
+      -18px
+      calc(-18px - var(--app-safe-bottom));
+    padding:
+      14px
+      18px
+      calc(14px + var(--app-safe-bottom));
+    background: linear-gradient(180deg, rgba(29,51,88,0), rgba(29,51,88,.94) 22%, rgba(29,51,88,1) 100%);
+    backdrop-filter: blur(10px);
+  }
+
+  .pulse-modal-actions .pulse-modal-btn {
+    flex: 1 1 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .pulse-complete-form,
+  .customer-task-complete-form,
+  .customer-task-create-form,
+  .customer-client-edit-form,
+  .pulse-create-modal-content {
+    padding-bottom: 8px;
+  }
+
+  .pulse-form-field input,
+  .pulse-form-field select,
+  .pulse-form-field textarea,
+  .customer-task-form-field input,
+  .customer-task-form-field select,
+  .customer-task-form-field textarea,
+  .pulse-search {
+    min-height: 48px;
+  }
+
+  .pulse-form-field textarea,
+  .customer-task-form-field textarea {
+    min-height: 112px;
+  }
+
+  .billing-clean-summary,
+  .pulse-item-actions,
+  .customer-project-head,
+  .customer-workflow-stage-top {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .pulse-topbar {
+    padding-top: calc(18px + var(--app-safe-top));
+    padding-left: max(16px, var(--app-safe-left));
+    padding-right: max(16px, var(--app-safe-right));
+  }
+
+  .pulse-phone-screen {
+    padding:
+      20px
+      max(14px, var(--app-safe-right))
+      calc(24px + var(--app-safe-bottom))
+      max(14px, var(--app-safe-left));
+  }
+
+  .pulse-modal,
+  .shared-modal {
+    border-radius: 20px;
+  }
+
+  .pulse-modal-actions {
+    border-radius: 18px 18px 0 0;
+  }
+
+  .billing-clean-filters {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: -4px 0 0;
+    padding-top: 4px;
+    background: linear-gradient(180deg, rgba(16,24,36,1), rgba(16,24,36,.92));
+  }
+}

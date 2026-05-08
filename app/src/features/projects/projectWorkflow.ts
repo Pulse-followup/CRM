@@ -1,5 +1,6 @@
-import { getActiveTasks, getCompletedTasks, getTasksByStage } from '../tasks/taskSelectors'
+import { getActiveTasks, getTasksByStage } from '../tasks/taskSelectors'
 import type { Task } from '../tasks/types'
+import { getProjectProgress } from './projectLifecycle'
 import type { Project } from './types'
 
 export interface ProjectStageProgressItem {
@@ -19,11 +20,12 @@ export function getProjectStageProgress(project: Project, tasks: Task[]): Projec
     .sort((left, right) => left.order - right.order)
     .map((stage) => {
       const stageTasks = getTasksByStage(tasks, stage.id)
+      const progress = getProjectProgress(stageTasks)
 
       return {
         stageId: stage.id,
-        totalTasks: stageTasks.length,
-        completedTasks: getCompletedTasks(stageTasks).length,
+        totalTasks: progress.totalTasks,
+        completedTasks: progress.completedTasks,
         activeTasks: getActiveTasks(stageTasks).length,
       }
     })

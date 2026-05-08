@@ -50,6 +50,6 @@ export function completeTask(task: Task, payload: CompleteTaskPayload): Task {
     materialDescription: payload.materialDescription || '',
     completedAt,
     updatedAt: completedAt,
-    billingState: task.billingState ?? 'not_billable',
+    billingState: task.billingState ?? (task.projectId ? 'ready_for_billing' : 'not_billable'),
   }
 }

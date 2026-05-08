@@ -1,9 +1,16 @@
+import { getBillingStatus } from '../billing/billingLifecycle'
 import type { BillingRecord } from '../billing/types'
-import { getActiveTasks, getCompletedTasks } from '../tasks/taskSelectors'
+import { isTaskCompleted } from '../tasks/taskLifecycle'
 import type { Task } from '../tasks/types'
 import type { Project } from './types'
 
-export type ProjectLifecycleStatus = 'active' | 'billing' | 'completed'
+export type ProjectLifecycleStatus = 'setup' | 'active' | 'completed' | 'billing' | 'overdue' | 'closed'
+
+export interface ProjectProgressSummary {
+  totalTasks: number
+  completedTasks: number
+  progressPercent: number
+}
 
 export interface ProjectLifecycleSummary {
   status: ProjectLifecycleStatus
@@ -12,60 +19,126 @@ export interface ProjectLifecycleSummary {
   activeTaskCount: number
   completedTaskCount: number
   totalTaskCount: number
+  progressPercent: number
   hasBilling: boolean
-  billingStatus?: BillingRecord['status']
+  billingStatus?: BillingRecord['status'] | 'issued' | 'closed'
+  isClosed: boolean
 }
 
-const BILLING_ACTIVE_STATUSES = new Set<BillingRecord['status']>(['ready', 'draft', 'invoiced', 'overdue'])
-const BILLING_DONE_STATUSES = new Set<BillingRecord['status']>(['paid'])
+function belongsToProject(task: Task, projectId: string) {
+  return Boolean(task.projectId) && String(task.projectId) === String(projectId)
+}
+
+export function getProjectProgress(projectTasks: Task[]): ProjectProgressSummary {
+  const totalTasks = projectTasks.length
+  const completedTasks = projectTasks.filter(isTaskCompleted).length
+
+  return {
+    totalTasks,
+    completedTasks,
+    progressPercent: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+  }
+}
 
 export function getProjectLifecycle(project: Project, tasks: Task[], billingRecords: BillingRecord[] = []): ProjectLifecycleSummary {
-  const projectTasks = tasks.filter((task) => String(task.projectId) === String(project.id))
+  const projectTasks = tasks.filter((task) => belongsToProject(task, project.id))
   const projectBilling = billingRecords.filter((record) => String(record.projectId) === String(project.id))
-  const activeBilling = projectBilling.find((record) => BILLING_ACTIVE_STATUSES.has(record.status))
-  const paidBilling = projectBilling.find((record) => BILLING_DONE_STATUSES.has(record.status))
-  const activeTaskCount = getActiveTasks(projectTasks).length
-  const completedTaskCount = getCompletedTasks(projectTasks).length
-  const totalTaskCount = projectTasks.length
+  const overdueBilling = projectBilling.find((record) => getBillingStatus(record) === 'overdue')
+  const issuedBilling = projectBilling.find((record) => getBillingStatus(record) === 'issued')
+  const closedBilling = projectBilling.find((record) => getBillingStatus(record) === 'closed')
+  const progress = getProjectProgress(projectTasks)
+  const openTaskCount = projectTasks.filter((task) => !isTaskCompleted(task)).length
 
-  if (activeBilling) {
+  if (overdueBilling) {
     return {
-      status: 'billing',
-      label: 'Na naplati',
-      tone: activeBilling.status === 'overdue' ? 'warning' : 'info',
-      activeTaskCount,
-      completedTaskCount,
-      totalTaskCount,
+      status: 'overdue',
+      label: 'Kasni',
+      tone: 'warning',
+      activeTaskCount: openTaskCount,
+      completedTaskCount: progress.completedTasks,
+      totalTaskCount: progress.totalTasks,
+      progressPercent: progress.progressPercent,
       hasBilling: true,
-      billingStatus: activeBilling.status,
+      billingStatus: overdueBilling.status,
+      isClosed: false,
     }
   }
 
-  if (activeTaskCount > 0) {
+  if (issuedBilling) {
+    return {
+      status: 'billing',
+      label: 'Na naplati',
+      tone: 'info',
+      activeTaskCount: openTaskCount,
+      completedTaskCount: progress.completedTasks,
+      totalTaskCount: progress.totalTasks,
+      progressPercent: progress.progressPercent,
+      hasBilling: true,
+      billingStatus: 'issued',
+      isClosed: false,
+    }
+  }
+
+  if (closedBilling) {
+    return {
+      status: 'closed',
+      label: 'Zatvoren',
+      tone: 'success',
+      activeTaskCount: 0,
+      completedTaskCount: progress.completedTasks,
+      totalTaskCount: progress.totalTasks,
+      progressPercent: progress.progressPercent,
+      hasBilling: true,
+      billingStatus: 'closed',
+      isClosed: true,
+    }
+  }
+
+  if (progress.totalTasks === 0) {
+    return {
+      status: 'setup',
+      label: 'U pripremi',
+      tone: 'warning',
+      activeTaskCount: 0,
+      completedTaskCount: 0,
+      totalTaskCount: 0,
+      progressPercent: 0,
+      hasBilling: false,
+      isClosed: false,
+    }
+  }
+
+  if (openTaskCount > 0) {
     return {
       status: 'active',
       label: 'Aktivan',
       tone: 'info',
-      activeTaskCount,
-      completedTaskCount,
-      totalTaskCount,
-      hasBilling: Boolean(paidBilling || project.billingId),
-      billingStatus: paidBilling?.status || project.billingStatus,
+      activeTaskCount: openTaskCount,
+      completedTaskCount: progress.completedTasks,
+      totalTaskCount: progress.totalTasks,
+      progressPercent: progress.progressPercent,
+      hasBilling: false,
+      isClosed: false,
     }
   }
 
   return {
     status: 'completed',
-    label: paidBilling ? 'Zatvoren' : 'Završen',
-    tone: paidBilling ? 'success' : 'success',
-    activeTaskCount,
-    completedTaskCount,
-    totalTaskCount,
-    hasBilling: Boolean(paidBilling || project.billingId),
-    billingStatus: paidBilling?.status || project.billingStatus,
+    label: 'Zavrsen',
+    tone: 'success',
+    activeTaskCount: 0,
+    completedTaskCount: progress.completedTasks,
+    totalTaskCount: progress.totalTasks,
+    progressPercent: progress.progressPercent,
+    hasBilling: false,
+    isClosed: false,
   }
 }
 
 export function getProjectLifecycleBucket(project: Project, tasks: Task[], billingRecords: BillingRecord[] = []) {
   return getProjectLifecycle(project, tasks, billingRecords).status
+}
+
+export function isProjectOperationallyActive(project: Project, tasks: Task[], billingRecords: BillingRecord[] = []) {
+  return getProjectLifecycle(project, tasks, billingRecords).status === 'active'
 }

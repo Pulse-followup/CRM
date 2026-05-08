@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BILLING_STATUS_LABELS, BILLING_STATUS_TONES } from '../billingLabels'
+import { getBillingStatus } from '../billingLifecycle'
 import type { BillingRecord } from '../types'
 
 export interface BillingCardProps {
@@ -31,6 +32,7 @@ function BillingCard({
 }: BillingCardProps) {
   const [isOpen, setIsOpen] = useState(false)
   const margin = getMargin(record)
+  const billingStatus = getBillingStatus(record)
 
   return (
     <article className="billing-clean-card">
@@ -51,27 +53,27 @@ function BillingCard({
       <div className="billing-clean-costs">
         <span>Rad: {formatMoney(record.totalLaborCost)}</span>
         <span>Materijal: {formatMoney(record.totalMaterialCost)}</span>
-        <span>Trošak: {formatMoney(record.totalCost)}</span>
-        {margin !== null ? <span>Marža: {formatMoney(margin)}</span> : null}
+        <span>Trosak: {formatMoney(record.totalCost)}</span>
+        {margin !== null ? <span>Marza: {formatMoney(margin)}</span> : null}
       </div>
 
       <div className="billing-clean-actions">
         <button type="button" className="customer-project-toggle" onClick={() => setIsOpen((value) => !value)}>
           {isOpen ? 'Sakrij detalje' : 'Otvori detalje'}
         </button>
-        {(record.status === 'draft' || record.status === 'ready') && onMarkInvoiced ? (
+        {billingStatus === 'issued' && (record.status === 'draft' || record.status === 'ready') && onMarkInvoiced ? (
           <button type="button" className="customer-project-toggle" onClick={onMarkInvoiced}>
-            Označi kao fakturisano
+            Oznaci kao fakturisano
           </button>
         ) : null}
-        {record.status === 'invoiced' && onMarkOverdue ? (
+        {billingStatus === 'issued' && record.status === 'invoiced' && onMarkOverdue ? (
           <button type="button" className="customer-project-toggle" onClick={onMarkOverdue}>
-            Označi kao kasni
+            Oznaci kao kasni
           </button>
         ) : null}
-        {(record.status === 'invoiced' || record.status === 'overdue') && onMarkPaid ? (
+        {(billingStatus === 'issued' || billingStatus === 'overdue') && onMarkPaid ? (
           <button type="button" className="customer-project-toggle" onClick={onMarkPaid}>
-            Označi kao plaćeno
+            Oznaci kao placeno
           </button>
         ) : null}
       </div>
@@ -87,7 +89,7 @@ function BillingCard({
             <dd>{record.invoiceNumber || '-'}</dd>
           </div>
           <div>
-            <dt>Rok plaćanja</dt>
+            <dt>Rok placanja</dt>
             <dd>{record.dueDate || '-'}</dd>
           </div>
           <div>
@@ -95,19 +97,19 @@ function BillingCard({
             <dd>{formatMoney(record.amount, record.currency)}</dd>
           </div>
           <div>
-            <dt>Trošak rada</dt>
+            <dt>Trosak rada</dt>
             <dd>{formatMoney(record.totalLaborCost)}</dd>
           </div>
           <div>
-            <dt>Trošak materijala</dt>
+            <dt>Trosak materijala</dt>
             <dd>{formatMoney(record.totalMaterialCost)}</dd>
           </div>
           <div>
-            <dt>Ukupan trošak</dt>
+            <dt>Ukupan trosak</dt>
             <dd>{formatMoney(record.totalCost)}</dd>
           </div>
           <div>
-            <dt>Marža</dt>
+            <dt>Marza</dt>
             <dd>{margin !== null ? formatMoney(margin) : '-'}</dd>
           </div>
         </dl>

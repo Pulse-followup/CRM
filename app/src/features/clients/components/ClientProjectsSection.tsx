@@ -1,21 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  PROJECT_FREQUENCY_LABELS,
-  PROJECT_STATUS_LABELS,
-  PROJECT_TYPE_LABELS,
-} from '../../projects/projectLabels'
+import { useBillingStore } from '../../billing/billingStore'
+import { PROJECT_FREQUENCY_LABELS, PROJECT_TYPE_LABELS } from '../../projects/projectLabels'
 import { getProjectHealth } from '../../projects/projectHealth'
+import { getProjectLifecycle, getProjectProgress } from '../../projects/projectLifecycle'
 import { useProjectStore } from '../../projects/projectStore'
+import type { Project } from '../../projects/types'
 import { readProducts } from '../../products/productStorage'
 import { readProcessTemplates } from '../../templates/templateStorage'
-import type { Project } from '../../projects/types'
 import TaskList from '../../tasks/components/TaskList'
-import {
-  getActiveTasks,
-  getCompletedTasks,
-  getTasksByProject as selectTasksByProject,
-} from '../../tasks/taskSelectors'
+import { getActiveTasks, getTasksByProject as selectTasksByProject } from '../../tasks/taskSelectors'
 import { useTaskStore } from '../../tasks/taskStore'
 
 export interface ClientProjectsSectionProps {
@@ -29,8 +23,11 @@ function ClientProjectsSection({ projects, title = 'Projekti', emptyText = 'Nema
   const navigate = useNavigate()
   const { archiveProject, restoreProject } = useProjectStore()
   const { tasks } = useTaskStore()
+  const { billing } = useBillingStore()
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([])
-  const activeProjects = hideArchived ? projects : projects.filter((project) => project.status !== 'arhiviran')
+  const activeProjects = hideArchived
+    ? projects
+    : projects.filter((project) => project.status !== 'arhiviran' && getProjectLifecycle(project, tasks, billing).status === 'active')
   const archivedProjects = hideArchived ? [] : projects.filter((project) => project.status === 'arhiviran')
   const products = readProducts()
   const processTemplates = readProcessTemplates()
@@ -57,8 +54,9 @@ function ClientProjectsSection({ projects, title = 'Projekti', emptyText = 'Nema
   const renderProjectCard = (project: Project, archived = false) => {
     const projectTasks = selectTasksByProject(tasks, project.id)
     const projectHealth = getProjectHealth(project.id, projectTasks)
+    const lifecycle = getProjectLifecycle(project, tasks, billing)
+    const progress = getProjectProgress(projectTasks)
     const activeTaskCount = getActiveTasks(projectTasks).length
-    const completedTaskCount = getCompletedTasks(projectTasks).length
     const isExpanded = expandedProjectIds.includes(project.id)
 
     return (
@@ -74,7 +72,7 @@ function ClientProjectsSection({ projects, title = 'Projekti', emptyText = 'Nema
           </div>
           <div className="customer-project-badges">
             <span className={`customer-status-badge${archived ? ' is-muted' : ''}`}>
-              {PROJECT_STATUS_LABELS[project.status]}
+              {lifecycle.label}
             </span>
             <span className={`customer-status-badge is-${projectHealth.tone}`}>
               {projectHealth.label}
@@ -86,7 +84,7 @@ function ClientProjectsSection({ projects, title = 'Projekti', emptyText = 'Nema
         </div>
 
         {getProjectTemplateLabel(project) ? (
-          <p className="customer-source-note">Šablon procesa: <strong>{getProjectTemplateLabel(project)}</strong></p>
+          <p className="customer-source-note">Sablon procesa: <strong>{getProjectTemplateLabel(project)}</strong></p>
         ) : null}
 
         <div className="customer-project-summary-grid">
@@ -97,7 +95,7 @@ function ClientProjectsSection({ projects, title = 'Projekti', emptyText = 'Nema
           <div className="customer-project-summary-item">
             <span>Task summary</span>
             <strong>
-              Ukupno: {projectTasks.length} - Aktivni: {activeTaskCount} - Zavrseni: {completedTaskCount}
+              Ukupno: {progress.totalTasks} - Aktivni: {activeTaskCount} - Zavrseni: {progress.completedTasks}
             </strong>
           </div>
         </div>

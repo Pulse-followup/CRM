@@ -30,7 +30,8 @@ interface TaskStoreValue {
 const TaskStoreContext = createContext<TaskStoreValue | null>(null)
 
 function isValidCloudLinkedTask(task: Task) {
-  return Boolean(task.clientId && task.projectId)
+  // FAZA 9.1.A+B: ad hoc/client activities are valid cloud tasks even without a project.
+  return Boolean(task.clientId)
 }
 
 function asString(value: unknown) {
@@ -141,6 +142,7 @@ function mapTaskRowToReact(row: Record<string, unknown>): Task {
     createdAt,
     updatedAt: asString(row.updated_at) || createdAt,
     completedAt: (row.completed_at as string | null | undefined) ?? null,
+    finishedAt: (row.finished_at as string | null | undefined) ?? (row.finishedAt as string | null | undefined) ?? null,
     timeSpentMinutes: asNumber(row.time_spent_minutes || row.timeSpentMinutes),
     materialCost: asNumber(row.material_cost || row.materialCost),
     materialDescription: asString(row.material_description || row.materialDescription),
@@ -164,7 +166,7 @@ function mapTaskToSupabaseRow(task: Task, workspaceId: string, userId?: string |
     id: task.id,
     workspace_id: workspaceId,
     client_id: task.clientId,
-    project_id: task.projectId,
+    project_id: task.projectId || null,
     action_type: task.type || 'drugo',
     title: task.title || 'Task',
     description: task.description || '',
@@ -269,7 +271,7 @@ export function TaskProvider({ children }: PropsWithChildren) {
     const nextTasks = Array.isArray(data)
       ? data
           .map((row) => mapTaskRowToReact(row as Record<string, unknown>))
-          .filter((task) => task.id && task.clientId && task.projectId)
+          .filter((task) => task.id && task.clientId)
       : []
 
     setCloudTasks(nextTasks)
@@ -304,7 +306,7 @@ export function TaskProvider({ children }: PropsWithChildren) {
           : { ...updatedTask, updatedAt: updatedTask.updatedAt || now }
 
       if (isCloudTaskMode) {
-        if (!activeWorkspace?.id || !isValidCloudLinkedTask(normalizedTask)) return
+        if (!activeWorkspace?.id || !normalizedTask.clientId) return
         let nextTaskToActivate: Task | null = null
         setCloudTasks((current) => {
           nextTaskToActivate = activateNextWorkflowTask(normalizedTask, current)
@@ -348,7 +350,7 @@ export function TaskProvider({ children }: PropsWithChildren) {
   const addTask = useCallback(
     async (task: Task) => {
       if (isCloudTaskMode) {
-        if (!activeWorkspace?.id || !isValidCloudLinkedTask(task)) return null
+        if (!activeWorkspace?.id || !task.clientId) return null
         const supabase = getSupabaseClient()
         const nextTask = { ...task, id: task.id || `task-${Date.now()}` }
         setCloudTasks((current) => [nextTask, ...current])

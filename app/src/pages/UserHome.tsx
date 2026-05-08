@@ -155,7 +155,7 @@ function UserHome() {
     tasks.forEach((task) => {
       const project = projectById.get(task.projectId)
       const stage = project?.stages?.find((s) => s.id === task.stageId)?.name ?? 'Bez faze'
-      map.set(task.id, { task, client: clientById.get(String(task.clientId)) ?? 'Nepoznat klijent', project: project?.title ?? 'Nepoznat projekat', stage })
+      map.set(task.id, { task, client: clientById.get(String(task.clientId)) ?? 'Nepoznat klijent', project: task.projectId ? (project?.title ?? 'Nepoznat projekat') : 'Ad hoc aktivnost', stage: task.projectId ? stage : 'Bez projekta' })
     })
     return map
   }, [clients, projects, tasks])
@@ -176,6 +176,7 @@ function UserHome() {
       <Section title="Zadaci koji kasne" empty="Nema kašnjenja" items={toItems(buckets.late)} tone="red" onOpen={setOpened} />
       <Section title="Danas" empty="Nema zadataka za danas" items={toItems(buckets.today)} tone="white" onOpen={setOpened} />
       <Section title="U radu" empty="Nema aktivnih zadataka" items={toItems(buckets.inProgress)} tone="blue" onOpen={setOpened} />
+      <Section title="Završeno" empty="Nema završenih zadataka" items={toItems(buckets.completed)} tone="white" onOpen={setOpened} />
       {opened ? (
         <TaskModal
           task={opened}

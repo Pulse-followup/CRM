@@ -42,6 +42,7 @@ export interface Task {
   createdAt: string
   updatedAt: string
   completedAt?: string | null
+  finishedAt?: string | null
   timeSpentMinutes?: number
   materialCost?: number
   materialDescription?: string

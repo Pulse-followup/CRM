@@ -7,7 +7,9 @@ import ClientInfoSection from './ClientInfoSection'
 import ClientProjectsSection from './ClientProjectsSection'
 import { isProductVisibleForClient, readProducts } from '../../products/productStorage'
 import type { ProductItem } from '../../products/types'
+import { getProjectLifecycle } from '../../projects/projectLifecycle'
 import type { Project } from '../../projects/types'
+import { isTaskCompleted, isTaskOpen } from '../../tasks/taskLifecycle'
 import type { Task } from '../../tasks/types'
 import type { ClientContact, CommercialInputs } from '../types'
 
@@ -45,13 +47,20 @@ function ClientCardSections({
   catalogNotice,
 }: ClientCardSectionsProps) {
   const navigate = useNavigate()
-  const activeProjects = projects.filter((project) => project.status !== 'arhiviran')
   const archivedProjects = projects.filter((project) => project.status === 'arhiviran')
-  const activeProjectIds = new Set(activeProjects.map((project) => project.id))
-  const activeTasks = tasks.filter(
-    (task) => task.projectId && activeProjectIds.has(task.projectId) && task.status !== 'zavrsen',
+  const lifecycleByProjectId = new Map(
+    projects.map((project) => [project.id, getProjectLifecycle(project, tasks, billing)]),
   )
-  const clientBilling = billing.filter((record) => activeProjectIds.has(record.projectId))
+  const activeProjects = projects.filter((project) => project.status !== 'arhiviran' && lifecycleByProjectId.get(project.id)?.status === 'active')
+  const activeProjectIds = new Set(activeProjects.map((project) => project.id))
+  const allProjectIds = new Set(projects.map((project) => project.id))
+  const activeTasks = tasks.filter((task) => isTaskOpen(task) && (!task.projectId || activeProjectIds.has(task.projectId)))
+  const completedClientTasks = tasks
+    .filter(isTaskCompleted)
+    .slice()
+    .sort((first, second) => new Date(second.completedAt || second.updatedAt || second.createdAt).getTime() - new Date(first.completedAt || first.updatedAt || first.createdAt).getTime())
+    .slice(0, 8)
+  const clientBilling = billing.filter((record) => allProjectIds.has(record.projectId))
   const openBilling = clientBilling.filter((record) => record.status !== 'paid' && record.status !== 'cancelled')
   const paidBilling = billing.filter((record) =>
     projects.some((project) => project.id === record.projectId) && record.status === 'paid',
@@ -182,6 +191,21 @@ function ClientCardSections({
               <span>Ukupno plaćeno</span>
               <strong>{formatAmount(paidBilling.reduce((sum, record) => sum + (record.amount ?? 0), 0))}</strong>
             </div>
+          </div>
+          <div className="customer-card-group">
+            <h4>Završene aktivnosti</h4>
+            {completedClientTasks.length ? (
+              <div className="customer-activity-history-list">
+                {completedClientTasks.map((task) => (
+                  <div className="customer-activity-history-item" key={task.id}>
+                    <strong>{task.title}</strong>
+                    <span>{task.projectId ? 'Projektni task' : 'Ad hoc aktivnost'} · {task.completedAt ? new Intl.DateTimeFormat('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(task.completedAt)) : 'završeno'}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="customer-card-empty">Nema završenih aktivnosti.</div>
+            )}
           </div>
           <ClientProjectsSection projects={archivedProjects} title="Arhiva projekata" emptyText="Nema arhiviranih projekata" hideArchived />
         </div>

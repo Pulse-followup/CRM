@@ -1,4 +1,5 @@
 import type { BillingRecord } from './types'
+import { getBillingStatus } from './billingLifecycle'
 
 const ACTIVE_BILLING_STATUSES = new Set(['ready', 'draft', 'invoiced', 'overdue'])
 
@@ -17,7 +18,7 @@ export function getBillingByProjectId(records: BillingRecord[], projectId: strin
 export function getActiveBillingByProjectId(records: BillingRecord[], projectId: string) {
   return (
     records.find(
-      (record) => record.projectId === projectId && ACTIVE_BILLING_STATUSES.has(record.status),
+      (record) => record.projectId === projectId && ACTIVE_BILLING_STATUSES.has(record.status) && getBillingStatus(record) !== 'closed',
     ) ?? null
   )
 }
@@ -30,10 +31,10 @@ export function getBillingSummary(records: BillingRecord[]) {
   return records.reduce(
     (summary, record) => ({
       total: summary.total + 1,
-      draft: summary.draft + (record.status === 'draft' || record.status === 'ready' ? 1 : 0),
-      invoiced: summary.invoiced + (record.status === 'invoiced' ? 1 : 0),
-      overdue: summary.overdue + (record.status === 'overdue' ? 1 : 0),
-      paid: summary.paid + (record.status === 'paid' ? 1 : 0),
+      draft: summary.draft + (getBillingStatus(record) === 'issued' && (record.status === 'draft' || record.status === 'ready') ? 1 : 0),
+      invoiced: summary.invoiced + (getBillingStatus(record) === 'issued' && record.status === 'invoiced' ? 1 : 0),
+      overdue: summary.overdue + (getBillingStatus(record) === 'overdue' ? 1 : 0),
+      paid: summary.paid + (getBillingStatus(record) === 'closed' ? 1 : 0),
       cancelled: summary.cancelled + (record.status === 'cancelled' ? 1 : 0),
       totalAmount: summary.totalAmount + (record.amount ?? 0),
     }),

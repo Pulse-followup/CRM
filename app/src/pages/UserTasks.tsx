@@ -1,6 +1,6 @@
 import TaskList from '../features/tasks/components/TaskList'
 import { useAuthStore } from '../features/auth/authStore'
-import { getTasksByUser } from '../features/tasks/taskSelectors'
+import { getVisibleTasksForUser } from '../features/tasks/taskSelectors'
 import { useTaskStore } from '../features/tasks/taskStore'
 
 function UserTasks() {
@@ -9,7 +9,7 @@ function UserTasks() {
 
   const visibleTasks =
     currentUser.role === 'user'
-      ? getTasksByUser(tasks, currentUser.id, currentUser.name)
+      ? getVisibleTasksForUser(tasks, currentUser)
       : tasks
 
   return (

@@ -1,4 +1,5 @@
-import type { Task, TaskStatus } from '../tasks/types'
+import { isTaskCompleted, isTaskOpen } from '../tasks/taskLifecycle'
+import type { Task } from '../tasks/types'
 
 export type ProjectHealthKey = 'no_tasks' | 'late' | 'waiting' | 'active' | 'done'
 export type ProjectHealthTone = 'muted' | 'danger' | 'warning' | 'info' | 'success'
@@ -9,8 +10,6 @@ export interface ProjectHealth {
   tone: ProjectHealthTone
 }
 
-const ACTIVE_STATUSES: TaskStatus[] = ['dodeljen', 'u_radu', 'vracen']
-
 function isPastDue(value?: string) {
   if (!value) return false
 
@@ -18,16 +17,8 @@ function isPastDue(value?: string) {
   if (Number.isNaN(dueDate.getTime())) return false
 
   const today = new Date()
-  const dueDateKey = new Date(
-    dueDate.getFullYear(),
-    dueDate.getMonth(),
-    dueDate.getDate(),
-  ).getTime()
-  const todayKey = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
-  ).getTime()
+  const dueDateKey = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()).getTime()
+  const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
 
   return dueDateKey < todayKey
 }
@@ -43,9 +34,7 @@ export function getProjectHealth(projectId: string, tasks: Task[]): ProjectHealt
     }
   }
 
-  const hasLateTask = projectTasks.some(
-    (task) => ACTIVE_STATUSES.includes(task.status) && isPastDue(task.dueDate),
-  )
+  const hasLateTask = projectTasks.some((task) => isTaskOpen(task) && isPastDue(task.dueDate))
 
   if (hasLateTask) {
     return {
@@ -65,9 +54,7 @@ export function getProjectHealth(projectId: string, tasks: Task[]): ProjectHealt
     }
   }
 
-  const hasActiveTask = projectTasks.some((task) =>
-    ['dodeljen', 'u_radu', 'vracen'].includes(task.status),
-  )
+  const hasActiveTask = projectTasks.some(isTaskOpen)
 
   if (hasActiveTask) {
     return {
@@ -77,7 +64,7 @@ export function getProjectHealth(projectId: string, tasks: Task[]): ProjectHealt
     }
   }
 
-  const allDone = projectTasks.every((task) => task.status === 'zavrsen')
+  const allDone = projectTasks.length > 0 && projectTasks.every(isTaskCompleted)
 
   if (allDone) {
     return {

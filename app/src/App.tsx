@@ -15,6 +15,8 @@ import UserLayout from './layouts/UserLayout'
 import AdminHome from './pages/AdminHome'
 import BillingPage from './pages/BillingPage'
 import ClientDetail from './pages/ClientDetail'
+import ClientCreateActivityPage from './features/clients/pages/ClientCreateActivityPage'
+import ClientCreateJobPage from './features/clients/pages/ClientCreateJobPage'
 import ClientsPage from './pages/ClientsPage'
 import FinanceHome from './pages/FinanceHome'
 import NoAccessPage from './pages/NoAccessPage'
@@ -96,6 +98,14 @@ function AppRoutes() {
           <Route
             path="/clients/:id"
             element={role === 'admin' ? <ClientDetail /> : <NoAccessPage />}
+          />
+          <Route
+            path="/clients/:id/new-activity"
+            element={role === 'admin' ? <ClientCreateActivityPage /> : <NoAccessPage />}
+          />
+          <Route
+            path="/clients/:id/new-job"
+            element={role === 'admin' ? <ClientCreateJobPage /> : <NoAccessPage />}
           />
           <Route path="/projects" element={role === 'admin' ? <ProjectsPage /> : <NoAccessPage />} />
           <Route path="/products" element={role === 'admin' ? <ProductsPage /> : <NoAccessPage />} />

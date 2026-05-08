@@ -8,9 +8,15 @@ import {
 import { useProjectStore } from '../features/projects/projectStore'
 import { getProjectLifecycle, type ProjectLifecycleStatus } from '../features/projects/projectLifecycle'
 import { useTaskStore } from '../features/tasks/taskStore'
-import { getTasksByProject } from '../features/tasks/taskSelectors'
 import { useBillingStore } from '../features/billing/billingStore'
 import { BILLING_STATUS_LABELS } from '../features/billing/billingLabels'
+
+function getLifecycleBillingLabel(status?: keyof typeof BILLING_STATUS_LABELS | 'issued' | 'closed') {
+  if (!status) return null
+  if (status === 'issued') return 'Poslato'
+  if (status === 'closed') return 'Placeno'
+  return BILLING_STATUS_LABELS[status]
+}
 
 function ProjectsPage() {
   const navigate = useNavigate()
@@ -24,7 +30,7 @@ function ProjectsPage() {
   const initialStatus = (searchParams.get('status') as ProjectLifecycleStatus | null) || 'active'
   const [selectedClientId, setSelectedClientId] = useState(initialClientId)
   const [selectedStatus, setSelectedStatus] = useState<ProjectLifecycleStatus>(
-    ['active', 'billing', 'completed'].includes(initialStatus) ? initialStatus : 'active',
+    ['setup', 'active', 'billing', 'completed', 'overdue', 'closed'].includes(initialStatus) ? initialStatus : 'active',
   )
 
   const clientById = useMemo(
@@ -47,6 +53,7 @@ function ProjectsPage() {
 
   const statusCounts = useMemo(
     () => ({
+      setup: projectsWithLifecycle.filter((item) => item.lifecycle.status === 'setup').length,
       active: projectsWithLifecycle.filter((item) => item.lifecycle.status === 'active').length,
       billing: projectsWithLifecycle.filter((item) => item.lifecycle.status === 'billing').length,
       completed: projectsWithLifecycle.filter((item) => item.lifecycle.status === 'completed').length,
@@ -81,6 +88,13 @@ function ProjectsPage() {
   return (
     <section className="page-card projects-page-shell">
       <div className="project-client-filter project-status-filter" aria-label="Filter po statusu projekta">
+        <button
+          type="button"
+          className={`project-filter-bubble${selectedStatus === 'setup' ? ' is-active' : ''}`}
+          onClick={() => changeStatus('setup')}
+        >
+          U pripremi <span>{statusCounts.setup}</span>
+        </button>
         <button
           type="button"
           className={`project-filter-bubble${selectedStatus === 'active' ? ' is-active' : ''}`}
@@ -132,7 +146,6 @@ function ProjectsPage() {
       {visibleProjects.length ? (
         <div className="projects-wide-list">
           {visibleProjects.map(({ project, lifecycle }) => {
-            const projectTasks = getTasksByProject(tasks, project.id)
             const client = clientById.get(String(project.clientId))
             const projectValue = project.value || (project.unitPrice && project.quantity ? project.unitPrice * project.quantity : 0)
             const commercialLine = project.unitPrice && project.quantity
@@ -157,11 +170,12 @@ function ProjectsPage() {
                 </div>
                 <div className="project-wide-status">
                   <span className={`customer-status-badge is-${lifecycle.tone}`}>{lifecycle.label}</span>
-                  {lifecycle.billingStatus ? <span className="customer-status-badge is-muted">Naplata: {BILLING_STATUS_LABELS[lifecycle.billingStatus]}</span> : null}
+                  {lifecycle.billingStatus ? <span className="customer-status-badge is-muted">Naplata: {getLifecycleBillingLabel(lifecycle.billingStatus)}</span> : null}
                 </div>
                 <div className="project-wide-stats">
                   <span>Koraci</span>
-                  <strong>{lifecycle.completedTaskCount}/{lifecycle.totalTaskCount || projectTasks.length} završeno</strong>
+                  <strong>{lifecycle.totalTaskCount ? `${lifecycle.completedTaskCount}/${lifecycle.totalTaskCount} završeno` : 'Taskovi nisu kreirani'}</strong>
+                  {lifecycle.status === 'setup' ? <em>U pripremi</em> : null}
                   {lifecycle.status === 'active' ? <em>{lifecycle.activeTaskCount} aktivno</em> : null}
                 </div>
               </button>

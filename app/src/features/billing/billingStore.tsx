@@ -10,6 +10,9 @@ import {
 import { readStoredArray, writeStoredValue } from '../../shared/storage'
 import { useCloudStore } from '../cloud/cloudStore'
 import { useProjectStore } from '../projects/projectStore'
+import { useTaskStore } from '../tasks/taskStore'
+import { getBillingStatus } from './billingLifecycle'
+import { isProjectFinishedForBilling, isSingleShotProject } from './billingGate'
 import { getSupabaseClient } from '../../lib/supabaseClient'
 import {
   getActiveBillingByProjectId as selectActiveBillingByProjectId,
@@ -48,20 +51,18 @@ interface BillingStoreValue {
 
 const BillingStoreContext = createContext<BillingStoreValue | null>(null)
 
-function isDueDateOverdue(dueDate?: string | null) {
-  if (!dueDate) return false
-  const date = new Date(dueDate)
-  if (Number.isNaN(date.getTime())) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return date.getTime() < today.getTime()
-}
-
 function normalizeRuntimeStatus(record: BillingRecord): BillingRecord {
-  if (record.status === 'invoiced' && isDueDateOverdue(record.dueDate)) {
+  if (getBillingStatus(record) === 'closed' && record.status !== 'paid') {
+    return { ...record, status: 'paid' }
+  }
+  if (getBillingStatus(record) === 'overdue' && record.status !== 'overdue') {
     return { ...record, status: 'overdue' }
   }
   return record
+}
+
+function isActiveOrClosedBilling(record?: BillingRecord | null) {
+  return Boolean(record && record.status !== 'cancelled')
 }
 
 function asString(value: unknown) {
@@ -202,6 +203,7 @@ export function BillingProvider({ children }: PropsWithChildren) {
   const [cloudReadError, setCloudReadError] = useState<string | null>(null)
   const billing = isCloudBillingMode ? cloudBilling : localBilling
   const { getProjectById, updateProject } = useProjectStore()
+  const { getTasksByProjectId } = useTaskStore()
 
   useEffect(() => {
     if (!isCloudBillingMode) {
@@ -316,8 +318,14 @@ export function BillingProvider({ children }: PropsWithChildren) {
     (record: BillingRecord) => {
       const project = getProjectById(record.projectId)
       if (!project) return
+
+      // Billing is the source of truth for the financial end of the project lifecycle.
+      // Paid billing means the commercial flow is closed. We keep the old ProjectStatus
+      // enum compatible by storing it as zavrsen, while ProjectLifecycle renders it as
+      // "Zatvoren" from billingStatus === paid.
       updateProject({
         ...project,
+        status: getBillingStatus(record) === 'closed' ? 'zavrsen' : project.status,
         billingId: record.id,
         billingStatus: record.status,
       })
@@ -356,11 +364,18 @@ export function BillingProvider({ children }: PropsWithChildren) {
 
   const createBillingForProject = useCallback(
     async (projectId: string, payload: CreateBillingPayload) => {
-      const existingRecord = selectActiveBillingByProjectId(billing, projectId)
+      // One project must not generate multiple billing records.
+      // Any non-cancelled billing record (ready/draft/invoiced/overdue/paid) owns the project.
+      const existingRecord = selectBillingByProjectId(billing, projectId).find(isActiveOrClosedBilling)
       if (existingRecord) return existingRecord
 
       const project = getProjectById(projectId)
       if (!project) return null
+
+      const projectTasks = getTasksByProjectId(projectId)
+      if (isSingleShotProject(project) && !isProjectFinishedForBilling(projectTasks)) {
+        return null
+      }
 
       const timestamp = new Date().toISOString()
       const nextRecord: BillingRecord = {
@@ -390,7 +405,7 @@ export function BillingProvider({ children }: PropsWithChildren) {
 
       return await replaceRecord(nextRecord)
     },
-    [billing, getProjectById, replaceRecord],
+    [billing, getProjectById, getTasksByProjectId, replaceRecord],
   )
 
   const updateBillingRecord = useCallback(

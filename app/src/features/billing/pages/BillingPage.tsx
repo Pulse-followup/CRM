@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useClientStore } from '../../clients/clientStore'
 import { useProjectStore } from '../../projects/projectStore'
 import '../../clients/pages/client-detail.css'
+import { getBillingStatus } from '../billingLifecycle'
 import { useBillingStore } from '../billingStore'
 import BillingCard from '../components/BillingCard'
 import type { BillingStatus } from '../types'
@@ -12,7 +13,7 @@ const FILTER_OPTIONS: Array<{ key: 'all' | BillingStatus; label: string }> = [
   { key: 'draft', label: 'Za fakturisanje' },
   { key: 'invoiced', label: 'Fakturisano' },
   { key: 'overdue', label: 'Kasni' },
-  { key: 'paid', label: 'Plaćeno' },
+  { key: 'paid', label: 'Placeno' },
 ]
 
 function normalizeFilterParam(value: string | null): 'all' | BillingStatus {
@@ -56,23 +57,33 @@ function BillingPage() {
       acc[option.key] = option.key === 'all'
         ? billing.length
         : option.key === 'draft'
-          ? billing.filter((record) => record.status === 'draft' || record.status === 'ready').length
-          : billing.filter((record) => record.status === option.key).length
+          ? billing.filter((record) => getBillingStatus(record) === 'issued' && (record.status === 'draft' || record.status === 'ready')).length
+          : option.key === 'invoiced'
+            ? billing.filter((record) => getBillingStatus(record) === 'issued' && record.status === 'invoiced').length
+            : option.key === 'overdue'
+              ? billing.filter((record) => getBillingStatus(record) === 'overdue').length
+              : billing.filter((record) => getBillingStatus(record) === 'closed').length
       return acc
     }, {})
   }, [billing])
 
-  const filteredBilling = useMemo(
-    () => {
-      if (isPaidWeekFilter) {
-        return billing.filter((record) => record.status === 'paid' && isPaidThisWeek(record.paidAt || record.updatedAt || record.createdAt))
-      }
-      return activeFilter === 'all'
-        ? billing
-        : billing.filter((record) => (activeFilter === 'draft' ? record.status === 'draft' || record.status === 'ready' : record.status === activeFilter))
-    },
-    [activeFilter, billing, isPaidWeekFilter],
-  )
+  const filteredBilling = useMemo(() => {
+    if (isPaidWeekFilter) {
+      return billing.filter((record) => getBillingStatus(record) === 'closed' && isPaidThisWeek(record.paidAt || record.updatedAt || record.createdAt))
+    }
+
+    if (activeFilter === 'all') return billing
+    if (activeFilter === 'draft') {
+      return billing.filter((record) => getBillingStatus(record) === 'issued' && (record.status === 'draft' || record.status === 'ready'))
+    }
+    if (activeFilter === 'invoiced') {
+      return billing.filter((record) => getBillingStatus(record) === 'issued' && record.status === 'invoiced')
+    }
+    if (activeFilter === 'overdue') {
+      return billing.filter((record) => getBillingStatus(record) === 'overdue')
+    }
+    return billing.filter((record) => getBillingStatus(record) === 'closed')
+  }, [activeFilter, billing, isPaidWeekFilter])
 
   return (
     <section className="page-card client-detail-shell billing-clean-page">
@@ -98,6 +109,7 @@ function BillingPage() {
           {filteredBilling.map((record) => {
             const client = getClientById(record.clientId)
             const project = getProjectById(record.projectId)
+            const billingStatus = getBillingStatus(record)
 
             return (
               <BillingCard
@@ -105,9 +117,9 @@ function BillingPage() {
                 record={record}
                 clientName={client?.name || record.clientName}
                 projectTitle={project?.title || record.projectName}
-                onMarkInvoiced={record.status === 'draft' || record.status === 'ready' ? () => markBillingInvoiced(record.id) : undefined}
-                onMarkOverdue={record.status === 'invoiced' ? () => markBillingOverdue(record.id) : undefined}
-                onMarkPaid={record.status === 'invoiced' || record.status === 'overdue' ? () => markBillingPaid(record.id) : undefined}
+                onMarkInvoiced={billingStatus === 'issued' && (record.status === 'draft' || record.status === 'ready') ? () => markBillingInvoiced(record.id) : undefined}
+                onMarkOverdue={billingStatus === 'issued' && record.status === 'invoiced' ? () => markBillingOverdue(record.id) : undefined}
+                onMarkPaid={billingStatus === 'issued' || billingStatus === 'overdue' ? () => markBillingPaid(record.id) : undefined}
               />
             )
           })}

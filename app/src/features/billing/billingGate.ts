@@ -1,4 +1,5 @@
 import type { Project } from '../projects/types'
+import { isTaskCompleted } from '../tasks/taskLifecycle'
 import type { Task } from '../tasks/types'
 import type { BillingRecord } from './types'
 
@@ -29,11 +30,12 @@ export function getWorkflowTasks(tasks: Task[]) {
 export function isProjectFinishedForBilling(projectTasks: Task[]) {
   const workflowTasks = getWorkflowTasks(projectTasks)
   const tasksToCheck = workflowTasks.length ? workflowTasks : projectTasks
-  return tasksToCheck.length > 0 && tasksToCheck.every((task) => task.status === 'zavrsen' || task.status === 'naplacen')
+  return tasksToCheck.length > 0 && tasksToCheck.every(isTaskCompleted)
 }
 
 export function isTaskBillableDone(task: Task, project?: Project, billing: BillingRecord[] = [], projectTasks: Task[] = []) {
-  if (task.status !== 'zavrsen') return false
+  if (!isTaskCompleted(task)) return false
+  if (task.billingState === 'not_billable' || (!task.projectId && !task.billingState)) return false
   if (task.billingState === 'sent_to_billing' || task.billingState === 'billed' || task.billingId) return false
   if (project && isProjectCoveredByBilling(project, billing)) return false
   if (project && isSingleShotProject(project) && !isProjectFinishedForBilling(projectTasks)) return false
@@ -49,7 +51,7 @@ export function getBillingGateMessage(project: Project, projectTasks: Task[]) {
   const workflowTasks = getWorkflowTasks(projectTasks)
   const tasksToCheck = workflowTasks.length ? workflowTasks : projectTasks
   if (!tasksToCheck.length) return ''
-  const completed = tasksToCheck.filter((task) => task.status === 'zavrsen' || task.status === 'naplacen').length
+  const completed = tasksToCheck.filter(isTaskCompleted).length
   if (completed === tasksToCheck.length) return ''
-  return `Jednokratni projekat: naplata se otvara tek kada svi obavezni koraci budu završeni (${completed}/${tasksToCheck.length}).`
+  return `Jednokratni projekat: naplata se otvara tek kada svi obavezni koraci budu zavrseni (${completed}/${tasksToCheck.length}).`
 }

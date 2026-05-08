@@ -1,82 +1,108 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { useBillingStore } from '../../billing/billingStore'
-import { isProductVisibleForClient, readProducts, readProductsFromSupabase, saveProducts } from '../../products/productStorage'
-import { readProcessTemplates, readProcessTemplatesFromSupabase, saveProcessTemplates } from '../../templates/templateStorage'
-import { buildCatalogJobPayload } from '../../workflows/createJobFromProduct'
-import ProjectForm, { type ProjectFormValues } from '../../projects/components/ProjectForm'
-import { buildStagesFromTemplate, getTemplateIdForProjectType } from '../../projects/projectTemplates'
-import { useProjectStore } from '../../projects/projectStore'
-import type { Project } from '../../projects/types'
-import { getClientScore } from '../../scoring/scoringSelectors'
-import CreateTaskForm, { type CreateTaskFormValues } from '../../tasks/components/CreateTaskForm'
-import { useTaskStore } from '../../tasks/taskStore'
-import type { Task } from '../../tasks/types'
-import { useClientStore } from '../clientStore'
-import ClientActionsBar from '../components/ClientActionsBar'
-import CatalogJobForm, { type CatalogJobFormValues } from '../components/CatalogJobForm'
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useBillingStore } from "../../billing/billingStore";
+import {
+  isProductVisibleForClient,
+  readProducts,
+  readProductsFromSupabase,
+  saveProducts,
+} from "../../products/productStorage";
+import {
+  readProcessTemplates,
+  readProcessTemplatesFromSupabase,
+  saveProcessTemplates,
+} from "../../templates/templateStorage";
+import { buildCatalogJobPayload } from "../../workflows/createJobFromProduct";
+import ProjectForm, {
+  type ProjectFormValues,
+} from "../../projects/components/ProjectForm";
+import {
+  buildStagesFromTemplate,
+  getTemplateIdForProjectType,
+} from "../../projects/projectTemplates";
+import { useProjectStore } from "../../projects/projectStore";
+import type { Project } from "../../projects/types";
+import { getClientScore } from "../../scoring/scoringSelectors";
+import CreateTaskForm, {
+  type CreateTaskFormValues,
+} from "../../tasks/components/CreateTaskForm";
+import { useTaskStore } from "../../tasks/taskStore";
+import type { Task } from "../../tasks/types";
+import { useClientStore } from "../clientStore";
+import ClientActionsBar from "../components/ClientActionsBar";
+import CatalogJobForm, {
+  type CatalogJobFormValues,
+} from "../components/CatalogJobForm";
 
-import ClientEditForm, { type ClientEditFormPatch } from '../components/ClientEditForm'
-import ClientHeader from '../components/ClientHeader'
-import ClientCardSections from '../components/ClientCardSections'
-import { useCloudStore } from '../../cloud/cloudStore'
-import './client-detail.css'
+import ClientEditForm, {
+  type ClientEditFormPatch,
+} from "../components/ClientEditForm";
+import ClientHeader from "../components/ClientHeader";
+import ClientCardSections from "../components/ClientCardSections";
+import { useCloudStore } from "../../cloud/cloudStore";
+import "./client-detail.css";
 
 const PRIORITY_LABELS = {
-  low: 'Nizak prioritet',
-  medium: 'Srednji prioritet',
-  high: 'Visok prioritet',
-} as const
+  low: "Nizak prioritet",
+  medium: "Srednji prioritet",
+  high: "Visok prioritet",
+} as const;
 
 function ClientDetail() {
-  const navigate = useNavigate()
-  const { id } = useParams()
-  const clientId = id ?? ''
-  const { clients, getClientById, updateClient } = useClientStore()
-  const { tasks, addTask } = useTaskStore()
-  const { projects: allProjects, getProjectsByClientId, addProject } = useProjectStore()
-  const { billing } = useBillingStore()
-  const cloud = useCloudStore()
-  const [isEditingClient, setIsEditingClient] = useState(false)
-  const [isCreatingActivity, setIsCreatingActivity] = useState(false)
-  const [isCreatingProject, setIsCreatingProject] = useState(false)
-  const [isChoosingJob, setIsChoosingJob] = useState(false)
-  const [isCreatingFromCatalog, setIsCreatingFromCatalog] = useState(false)
-  const [initialCatalogProductId, setInitialCatalogProductId] = useState<string | undefined>(undefined)
-  const [catalogJobMessage, setCatalogJobMessage] = useState('')
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const clientId = id ?? "";
+  const { clients, getClientById, updateClient } = useClientStore();
+  const { tasks, addTask } = useTaskStore();
+  const {
+    projects: allProjects,
+    getProjectsByClientId,
+    addProject,
+  } = useProjectStore();
+  const { billing } = useBillingStore();
+  const cloud = useCloudStore();
+  const [isEditingClient, setIsEditingClient] = useState(false);
+  const [isCreatingActivity, setIsCreatingActivity] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [isChoosingJob, setIsChoosingJob] = useState(false);
+  const [isCreatingFromCatalog, setIsCreatingFromCatalog] = useState(false);
+  const [initialCatalogProductId, setInitialCatalogProductId] = useState<
+    string | undefined
+  >(undefined);
+  const [catalogJobMessage, setCatalogJobMessage] = useState("");
 
   useEffect(() => {
-    let isMounted = true
-    const workspaceId = cloud.activeWorkspace?.id || ''
+    let isMounted = true;
+    const workspaceId = cloud.activeWorkspace?.id || "";
 
     async function preloadCatalogFromCloud() {
-      if (!cloud.isConfigured || !workspaceId) return
+      if (!cloud.isConfigured || !workspaceId) return;
 
       try {
         const [cloudProducts, cloudTemplates] = await Promise.all([
           readProductsFromSupabase(workspaceId),
           readProcessTemplatesFromSupabase(workspaceId),
-        ])
+        ]);
 
-        if (!isMounted) return
-        if (cloudProducts.length) saveProducts(cloudProducts)
-        if (cloudTemplates.length) saveProcessTemplates(cloudTemplates)
+        if (!isMounted) return;
+        if (cloudProducts.length) saveProducts(cloudProducts);
+        if (cloudTemplates.length) saveProcessTemplates(cloudTemplates);
       } catch {
         // Cloud catalog preload is best-effort; localStorage remains fallback.
       }
     }
 
-    void preloadCatalogFromCloud()
+    void preloadCatalogFromCloud();
 
     return () => {
-      isMounted = false
-    }
-  }, [cloud.activeWorkspace?.id, cloud.isConfigured])
+      isMounted = false;
+    };
+  }, [cloud.activeWorkspace?.id, cloud.isConfigured]);
 
-  const client = getClientById(clientId)
-  const projects = getProjectsByClientId(clientId)
-  const products = readProducts()
-  const processTemplates = readProcessTemplates()
+  const client = getClientById(clientId);
+  const projects = getProjectsByClientId(clientId);
+  const products = readProducts();
+  const processTemplates = readProcessTemplates();
   const score = client
     ? getClientScore(String(client.id), {
         clients,
@@ -84,116 +110,145 @@ function ClientDetail() {
         tasks,
         billing,
       })
-    : null
+    : null;
 
   const handleCreateActivity = (values: CreateTaskFormValues) => {
-    if (!client) return
+    if (!client) return;
 
-    const timestamp = new Date().toISOString()
+    const timestamp = new Date().toISOString();
     const nextTask: Task = {
       id: `task-${Date.now()}`,
       clientId: String(client.id),
       projectId: values.projectId,
-      title: values.title.trim() || 'Nova aktivnost',
+      title: values.title.trim() || "Nova aktivnost",
       description: values.description.trim(),
       type: values.type || undefined,
       assignedToUserId: values.assignedToUserId,
       assignedToLabel: values.assignedToLabel.trim(),
       dueDate: values.dueDate || undefined,
       stageId: values.stageId || undefined,
-      status: 'dodeljen',
+      status: "dodeljen",
       createdAt: timestamp,
       updatedAt: timestamp,
       completedAt: null,
-      billingState: 'not_billable',
-    }
+      billingState: values.billingState,
+    };
 
-    addTask(nextTask)
-    setIsCreatingActivity(false)
-  }
+    addTask(nextTask);
+    setIsCreatingActivity(false);
+  };
 
   const handleCreateProject = (values: ProjectFormValues) => {
-    if (!client) return
+    if (!client) return;
 
-    const templateId = getTemplateIdForProjectType(values.type)
+    const templateId = getTemplateIdForProjectType(values.type);
     const nextProject: Project = {
       id: `project-${Date.now()}`,
       clientId: String(client.id),
-      title: values.title.trim() || 'Novi projekat',
+      title: values.title.trim() || "Novi projekat",
       type: values.type || undefined,
       frequency: values.frequency || undefined,
       value: values.value.trim() ? Number(values.value) : undefined,
-      status: 'aktivan',
+      status: "aktivan",
       templateId,
       stages: buildStagesFromTemplate(templateId),
-    }
+    };
 
-    addProject(nextProject)
-    setIsCreatingProject(false)
-    setIsChoosingJob(false)
-  }
-
+    addProject(nextProject);
+    setIsCreatingProject(false);
+    setIsChoosingJob(false);
+  };
 
   const openCatalogJobForm = (productId?: string) => {
-    setInitialCatalogProductId(productId)
-    setIsCreatingFromCatalog(true)
-    setIsCreatingProject(false)
-    setIsCreatingActivity(false)
-    setIsChoosingJob(false)
-    setCatalogJobMessage('')
-  }
+    setInitialCatalogProductId(productId);
+    setIsCreatingFromCatalog(true);
+    setIsCreatingProject(false);
+    setIsCreatingActivity(false);
+    setIsChoosingJob(false);
+    setCatalogJobMessage("");
+  };
 
   const handleCreateJobFromCatalog = async (values: CatalogJobFormValues) => {
-    if (!client) return
+    if (!client) return;
 
-    const product = products.find((item) => item.id === values.productId && item.status === 'active' && isProductVisibleForClient(item, String(client.id)))
+    const product = products.find(
+      (item) =>
+        item.id === values.productId &&
+        item.status === "active" &&
+        isProductVisibleForClient(item, String(client.id)),
+    );
     const template = product?.processTemplateId
       ? processTemplates.find((item) => item.id === product.processTemplateId)
-      : undefined
-    const quantity = Number(values.quantity.replace(',', '.'))
+      : undefined;
+    const quantity = Number(values.quantity.replace(",", "."));
 
-    if (!product || !template || !template.steps.length || !Number.isFinite(quantity) || quantity <= 0) {
-      setCatalogJobMessage('Posao nije kreiran. Proveri proizvod, šablon procesa i količinu.')
-      return
+    if (
+      !product ||
+      !template ||
+      !template.steps.length ||
+      !Number.isFinite(quantity) ||
+      quantity <= 0
+    ) {
+      setCatalogJobMessage(
+        "Posao nije kreiran. Proveri proizvod, šablon procesa i količinu.",
+      );
+      return;
     }
 
-    const payload = buildCatalogJobPayload({
-      clientId: String(client.id),
-      product,
-      template,
-      title: values.title,
-      dueDate: values.dueDate || undefined,
-      quantity,
-      fileLink: values.fileLink,
-      note: values.note,
-    }, cloud.members.map((member) => ({
-      id: member.user_id,
-      name: member.display_name || member.profile?.full_name || member.profile?.email || member.user_id,
-      productionRole: member.production_role || null,
-    })))
+    const payload = buildCatalogJobPayload(
+      {
+        clientId: String(client.id),
+        product,
+        template,
+        title: values.title,
+        dueDate: values.dueDate || undefined,
+        quantity,
+        fileLink: values.fileLink,
+        note: values.note,
+      },
+      cloud.members.map((member) => ({
+        id: member.user_id,
+        name:
+          member.display_name ||
+          member.profile?.full_name ||
+          member.profile?.email ||
+          member.user_id,
+        productionRole: member.production_role || null,
+      })),
+    );
 
-    const savedProject = await Promise.resolve(addProject(payload.project))
+    const savedProject = await Promise.resolve(addProject(payload.project));
 
     if (!savedProject) {
-      setCatalogJobMessage('Projekat nije sačuvan. Taskovi nisu kreirani.')
-      return
+      setCatalogJobMessage("Projekat nije sačuvan. Taskovi nisu kreirani.");
+      return;
     }
 
-    await Promise.all(payload.tasks.map((task) => Promise.resolve(addTask({ ...task, projectId: savedProject.id }))))
-    setIsCreatingFromCatalog(false)
-    setInitialCatalogProductId(undefined)
-    setCatalogJobMessage(`Kreiran posao: ${savedProject.title} + ${payload.tasks.length} taskova.`)
-  }
+    await Promise.all(
+      payload.tasks.map((task) =>
+        Promise.resolve(addTask({ ...task, projectId: savedProject.id })),
+      ),
+    );
+    setIsCreatingFromCatalog(false);
+    setInitialCatalogProductId(undefined);
+    setCatalogJobMessage(
+      `Kreiran posao: ${savedProject.title} + ${payload.tasks.length} taskova.`,
+    );
+  };
 
   const handleUpdateClient = (patch: ClientEditFormPatch) => {
-    updateClient(clientId, patch)
-    setIsEditingClient(false)
-  }
+    updateClient(clientId, patch);
+    setIsEditingClient(false);
+  };
 
   if (!client) {
     return (
       <section className="page-card client-detail-shell">
-        <button type="button" className="secondary-link-button" onClick={() => navigate('/clients')}>
+        <button
+          type="button"
+          className="secondary-link-button"
+          onClick={() => navigate("/clients")}
+        >
           Nazad na klijente
         </button>
 
@@ -202,12 +257,16 @@ function ClientDetail() {
           <p>Vrati se na listu klijenata i izaberi postojeći zapis.</p>
         </div>
       </section>
-    )
+    );
   }
 
   return (
     <section className="page-card client-detail-shell">
-      <button type="button" className="secondary-link-button" onClick={() => navigate('/clients')}>
+      <button
+        type="button"
+        className="secondary-link-button"
+        onClick={() => navigate("/clients")}
+      >
         Nazad na klijente
       </button>
 
@@ -217,11 +276,11 @@ function ClientDetail() {
         pulseScore={score?.total}
         priorityLabel={score ? PRIORITY_LABELS[score.priority] : undefined}
         priorityTone={
-          score?.priority === 'high'
-            ? 'success'
-            : score?.priority === 'medium'
-              ? 'warning'
-              : 'muted'
+          score?.priority === "high"
+            ? "success"
+            : score?.priority === "medium"
+              ? "warning"
+              : "muted"
         }
         risks={score?.signals.risks ?? []}
       />
@@ -236,9 +295,9 @@ function ClientDetail() {
             type="button"
             className="customer-project-action-button"
             onClick={() => {
-              setIsCreatingProject(true)
-              setIsCreatingFromCatalog(false)
-              setCatalogJobMessage('')
+              setIsCreatingProject(true);
+              setIsCreatingFromCatalog(false);
+              setCatalogJobMessage("");
             }}
           >
             Prazan projekat
@@ -247,7 +306,7 @@ function ClientDetail() {
             type="button"
             className="customer-project-action-button customer-project-action-button-secondary"
             onClick={() => {
-              openCatalogJobForm()
+              openCatalogJobForm();
             }}
           >
             Iz kataloga
@@ -262,7 +321,10 @@ function ClientDetail() {
         />
       ) : null}
       {isCreatingProject ? (
-        <ProjectForm onCancel={() => setIsCreatingProject(false)} onSubmit={handleCreateProject} />
+        <ProjectForm
+          onCancel={() => setIsCreatingProject(false)}
+          onSubmit={handleCreateProject}
+        />
       ) : null}
       {isCreatingFromCatalog ? (
         <CatalogJobForm
@@ -271,13 +333,15 @@ function ClientDetail() {
           templates={processTemplates}
           initialProductId={initialCatalogProductId}
           onCancel={() => {
-            setIsCreatingFromCatalog(false)
-            setInitialCatalogProductId(undefined)
+            setIsCreatingFromCatalog(false);
+            setInitialCatalogProductId(undefined);
           }}
           onSubmit={handleCreateJobFromCatalog}
         />
       ) : null}
-      {catalogJobMessage ? <p className="customer-catalog-job-message">{catalogJobMessage}</p> : null}
+      {catalogJobMessage ? (
+        <p className="customer-catalog-job-message">{catalogJobMessage}</p>
+      ) : null}
       {isCreatingActivity ? (
         <CreateTaskForm
           onCancel={() => setIsCreatingActivity(false)}
@@ -304,7 +368,7 @@ function ClientDetail() {
         onAddFromCatalog={openCatalogJobForm}
       />
     </section>
-  )
+  );
 }
 
-export default ClientDetail
+export default ClientDetail;

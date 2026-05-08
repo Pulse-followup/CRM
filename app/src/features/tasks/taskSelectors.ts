@@ -1,8 +1,6 @@
 import type { AppUser } from '../auth/types'
 import type { Task, TaskBillingState, TaskStatus } from './types'
-
-const ACTIVE_TASK_STATUSES: TaskStatus[] = ['dodeljen', 'u_radu', 'na_cekanju', 'vracen']
-const COMPLETED_TASK_STATUSES: TaskStatus[] = ['zavrsen', 'poslat_na_naplatu', 'naplacen']
+import { isTaskCompleted, isTaskOpen, isWorkflowWaitingTask } from './taskLifecycle'
 
 function getDateKey(date: Date) {
   const year = date.getFullYear()
@@ -27,10 +25,6 @@ export function getAllTasks(tasks: Task[]) {
 
 export function getTaskById(tasks: Task[], taskId: string) {
   return tasks.find((task) => task.id === taskId) ?? null
-}
-
-export function isWorkflowWaitingTask(task: Task) {
-  return task.status === 'na_cekanju' && Boolean(task.dependsOnTaskId)
 }
 
 export function getTasksByUser(tasks: Task[], userId: string, fallbackName?: string) {
@@ -66,11 +60,11 @@ export function getTasksWithoutStage(tasks: Task[]) {
 }
 
 export function isTaskActive(task: Task) {
-  return ACTIVE_TASK_STATUSES.includes(task.status) && !isWorkflowWaitingTask(task)
+  return isTaskOpen(task)
 }
 
 export function isTaskDone(task: Task) {
-  return task.status === 'zavrsen'
+  return isTaskCompleted(task)
 }
 
 export function isTaskLate(task: Task, referenceDate: Date = new Date()) {
@@ -111,7 +105,7 @@ export function getActiveTasks(tasks: Task[]) {
 }
 
 export function getCompletedTasks(tasks: Task[]) {
-  return tasks.filter((task) => COMPLETED_TASK_STATUSES.includes(task.status))
+  return tasks.filter(isTaskCompleted)
 }
 
 export function getTasksReadyForBilling(tasks: Task[]) {
@@ -120,6 +114,17 @@ export function getTasksReadyForBilling(tasks: Task[]) {
 
 export function getTasksByBillingState(tasks: Task[], billingState: TaskBillingState) {
   return tasks.filter((task) => task.billingState === billingState)
+}
+
+
+export function getCompletedTasksForUser(tasks: Task[], user: Pick<AppUser, 'id' | 'name'>) {
+  return getTasksByUser(tasks, user.id, user.name).filter(isTaskCompleted)
+}
+
+export function getVisibleTasksForUser(tasks: Task[], user: Pick<AppUser, 'id' | 'name'>) {
+  return getTasksByUser(tasks, user.id, user.name).filter(
+    (task) => !isTaskCompleted(task) && (!task.billingState || task.billingState !== 'billed'),
+  )
 }
 
 export function getUserTaskBuckets(tasks: Task[], user: Pick<AppUser, 'id' | 'name'>) {
@@ -132,9 +137,14 @@ export function getUserTaskBuckets(tasks: Task[], user: Pick<AppUser, 'id' | 'na
     (task) => !lateIds.has(task.id) && !todayIds.has(task.id),
   )
 
+  const completedTasks = getCompletedTasksForUser(tasks, user)
+    .sort((first, second) => new Date(second.completedAt || second.updatedAt || second.createdAt).getTime() - new Date(first.completedAt || first.updatedAt || first.createdAt).getTime())
+    .slice(0, 10)
+
   return {
     late: lateTasks,
     today: todayTasks,
     inProgress: inProgressTasks,
+    completed: completedTasks,
   }
 }
