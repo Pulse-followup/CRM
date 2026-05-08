@@ -4,6 +4,8 @@ import { useAuthStore } from '../features/auth/authStore'
 import { useBillingStore } from '../features/billing/billingStore'
 import { useClientStore } from '../features/clients/clientStore'
 import { useCloudStore } from '../features/cloud/cloudStore'
+import NotificationCenter from '../features/notifications/NotificationCenter'
+import { useNotificationStore } from '../features/notifications/notificationStore'
 import { useProjectStore } from '../features/projects/projectStore'
 import { useTaskStore } from '../features/tasks/taskStore'
 
@@ -24,6 +26,7 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
   const projectStore = useProjectStore()
   const taskStore = useTaskStore()
   const billingStore = useBillingStore()
+  const notificationStore = useNotificationStore()
   const [isOpen, setIsOpen] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -53,6 +56,7 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
         projectStore.refreshProjectsFromCloud(),
         taskStore.refreshTasksFromCloud(),
         billingStore.refreshBillingFromCloud(),
+        notificationStore.refreshNotificationsFromCloud(),
       ])
     } finally {
       setIsSyncing(false)
@@ -108,6 +112,7 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
         <button className="pulse-sync-button" type="button" onClick={() => void handleSync()} disabled={isSyncing}>
           {isSyncing ? 'SYNC...' : 'SYNC'}
         </button>
+        <NotificationCenter />
         <strong>{userName}</strong>
       </div>
       <nav className="pulse-desktop-nav" aria-label="Glavni meni">

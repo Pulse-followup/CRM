@@ -1,0 +1,376 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from 'react'
+import { getSupabaseClient } from '../../lib/supabaseClient'
+import { readStoredArray, writeStoredValue } from '../../shared/storage'
+import { useAuthStore } from '../auth/authStore'
+import { useCloudStore } from '../cloud/cloudStore'
+import { getAppBaseUrl } from './pushConfig'
+import { ensurePushRegistration, type PushStatus } from './pushService'
+import type { AppNotification, CreateNotificationInput, NotificationToast } from './types'
+
+const NOTIFICATIONS_STORAGE_KEY = 'pulse.notifications.v1'
+const CLOUD_READ_STATE_STORAGE_KEY = 'pulse.notifications.seen.v1'
+
+type CloudReadStatus = 'local' | 'loading' | 'cloud' | 'cloud-empty' | 'error'
+
+interface NotificationStoreValue {
+  notifications: AppNotification[]
+  unreadCount: number
+  toasts: NotificationToast[]
+  cloudReadStatus: CloudReadStatus
+  cloudReadError: string | null
+  pushStatus: PushStatus
+  refreshNotificationsFromCloud: () => Promise<void>
+  createNotification: (input: CreateNotificationInput) => Promise<AppNotification | null>
+  createNotifications: (inputs: CreateNotificationInput[]) => Promise<AppNotification[]>
+  markNotificationRead: (notificationId: string) => Promise<void>
+  dismissToast: (toastId: string) => void
+  enablePushNotifications: (allowPrompt?: boolean) => Promise<PushStatus>
+}
+
+const NotificationStoreContext = createContext<NotificationStoreValue | null>(null)
+
+function makeId(prefix: string) {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return `${prefix}-${crypto.randomUUID()}`
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function asString(value: unknown) {
+  return typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value)
+}
+
+function mapNotificationRowToReact(row: Record<string, unknown>): AppNotification {
+  const createdAt = asString(row.created_at) || new Date().toISOString()
+  return {
+    id: asString(row.id),
+    workspaceId: asString(row.workspace_id || row.workspaceId) || null,
+    recipientUserId: asString(row.recipient_user_id || row.recipientUserId),
+    type: asString(row.type) as AppNotification['type'],
+    title: asString(row.title),
+    body: asString(row.body),
+    entityType: asString(row.entity_type || row.entityType) as AppNotification['entityType'],
+    entityId: asString(row.entity_id || row.entityId),
+    readAt: (row.read_at as string | null | undefined) ?? null,
+    createdAt,
+  }
+}
+
+function mapNotificationToSupabaseRow(notification: AppNotification, workspaceId: string) {
+  return {
+    id: notification.id,
+    workspace_id: workspaceId,
+    recipient_user_id: notification.recipientUserId,
+    type: notification.type,
+    title: notification.title,
+    body: notification.body,
+    entity_type: notification.entityType,
+    entity_id: notification.entityId,
+    read_at: notification.readAt || null,
+    created_at: notification.createdAt,
+  }
+}
+
+function mergeNotifications(records: AppNotification[]) {
+  const map = new Map<string, AppNotification>()
+  records.forEach((record) => {
+    if (!record.id) return
+    map.set(record.id, record)
+  })
+  return Array.from(map.values()).sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+}
+
+function readSeenNotificationIds() {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(CLOUD_READ_STATE_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as string[]) : []
+  } catch {
+    return []
+  }
+}
+
+function writeSeenNotificationIds(ids: string[]) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(CLOUD_READ_STATE_STORAGE_KEY, JSON.stringify(ids.slice(-300)))
+  } catch {
+    // best effort
+  }
+}
+
+export function NotificationProvider({ children }: PropsWithChildren) {
+  const { currentUser, isCloudUser } = useAuthStore()
+  const { isConfigured, activeWorkspace } = useCloudStore()
+  const isCloudNotificationMode = Boolean(isConfigured && activeWorkspace?.id && isCloudUser)
+  const [localNotifications, setLocalNotifications] = useState<AppNotification[]>(() =>
+    readStoredArray(NOTIFICATIONS_STORAGE_KEY, []),
+  )
+  const [cloudNotifications, setCloudNotifications] = useState<AppNotification[]>([])
+  const [cloudReadStatus, setCloudReadStatus] = useState<CloudReadStatus>('local')
+  const [cloudReadError, setCloudReadError] = useState<string | null>(null)
+  const [toasts, setToasts] = useState<NotificationToast[]>([])
+  const [pushStatus, setPushStatus] = useState<PushStatus>('idle')
+  const seenNotificationIdsRef = useRef<Set<string>>(new Set(readSeenNotificationIds()))
+
+  const notifications = useMemo(
+    () =>
+      (isCloudNotificationMode ? cloudNotifications : localNotifications).filter(
+        (notification) => notification.recipientUserId === currentUser.id,
+      ),
+    [cloudNotifications, currentUser.id, isCloudNotificationMode, localNotifications],
+  )
+
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.readAt).length,
+    [notifications],
+  )
+
+  useEffect(() => {
+    if (!isCloudNotificationMode) {
+      writeStoredValue(NOTIFICATIONS_STORAGE_KEY, localNotifications)
+    }
+  }, [isCloudNotificationMode, localNotifications])
+
+  const enqueueToasts = useCallback((records: AppNotification[]) => {
+    const nextToasts = records
+      .filter((record) => record.recipientUserId === currentUser.id && !record.readAt)
+      .filter((record) => !seenNotificationIdsRef.current.has(record.id))
+      .map((record) => ({
+        id: makeId('toast'),
+        notificationId: record.id,
+        title: record.title,
+        body: record.body,
+      }))
+
+    if (!nextToasts.length) return
+
+    nextToasts.forEach((toast) => seenNotificationIdsRef.current.add(toast.notificationId))
+    writeSeenNotificationIds(Array.from(seenNotificationIdsRef.current))
+    setToasts((current) => [...current, ...nextToasts].slice(-4))
+  }, [currentUser.id])
+
+  const refreshNotificationsFromCloud = useCallback(async () => {
+    const supabase = getSupabaseClient()
+
+    if (!isConfigured || !supabase || !activeWorkspace?.id || !isCloudUser) {
+      setCloudReadStatus('local')
+      setCloudReadError(null)
+      return
+    }
+
+    setCloudReadStatus('loading')
+    setCloudReadError(null)
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('workspace_id', activeWorkspace.id)
+      .eq('recipient_user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (error) {
+      setCloudReadStatus('error')
+      setCloudReadError(error.message || 'Notifikacije nisu ucitane iz Supabase-a.')
+      setCloudNotifications([])
+      return
+    }
+
+    const nextNotifications = Array.isArray(data)
+      ? data.map((row) => mapNotificationRowToReact(row as Record<string, unknown>)).filter((item) => item.id)
+      : []
+
+    setCloudNotifications(nextNotifications)
+    enqueueToasts(nextNotifications)
+    setCloudReadStatus(nextNotifications.length ? 'cloud' : 'cloud-empty')
+  }, [activeWorkspace?.id, currentUser.id, enqueueToasts, isCloudUser, isConfigured])
+
+  useEffect(() => {
+    if (isCloudNotificationMode) {
+      setCloudNotifications([])
+      void refreshNotificationsFromCloud()
+    }
+  }, [isCloudNotificationMode, refreshNotificationsFromCloud])
+
+  const enablePushNotifications = useCallback(async (allowPrompt = false) => {
+    if (!activeWorkspace?.id || !currentUser.id || !isCloudNotificationMode) {
+      setPushStatus('disabled')
+      return 'disabled'
+    }
+
+    const nextStatus = await ensurePushRegistration({
+      workspaceId: activeWorkspace.id,
+      userId: currentUser.id,
+      allowPrompt,
+      onForegroundMessage: () => {
+        void refreshNotificationsFromCloud()
+      },
+    })
+    setPushStatus(nextStatus)
+    return nextStatus
+  }, [activeWorkspace?.id, currentUser.id, isCloudNotificationMode, refreshNotificationsFromCloud])
+
+  useEffect(() => {
+    if (!isCloudNotificationMode || typeof window === 'undefined') {
+      setPushStatus('disabled')
+      return
+    }
+
+    if (window.Notification?.permission === 'granted') {
+      void enablePushNotifications(false)
+      return
+    }
+
+    setPushStatus('idle')
+  }, [enablePushNotifications, isCloudNotificationMode])
+
+  const createNotifications = useCallback(async (inputs: CreateNotificationInput[]) => {
+    const deduped = inputs.filter((input, index, array) =>
+      Boolean(input.recipientUserId) &&
+      array.findIndex((candidate) =>
+        candidate.recipientUserId === input.recipientUserId &&
+        candidate.type === input.type &&
+        candidate.entityType === input.entityType &&
+        candidate.entityId === input.entityId,
+      ) === index,
+    )
+
+    if (!deduped.length) return []
+
+    const now = new Date().toISOString()
+    const records: AppNotification[] = deduped.map((input) => ({
+      id: makeId('notification'),
+      workspaceId: activeWorkspace?.id || null,
+      recipientUserId: input.recipientUserId,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      readAt: null,
+      createdAt: now,
+    }))
+
+    if (isCloudNotificationMode) {
+      const supabase = getSupabaseClient()
+      if (!supabase || !activeWorkspace?.id) return []
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .insert(records.map((record) => mapNotificationToSupabaseRow(record, activeWorkspace.id!)))
+        .select('*')
+
+      if (error) {
+        setCloudReadStatus('error')
+        setCloudReadError(error.message)
+        return []
+      }
+
+      const savedRecords = Array.isArray(data)
+        ? data.map((row) => mapNotificationRowToReact(row as Record<string, unknown>))
+        : records
+      setCloudNotifications((current) => mergeNotifications([...savedRecords, ...current]))
+      enqueueToasts(savedRecords)
+      if (savedRecords.length) {
+        void supabase.functions.invoke('send-notification-push', {
+          body: {
+            workspaceId: activeWorkspace.id,
+            notificationIds: savedRecords.map((record) => record.id),
+            appBaseUrl: getAppBaseUrl(),
+          },
+        })
+      }
+      return savedRecords
+    }
+
+    setLocalNotifications((current) => mergeNotifications([...records, ...current]))
+    enqueueToasts(records)
+    return records
+  }, [activeWorkspace?.id, enqueueToasts, isCloudNotificationMode])
+
+  const createNotification = useCallback(
+    async (input: CreateNotificationInput) => {
+      const created = await createNotifications([input])
+      return created[0] ?? null
+    },
+    [createNotifications],
+  )
+
+  const markNotificationRead = useCallback(async (notificationId: string) => {
+    const readAt = new Date().toISOString()
+
+    if (isCloudNotificationMode) {
+      const supabase = getSupabaseClient()
+      if (supabase) {
+        const { error } = await supabase
+          .from('notifications')
+          .update({ read_at: readAt })
+          .eq('id', notificationId)
+          .eq('recipient_user_id', currentUser.id)
+        if (error) {
+          setCloudReadStatus('error')
+          setCloudReadError(error.message)
+          return
+        }
+      }
+      setCloudNotifications((current) =>
+        current.map((item) => (item.id === notificationId ? { ...item, readAt } : item)),
+      )
+    } else {
+      setLocalNotifications((current) =>
+        current.map((item) => (item.id === notificationId ? { ...item, readAt } : item)),
+      )
+    }
+  }, [currentUser.id, isCloudNotificationMode])
+
+  const dismissToast = useCallback((toastId: string) => {
+    setToasts((current) => current.filter((toast) => toast.id !== toastId))
+  }, [])
+
+  const value = useMemo<NotificationStoreValue>(
+    () => ({
+      notifications,
+      unreadCount,
+      toasts,
+      cloudReadStatus,
+      cloudReadError,
+      pushStatus,
+      refreshNotificationsFromCloud,
+      createNotification,
+      createNotifications,
+      markNotificationRead,
+      dismissToast,
+      enablePushNotifications,
+    }),
+    [
+      cloudReadError,
+      cloudReadStatus,
+      createNotification,
+      createNotifications,
+      dismissToast,
+      enablePushNotifications,
+      markNotificationRead,
+      notifications,
+      pushStatus,
+      refreshNotificationsFromCloud,
+      toasts,
+      unreadCount,
+    ],
+  )
+
+  return <NotificationStoreContext.Provider value={value}>{children}</NotificationStoreContext.Provider>
+}
+
+export function useNotificationStore() {
+  const context = useContext(NotificationStoreContext)
+  if (!context) throw new Error('useNotificationStore must be used within NotificationProvider')
+  return context
+}

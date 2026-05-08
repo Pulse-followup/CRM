@@ -8,7 +8,9 @@ import {
   type PropsWithChildren,
 } from 'react'
 import { readStoredArray, writeStoredValue } from '../../shared/storage'
+import { useAuthStore } from '../auth/authStore'
 import { useCloudStore } from '../cloud/cloudStore'
+import { useNotificationStore } from '../notifications/notificationStore'
 import { useProjectStore } from '../projects/projectStore'
 import { useTaskStore } from '../tasks/taskStore'
 import { getBillingStatus } from './billingLifecycle'
@@ -193,7 +195,9 @@ function mergeBillingRows(records: BillingRecord[]) {
 }
 
 export function BillingProvider({ children }: PropsWithChildren) {
-  const { isConfigured, activeWorkspace } = useCloudStore()
+  const { isConfigured, activeWorkspace, members } = useCloudStore()
+  const { users } = useAuthStore()
+  const { createNotifications } = useNotificationStore()
   const isCloudBillingMode = Boolean(isConfigured && activeWorkspace?.id)
   const [localBilling, setLocalBilling] = useState<BillingRecord[]>(() =>
     readStoredArray(BILLING_STORAGE_KEY, mockBilling).map(normalizeRuntimeStatus),
@@ -336,6 +340,7 @@ export function BillingProvider({ children }: PropsWithChildren) {
   const replaceRecord = useCallback(
     async (record: BillingRecord) => {
       const normalizedRecord = normalizeRuntimeStatus(record)
+      const previousRecord = selectBillingById(billing, record.id)
       let savedRecord = normalizedRecord
 
       if (isCloudBillingMode) {
@@ -357,9 +362,28 @@ export function BillingProvider({ children }: PropsWithChildren) {
       }
 
       syncProjectBilling(savedRecord)
+      const previousStatus = previousRecord ? getBillingStatus(previousRecord) : 'none'
+      const nextStatus = getBillingStatus(savedRecord)
+      if (previousStatus !== 'overdue' && nextStatus === 'overdue') {
+        const recipientUserIds = isCloudBillingMode
+          ? Array.from(new Set(members.filter((member) => member.role === 'admin' || member.role === 'finance').map((member) => member.user_id)))
+          : Array.from(new Set(users.filter((appUser) => appUser.role === 'admin' || appUser.role === 'finance').map((appUser) => appUser.id)))
+        if (recipientUserIds.length) {
+          void createNotifications(
+            recipientUserIds.map((recipientUserId) => ({
+              recipientUserId,
+              type: 'invoice_overdue' as const,
+              title: 'Faktura kasni',
+              body: savedRecord.projectName || savedRecord.description || 'Jedan nalog za naplatu je usao u kasnjenje.',
+              entityType: 'billing' as const,
+              entityId: savedRecord.id,
+            })),
+          )
+        }
+      }
       return savedRecord
     },
-    [isCloudBillingMode, persistCloudBilling, syncProjectBilling],
+    [billing, createNotifications, isCloudBillingMode, members, persistCloudBilling, syncProjectBilling, users],
   )
 
   const createBillingForProject = useCallback(

@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 import { mockTasks } from './mockTasks'
 import { readStoredArray, writeStoredValue } from '../../shared/storage'
+import { useAuthStore } from '../auth/authStore'
 import { useCloudStore } from '../cloud/cloudStore'
+import { useNotificationStore } from '../notifications/notificationStore'
 import { getSupabaseClient } from '../../lib/supabaseClient'
 import {
   getTaskById as selectTaskById,
@@ -9,6 +11,7 @@ import {
   getTasksByProject as selectTasksByProject,
 } from './taskSelectors'
 import type { Task, TaskBillingState, TaskStatus, TaskType } from './types'
+import { isTaskCompleted } from './taskLifecycle'
 
 const TASKS_STORAGE_KEY = 'pulse.tasks.v1'
 
@@ -223,8 +226,22 @@ function activateNextWorkflowTask(updatedTask: Task, allTasks: Task[]) {
   }
 }
 
+function getTaskAssigneeNotification(task: Task) {
+  if (!task.assignedToUserId) return null
+  return {
+    recipientUserId: task.assignedToUserId,
+    type: 'task_assigned' as const,
+    title: 'Dodeljen ti je task',
+    body: task.title || 'Otvoren je novi task za tebe.',
+    entityType: 'task' as const,
+    entityId: task.id,
+  }
+}
+
 export function TaskProvider({ children }: PropsWithChildren) {
-  const { isConfigured, activeWorkspace, user } = useCloudStore()
+  const { isConfigured, activeWorkspace, user, members } = useCloudStore()
+  const { users } = useAuthStore()
+  const { createNotifications } = useNotificationStore()
   const isCloudTaskMode = Boolean(isConfigured && activeWorkspace?.id)
   const [localTasks, setLocalTasks] = useState<Task[]>(() => readStoredArray(TASKS_STORAGE_KEY, mockTasks))
   const [cloudTasks, setCloudTasks] = useState<Task[]>([])
@@ -300,6 +317,7 @@ export function TaskProvider({ children }: PropsWithChildren) {
   const updateTask = useCallback(
     async (updatedTask: Task) => {
       const now = new Date().toISOString()
+      const previousTask = tasks.find((task) => task.id === updatedTask.id) || null
       const normalizedTask: Task =
         (updatedTask.status === 'dodeljen' || updatedTask.status === 'u_radu') && !updatedTask.activatedAt
           ? { ...updatedTask, activatedAt: now, updatedAt: updatedTask.updatedAt || now }
@@ -332,6 +350,35 @@ export function TaskProvider({ children }: PropsWithChildren) {
             }
           }
         }
+        const notifications = []
+        const assigneeChanged = normalizedTask.assignedToUserId && previousTask?.assignedToUserId !== normalizedTask.assignedToUserId
+        if (assigneeChanged) {
+          const assignedNotification = getTaskAssigneeNotification(normalizedTask)
+          if (assignedNotification) notifications.push(assignedNotification)
+        }
+        const justCompleted = previousTask ? !isTaskCompleted(previousTask) && isTaskCompleted(normalizedTask) : false
+        if (justCompleted) {
+          const adminAndFinanceIds = Array.from(
+            new Set(
+              members
+                .filter((member) => member.role === 'admin' || member.role === 'finance')
+                .map((member) => member.user_id),
+            ),
+          )
+          adminAndFinanceIds.forEach((recipientUserId) => {
+            notifications.push({
+              recipientUserId,
+              type: 'task_completed' as const,
+              title: 'Task je zavrsen',
+              body: normalizedTask.title || 'Jedan task je oznacen kao zavrsen.',
+              entityType: 'task' as const,
+              entityId: normalizedTask.id,
+            })
+          })
+        }
+        if (notifications.length) {
+          void createNotifications(notifications)
+        }
         return
       }
 
@@ -343,8 +390,37 @@ export function TaskProvider({ children }: PropsWithChildren) {
           return task
         })
       })
+      const notifications = []
+      const assigneeChanged = normalizedTask.assignedToUserId && previousTask?.assignedToUserId !== normalizedTask.assignedToUserId
+      if (assigneeChanged) {
+        const assignedNotification = getTaskAssigneeNotification(normalizedTask)
+        if (assignedNotification) notifications.push(assignedNotification)
+      }
+      const justCompleted = previousTask ? !isTaskCompleted(previousTask) && isTaskCompleted(normalizedTask) : false
+      if (justCompleted) {
+        const adminAndFinanceIds = Array.from(
+          new Set(
+            users
+              .filter((appUser) => appUser.role === 'admin' || appUser.role === 'finance')
+              .map((appUser) => appUser.id),
+          ),
+        )
+        adminAndFinanceIds.forEach((recipientUserId) => {
+          notifications.push({
+            recipientUserId,
+            type: 'task_completed' as const,
+            title: 'Task je zavrsen',
+            body: normalizedTask.title || 'Jedan task je oznacen kao zavrsen.',
+            entityType: 'task' as const,
+            entityId: normalizedTask.id,
+          })
+        })
+      }
+      if (notifications.length) {
+        void createNotifications(notifications)
+      }
     },
-    [activeWorkspace?.id, cloudTasks, isCloudTaskMode, user?.id],
+    [activeWorkspace?.id, createNotifications, isCloudTaskMode, members, tasks, user?.id, users],
   )
 
   const addTask = useCallback(
@@ -369,15 +445,19 @@ export function TaskProvider({ children }: PropsWithChildren) {
           const savedTask = mapTaskRowToReact(data as Record<string, unknown>)
           setCloudTasks((current) => [savedTask, ...current.filter((item) => item.id !== nextTask.id)])
           setCloudReadStatus('cloud')
+          const assignedNotification = getTaskAssigneeNotification(savedTask)
+          if (assignedNotification) void createNotifications([assignedNotification])
           return savedTask
         }
         return nextTask
       }
 
       setLocalTasks((current) => [task, ...current])
+      const assignedNotification = getTaskAssigneeNotification(task)
+      if (assignedNotification) void createNotifications([assignedNotification])
       return task
     },
-    [activeWorkspace?.id, isCloudTaskMode, user?.id],
+    [activeWorkspace?.id, createNotifications, isCloudTaskMode, user?.id],
   )
 
   const value = useMemo<TaskStoreValue>(

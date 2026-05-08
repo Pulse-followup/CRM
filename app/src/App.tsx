@@ -5,6 +5,8 @@ import { AuthProvider, useAuthStore } from './features/auth/authStore'
 import { CloudProvider, useCloudStore } from './features/cloud/cloudStore'
 import { BillingProvider } from './features/billing/billingStore'
 import { ClientProvider } from './features/clients/clientStore'
+import NotificationToasts from './features/notifications/NotificationToasts'
+import { NotificationProvider } from './features/notifications/notificationStore'
 import { ProjectProvider } from './features/projects/projectStore'
 import ProjectDetail from './features/projects/pages/ProjectDetail'
 import TaskDetail from './features/tasks/pages/TaskDetail'
@@ -34,15 +36,17 @@ function App() {
   return (
     <CloudProvider>
       <AuthProvider>
-        <ClientProvider>
-          <ProjectProvider>
-            <TaskProvider>
-              <BillingProvider>
-                <AppRoutes />
-              </BillingProvider>
-            </TaskProvider>
-          </ProjectProvider>
-        </ClientProvider>
+        <NotificationProvider>
+          <ClientProvider>
+            <ProjectProvider>
+              <TaskProvider>
+                <BillingProvider>
+                  <AppRoutes />
+                </BillingProvider>
+              </TaskProvider>
+            </ProjectProvider>
+          </ClientProvider>
+        </NotificationProvider>
       </AuthProvider>
     </CloudProvider>
   )
@@ -123,6 +127,7 @@ function AppRoutes() {
         </Routes>
       </BrowserRouter>
       <PulseWelcomeGuide isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
+      <NotificationToasts />
     </>
   )
 }
