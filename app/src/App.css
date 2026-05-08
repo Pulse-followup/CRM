@@ -4466,6 +4466,10 @@
 }
 
 @media (max-width: 760px) {
+  .pulse-topbar {
+    overflow: visible;
+  }
+
   .pulse-user-block {
     gap: 8px;
   }
@@ -4476,8 +4480,13 @@
   }
 
   .pulse-notification-dropdown {
-    right: -8px;
-    width: min(340px, calc(100vw - 20px));
+    position: fixed;
+    top: calc(88px + var(--app-safe-top));
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(340px, calc(100vw - 20px - var(--app-safe-left) - var(--app-safe-right)));
+    max-width: calc(100vw - 20px - var(--app-safe-left) - var(--app-safe-right));
   }
 
   .pulse-toast-stack {

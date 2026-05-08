@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useNotificationStore } from './notificationStore'
 
@@ -10,10 +10,35 @@ function getNotificationLink(entityType: 'task' | 'billing', entityId: string) {
 function NotificationCenter() {
   const { notifications, unreadCount, markNotificationRead, enablePushNotifications } = useNotificationStore()
   const [isOpen, setIsOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const items = useMemo(() => notifications.slice(0, 12), [notifications])
 
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+
   return (
-    <div className="pulse-notifications">
+    <div className="pulse-notifications" ref={rootRef}>
       <button
         type="button"
         className={`pulse-bell-button${isOpen ? ' is-open' : ''}`}
