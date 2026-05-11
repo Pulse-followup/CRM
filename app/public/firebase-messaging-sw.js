@@ -1,10 +1,10 @@
 const firebaseConfig = {
-  apiKey: 'AIzaSyDkstAifmb_ZjviNzAOBJVnA5ZhxDrKYcQ',
+  apiKey: 'AIzaSyDSGziRMso52EFLkj06ldU27LqYfnu6svw',
   authDomain: 'pulse-7072b.firebaseapp.com',
   projectId: 'pulse-7072b',
   storageBucket: 'pulse-7072b.firebasestorage.app',
   messagingSenderId: '523914677345',
-  appId: '1:523914677345:web:ceac7f2eca39751fc66e20',
+  appId: '1:523914677345:web:cf8e71a81e87b247c66e20',
   measurementId: 'G-Q2TMG7P5DF',
 }
 const basePath = '/CRM/'
