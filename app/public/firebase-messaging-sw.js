@@ -1,5 +1,5 @@
 const firebaseConfig = {
-  apiKey: 'AIzaSyDvSNsv5nWMXMOa4hW1ji0O0aPw4IgTf00',
+  apiKey: 'AIzaSyDkstAifmb_ZjviNzAOBJVnA5ZhxDrKYcQ',
   authDomain: 'pulse-7072b.firebaseapp.com',
   projectId: 'pulse-7072b',
   storageBucket: 'pulse-7072b.firebasestorage.app',
