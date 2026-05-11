@@ -1,5 +1,6 @@
 export type NotificationType =
   | 'task_assigned'
+  | 'task_taken'
   | 'task_completed'
   | 'invoice_overdue'
 

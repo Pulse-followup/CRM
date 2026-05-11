@@ -158,47 +158,16 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   }, [currentUser.id])
 
   const refreshNotificationsFromCloud = useCallback(async () => {
-    const supabase = getSupabaseClient()
-
-    if (!isConfigured || !supabase || !activeWorkspace?.id || !isCloudUser) {
+    if (!isConfigured || !activeWorkspace?.id || !isCloudUser) {
       setCloudReadStatus('local')
       setCloudReadError(null)
       return
     }
 
-    setCloudReadStatus('loading')
+    setCloudNotifications([])
+    setCloudReadStatus('cloud-empty')
     setCloudReadError(null)
-
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('workspace_id', activeWorkspace.id)
-      .eq('recipient_user_id', currentUser.id)
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    if (error) {
-      setCloudReadStatus('error')
-      setCloudReadError(error.message || 'Notifikacije nisu ucitane iz Supabase-a.')
-      setCloudNotifications([])
-      return
-    }
-
-    const nextNotifications = Array.isArray(data)
-      ? data.map((row) => mapNotificationRowToReact(row as Record<string, unknown>)).filter((item) => item.id)
-      : []
-
-    setCloudNotifications(nextNotifications)
-    enqueueToasts(nextNotifications)
-    setCloudReadStatus(nextNotifications.length ? 'cloud' : 'cloud-empty')
-  }, [activeWorkspace?.id, currentUser.id, enqueueToasts, isCloudUser, isConfigured])
-
-  useEffect(() => {
-    if (isCloudNotificationMode) {
-      setCloudNotifications([])
-      void refreshNotificationsFromCloud()
-    }
-  }, [isCloudNotificationMode, refreshNotificationsFromCloud])
+  }, [activeWorkspace?.id, isCloudUser, isConfigured])
 
   const enablePushNotifications = useCallback(async (allowPrompt = false) => {
     if (!activeWorkspace?.id || !currentUser.id || !isCloudNotificationMode) {
@@ -210,9 +179,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       workspaceId: activeWorkspace.id,
       userId: currentUser.id,
       allowPrompt,
-      onForegroundMessage: () => {
-        void refreshNotificationsFromCloud()
-      },
+      onForegroundMessage: () => undefined,
     })
     setPushStatus(nextStatus)
     return nextStatus

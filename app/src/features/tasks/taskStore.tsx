@@ -238,6 +238,47 @@ function getTaskAssigneeNotification(task: Task) {
   }
 }
 
+function getTaskAdminRecipientIds(
+  membersOrUsers: Array<{ user_id?: string; id?: string; role?: string }>,
+) {
+  return Array.from(
+    new Set(
+      membersOrUsers
+        .filter((item) => item.role === 'admin' || item.role === 'finance')
+        .map((item) => item.user_id || item.id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  )
+}
+
+function getTaskTakenNotifications(
+  task: Task,
+  recipientIds: string[],
+  assignedLabel?: string,
+) {
+  return recipientIds.map((recipientUserId) => ({
+    recipientUserId,
+    type: 'task_taken' as const,
+    title: 'Task je preuzet',
+    body: assignedLabel
+      ? `${assignedLabel} je preuzeo/la task "${task.title || 'Task'}".`
+      : `Task "${task.title || 'Task'}" je preuzet.`,
+    entityType: 'task' as const,
+    entityId: task.id,
+  }))
+}
+
+function getTaskCompletedNotifications(task: Task, recipientIds: string[]) {
+  return recipientIds.map((recipientUserId) => ({
+    recipientUserId,
+    type: 'task_completed' as const,
+    title: 'Task je zavrsen',
+    body: task.title || 'Jedan task je oznacen kao zavrsen.',
+    entityType: 'task' as const,
+    entityId: task.id,
+  }))
+}
+
 export function TaskProvider({ children }: PropsWithChildren) {
   const { isConfigured, activeWorkspace, user, members } = useCloudStore()
   const { users } = useAuthStore()
@@ -351,30 +392,23 @@ export function TaskProvider({ children }: PropsWithChildren) {
           }
         }
         const notifications = []
+        const adminAndFinanceIds = getTaskAdminRecipientIds(members)
         const assigneeChanged = normalizedTask.assignedToUserId && previousTask?.assignedToUserId !== normalizedTask.assignedToUserId
         if (assigneeChanged) {
           const assignedNotification = getTaskAssigneeNotification(normalizedTask)
           if (assignedNotification) notifications.push(assignedNotification)
         }
+        const justTaken =
+          previousTask?.status !== 'u_radu' &&
+          normalizedTask.status === 'u_radu'
+        if (justTaken) {
+          notifications.push(
+            ...getTaskTakenNotifications(normalizedTask, adminAndFinanceIds, normalizedTask.assignedToLabel),
+          )
+        }
         const justCompleted = previousTask ? !isTaskCompleted(previousTask) && isTaskCompleted(normalizedTask) : false
         if (justCompleted) {
-          const adminAndFinanceIds = Array.from(
-            new Set(
-              members
-                .filter((member) => member.role === 'admin' || member.role === 'finance')
-                .map((member) => member.user_id),
-            ),
-          )
-          adminAndFinanceIds.forEach((recipientUserId) => {
-            notifications.push({
-              recipientUserId,
-              type: 'task_completed' as const,
-              title: 'Task je zavrsen',
-              body: normalizedTask.title || 'Jedan task je oznacen kao zavrsen.',
-              entityType: 'task' as const,
-              entityId: normalizedTask.id,
-            })
-          })
+          notifications.push(...getTaskCompletedNotifications(normalizedTask, adminAndFinanceIds))
         }
         if (notifications.length) {
           void createNotifications(notifications)
@@ -391,30 +425,23 @@ export function TaskProvider({ children }: PropsWithChildren) {
         })
       })
       const notifications = []
+      const adminAndFinanceIds = getTaskAdminRecipientIds(users)
       const assigneeChanged = normalizedTask.assignedToUserId && previousTask?.assignedToUserId !== normalizedTask.assignedToUserId
       if (assigneeChanged) {
         const assignedNotification = getTaskAssigneeNotification(normalizedTask)
         if (assignedNotification) notifications.push(assignedNotification)
       }
+      const justTaken =
+        previousTask?.status !== 'u_radu' &&
+        normalizedTask.status === 'u_radu'
+      if (justTaken) {
+        notifications.push(
+          ...getTaskTakenNotifications(normalizedTask, adminAndFinanceIds, normalizedTask.assignedToLabel),
+        )
+      }
       const justCompleted = previousTask ? !isTaskCompleted(previousTask) && isTaskCompleted(normalizedTask) : false
       if (justCompleted) {
-        const adminAndFinanceIds = Array.from(
-          new Set(
-            users
-              .filter((appUser) => appUser.role === 'admin' || appUser.role === 'finance')
-              .map((appUser) => appUser.id),
-          ),
-        )
-        adminAndFinanceIds.forEach((recipientUserId) => {
-          notifications.push({
-            recipientUserId,
-            type: 'task_completed' as const,
-            title: 'Task je zavrsen',
-            body: normalizedTask.title || 'Jedan task je oznacen kao zavrsen.',
-            entityType: 'task' as const,
-            entityId: normalizedTask.id,
-          })
-        })
+        notifications.push(...getTaskCompletedNotifications(normalizedTask, adminAndFinanceIds))
       }
       if (notifications.length) {
         void createNotifications(notifications)
