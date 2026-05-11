@@ -68,6 +68,10 @@ function TaskCard({ task, onTaskChange, compact = false }: TaskCardProps) {
   const isWaitingForPreviousStep =
     task.status === "na_cekanju" && Boolean(task.dependsOnTaskId);
   const isAdmin = currentUser.role === "admin";
+  const canTakeTask =
+    currentUser.role === "user" &&
+    task.status === "dodeljen" &&
+    task.assignedToUserId === currentUser.id;
   const assignedUser = task.assignedToUserId
     ? users.find((user) => user.id === task.assignedToUserId)
     : null;
@@ -87,7 +91,7 @@ function TaskCard({ task, onTaskChange, compact = false }: TaskCardProps) {
   }, [task]);
 
   const handleStart = () => {
-    if (!onTaskChange || task.status !== "dodeljen") return;
+    if (!onTaskChange || !canTakeTask) return;
     onTaskChange(startTask(task));
   };
 
@@ -274,7 +278,7 @@ function TaskCard({ task, onTaskChange, compact = false }: TaskCardProps) {
                 Re-dodeli
               </button>
             ) : null}
-            {task.status === "dodeljen" ? (
+            {canTakeTask ? (
               <button
                 type="button"
                 className="customer-project-toggle"
@@ -574,7 +578,7 @@ function TaskCard({ task, onTaskChange, compact = false }: TaskCardProps) {
             </button>
           ) : null}
 
-          {task.status === "dodeljen" ? (
+          {canTakeTask ? (
             <button
               type="button"
               className="customer-project-toggle"

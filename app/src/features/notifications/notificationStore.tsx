@@ -28,6 +28,8 @@ interface NotificationStoreValue {
   cloudReadStatus: CloudReadStatus
   cloudReadError: string | null
   pushStatus: PushStatus
+  isNotificationSeen: (notificationId: string) => boolean
+  markNotificationSeen: (notificationId: string) => void
   refreshNotificationsFromCloud: () => Promise<void>
   createNotification: (input: CreateNotificationInput) => Promise<AppNotification | null>
   createNotifications: (inputs: CreateNotificationInput[]) => Promise<AppNotification[]>
@@ -156,6 +158,17 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     writeSeenNotificationIds(Array.from(seenNotificationIdsRef.current))
     setToasts((current) => [...current, ...nextToasts].slice(-4))
   }, [currentUser.id])
+
+  const isNotificationSeen = useCallback((notificationId: string) => {
+    return seenNotificationIdsRef.current.has(notificationId)
+  }, [])
+
+  const markNotificationSeen = useCallback((notificationId: string) => {
+    if (!notificationId || seenNotificationIdsRef.current.has(notificationId)) return
+    seenNotificationIdsRef.current.add(notificationId)
+    writeSeenNotificationIds(Array.from(seenNotificationIdsRef.current))
+    setToasts((current) => current.filter((toast) => toast.notificationId !== notificationId))
+  }, [])
 
   const refreshNotificationsFromCloud = useCallback(async () => {
     if (!isConfigured || !activeWorkspace?.id || !isCloudUser) {
@@ -305,6 +318,8 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       cloudReadStatus,
       cloudReadError,
       pushStatus,
+      isNotificationSeen,
+      markNotificationSeen,
       refreshNotificationsFromCloud,
       createNotification,
       createNotifications,
@@ -319,6 +334,8 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       createNotifications,
       dismissToast,
       enablePushNotifications,
+      isNotificationSeen,
+      markNotificationSeen,
       markNotificationRead,
       notifications,
       pushStatus,

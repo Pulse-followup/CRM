@@ -87,13 +87,17 @@ function buildDerivedNotificationFeed(tasks: Task[], currentUser: AppUser) {
 }
 
 function NotificationCenter() {
-  const { enablePushNotifications } = useNotificationStore()
+  const { enablePushNotifications, isNotificationSeen, markNotificationSeen } = useNotificationStore()
   const { currentUser } = useAuthStore()
   const { tasks } = useTaskStore()
   const [isOpen, setIsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const items = useMemo(() => buildDerivedNotificationFeed(tasks, currentUser), [currentUser, tasks])
-  const unreadCount = items.length
+  const unreadItems = useMemo(
+    () => items.filter((item) => !isNotificationSeen(item.id)),
+    [isNotificationSeen, items],
+  )
+  const unreadCount = unreadItems.length
 
   useEffect(() => {
     if (!isOpen) return
@@ -141,12 +145,13 @@ function NotificationCenter() {
             <span>{unreadCount ? `${unreadCount} neprocitanih` : 'Sve procitano'}</span>
           </div>
           <div className="pulse-notification-list">
-            {items.length ? items.map((item) => (
+            {unreadItems.length ? unreadItems.map((item) => (
               <Link
                 key={item.id}
                 to={getNotificationLink(item.entityType, item.entityId)}
                 className="pulse-notification-item is-unread"
                 onClick={() => {
+                  markNotificationSeen(item.id)
                   setIsOpen(false)
                 }}
               >

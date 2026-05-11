@@ -65,6 +65,13 @@ type ModalState =
   | { type: "project"; project: Project }
   | { type: "billing"; record: BillingRecord }
   | { type: "client"; client: Client; score: number }
+  | {
+      type: "member-tasks";
+      memberName: string;
+      tasks: Task[];
+      activeCount: number;
+      lateCount: number;
+    }
   | { type: "create-client" }
   | { type: "create-project"; clientId?: string }
   | null;
@@ -863,6 +870,36 @@ function AdminModal({
             onCreateBilling={onCreateBillingFromProject}
           />
         ) : null}
+        {state.type === "member-tasks" ? (
+          <>
+            <h3>{state.memberName} - taskovi</h3>
+            <p>
+              <strong>{state.activeCount}</strong> aktivna ·{" "}
+              <strong>{state.lateCount}</strong> kasni
+            </p>
+            <div className="pulse-team-task-peek">
+              {state.tasks.length ? (
+                state.tasks.map((task) => (
+                  <div key={task.id} className="pulse-team-task-row">
+                    <span>{task.title}</span>
+                    <small>
+                      {task.projectId
+                        ? projects.find((project) => project.id === task.projectId)
+                            ?.title ?? "Nepoznat projekat"
+                        : `${clients.find((client) => String(client.id) === String(task.clientId))?.name ?? "Nepoznat klijent"} · Ad hoc`}{" "}
+                      ·{" "}
+                      {isOverdueDate(task.dueDate)
+                        ? "Kasni"
+                        : TASK_STATUS_LABELS[task.status]}
+                    </small>
+                  </div>
+                ))
+              ) : (
+                <p>Nema zadataka za prikaz.</p>
+              )}
+            </div>
+          </>
+        ) : null}
         {state.type === "client" ? (
           <ClientCardDrawer
             client={state.client}
@@ -908,7 +945,7 @@ function AdminModal({
 function AdminHome() {
   const navigate = useNavigate();
   const { activeWorkspace, members, isConfigured } = useCloudStore();
-  const [expandedTeamMemberId, setExpandedTeamMemberId] = useState<
+  const [selectedTeamMemberId, setSelectedTeamMemberId] = useState<
     string | null
   >(null);
   const { clients, addClient, updateClient } = useClientStore();
@@ -1223,9 +1260,6 @@ function AdminHome() {
     if (task.projectId && !projectById.has(task.projectId)) return false;
     return true;
   });
-  const teamVisibleTasks = validTeamTasks.filter(
-    (task) => isTaskOpen(task) || isTaskCompleted(task),
-  );
   const teamActiveTasks = validTeamTasks.filter(isTaskOpen);
   const activeTeamMembers = members
     .filter((member) => member.status !== "invited")
@@ -1234,8 +1268,6 @@ function AdminHome() {
     .sort((first, second) =>
       memberDisplayName(first).localeCompare(memberDisplayName(second), "sr"),
     );
-  const teamTasksForMember = (memberId: string) =>
-    teamVisibleTasks.filter((task) => task.assignedToUserId === memberId);
   const teamActiveTasksForMember = (memberId: string) =>
     teamActiveTasks.filter((task) => task.assignedToUserId === memberId);
   const openWorkspaceMember = (memberId: string) => {
@@ -1600,8 +1632,8 @@ function AdminHome() {
         <div className="pulse-team-bubbles" aria-label="Filter po clanu tima">
           <button
             type="button"
-            className={`pulse-team-bubble ${expandedTeamMemberId === null ? "is-active" : ""}`}
-            onClick={() => setExpandedTeamMemberId(null)}
+            className={`pulse-team-bubble ${selectedTeamMemberId === null ? "is-active" : ""}`}
+            onClick={() => setSelectedTeamMemberId(null)}
           >
             Svi
           </button>
@@ -1609,8 +1641,8 @@ function AdminHome() {
             <button
               key={member.id || member.user_id}
               type="button"
-              className={`pulse-team-bubble ${expandedTeamMemberId === member.user_id ? "is-active" : ""}`}
-              onClick={() => setExpandedTeamMemberId(member.user_id)}
+              className={`pulse-team-bubble ${selectedTeamMemberId === member.user_id ? "is-active" : ""}`}
+              onClick={() => setSelectedTeamMemberId(member.user_id)}
             >
               {memberDisplayName(member)}
             </button>
@@ -1621,18 +1653,16 @@ function AdminHome() {
             activeTeamMembers
               .filter(
                 (member) =>
-                  !expandedTeamMemberId ||
-                  member.user_id === expandedTeamMemberId,
+                  !selectedTeamMemberId ||
+                  member.user_id === selectedTeamMemberId,
               )
               .map((member) => {
-                const memberTasks = teamTasksForMember(member.user_id);
                 const activeMemberTasks = teamActiveTasksForMember(
                   member.user_id,
                 );
                 const lateMemberTasks = activeMemberTasks.filter((task) =>
                   isOverdueDate(task.dueDate),
                 );
-                const isExpanded = expandedTeamMemberId === member.user_id;
                 return (
                   <article
                     className={`pulse-team-member-card ${lateMemberTasks.length ? "has-late" : ""}`}
@@ -1680,48 +1710,17 @@ function AdminHome() {
                       className="pulse-outline-btn pulse-team-tasks-button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setExpandedTeamMemberId(
-                          isExpanded ? null : member.user_id,
-                        );
+                        setModal({
+                          type: "member-tasks",
+                          memberName: memberDisplayName(member),
+                          tasks: activeMemberTasks,
+                          activeCount: activeMemberTasks.length,
+                          lateCount: lateMemberTasks.length,
+                        });
                       }}
                     >
                       Taskovi
                     </button>
-                    {isExpanded ? (
-                      <div
-                        className="pulse-team-task-peek"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {memberTasks.length ? (
-                          memberTasks.slice(0, 5).map((task) => (
-                            <button
-                              key={task.id}
-                              type="button"
-                              className="pulse-team-task-row"
-                              onClick={() => setModal({ type: "task", task })}
-                            >
-                              <span>{task.title}</span>
-                              <small>
-                                {task.projectId
-                                  ? projectTitle(task.projectId)
-                                  : `${clientName(String(task.clientId))} · Ad hoc`}{" "}
-                                ·{" "}
-                                {isOverdueDate(task.dueDate)
-                                  ? "Kasni"
-                                  : TASK_STATUS_LABELS[task.status]}
-                              </small>
-                            </button>
-                          ))
-                        ) : (
-                          <p>Nema zadataka za prikaz.</p>
-                        )}
-                        {memberTasks.length > 5 ? (
-                          <p className="pulse-team-more">
-                            + jos {memberTasks.length - 5} zadatka
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : null}
                   </article>
                 );
               })
@@ -1775,3 +1774,4 @@ function AdminHome() {
 }
 
 export default AdminHome;
+
