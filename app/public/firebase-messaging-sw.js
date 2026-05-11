@@ -1,14 +1,13 @@
-const query = new URL(self.location.href).searchParams
 const firebaseConfig = {
-  apiKey: query.get('apiKey') || '',
-  authDomain: query.get('authDomain') || '',
-  projectId: query.get('projectId') || '',
-  storageBucket: query.get('storageBucket') || '',
-  messagingSenderId: query.get('messagingSenderId') || '',
-  appId: query.get('appId') || '',
-  measurementId: query.get('measurementId') || '',
+  apiKey: 'AIzaSyDvSNsv5nWMXMOa4hW1ji0O0aPw4IgTf00',
+  authDomain: 'pulse-7072b.firebaseapp.com',
+  projectId: 'pulse-7072b',
+  storageBucket: 'pulse-7072b.firebasestorage.app',
+  messagingSenderId: '523914677345',
+  appId: '1:523914677345:web:ceac7f2eca39751fc66e20',
+  measurementId: 'G-Q2TMG7P5DF',
 }
-const basePath = query.get('basePath') || '/'
+const basePath = '/CRM/'
 
 function canInitFirebase() {
   return Boolean(

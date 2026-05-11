@@ -20,17 +20,15 @@ function asString(value: unknown) {
 }
 
 export function getFirebasePushConfig(): FirebasePushRuntimeConfig {
-  const runtimeConfig = typeof window !== 'undefined' ? window.PULSE_FIREBASE_CONFIG : undefined
-
   return {
-    apiKey: asString(import.meta.env.VITE_FIREBASE_API_KEY || runtimeConfig?.apiKey),
-    authDomain: asString(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || runtimeConfig?.authDomain),
-    projectId: asString(import.meta.env.VITE_FIREBASE_PROJECT_ID || runtimeConfig?.projectId),
-    storageBucket: asString(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || runtimeConfig?.storageBucket),
-    messagingSenderId: asString(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || runtimeConfig?.messagingSenderId),
-    appId: asString(import.meta.env.VITE_FIREBASE_APP_ID || runtimeConfig?.appId),
-    measurementId: asString(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || runtimeConfig?.measurementId),
-    vapidKey: asString(import.meta.env.VITE_FIREBASE_VAPID_KEY || runtimeConfig?.vapidKey),
+    apiKey: asString(import.meta.env.VITE_FIREBASE_API_KEY),
+    authDomain: asString(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN),
+    projectId: asString(import.meta.env.VITE_FIREBASE_PROJECT_ID),
+    storageBucket: asString(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET),
+    messagingSenderId: asString(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID),
+    appId: asString(import.meta.env.VITE_FIREBASE_APP_ID),
+    measurementId: asString(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
+    vapidKey: asString(import.meta.env.VITE_FIREBASE_VAPID_KEY),
   }
 }
 
@@ -53,4 +51,21 @@ export function getAppBasePath() {
 export function getAppBaseUrl() {
   if (typeof window === 'undefined') return ''
   return new URL(getAppBasePath(), window.location.origin).toString()
+}
+
+let hasLoggedFirebaseEnv = false
+
+export function logFirebasePushEnv() {
+  if (!import.meta.env.DEV || hasLoggedFirebaseEnv) return
+
+  const { apiKey, projectId, messagingSenderId, appId, vapidKey } = getFirebasePushConfig()
+  hasLoggedFirebaseEnv = true
+
+  console.log('[PULSE push] Firebase env loaded', {
+    projectId,
+    senderId: messagingSenderId,
+    hasApiKey: Boolean(apiKey),
+    hasAppId: Boolean(appId),
+    hasVapidKey: Boolean(vapidKey),
+  })
 }

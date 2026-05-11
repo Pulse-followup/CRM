@@ -223,14 +223,9 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       setPushStatus('disabled')
       return
     }
-
-    if (window.Notification?.permission === 'granted') {
-      void enablePushNotifications(false)
-      return
-    }
-
+ 
     setPushStatus('idle')
-  }, [enablePushNotifications, isCloudNotificationMode])
+  }, [isCloudNotificationMode])
 
   const createNotifications = useCallback(async (inputs: CreateNotificationInput[]) => {
     const deduped = inputs.filter((input, index, array) =>

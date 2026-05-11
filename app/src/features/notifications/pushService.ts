@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../../lib/supabaseClient'
-import { getAppBasePath, getFirebasePushConfig, isFirebasePushConfigured } from './pushConfig'
+import { getAppBasePath, getFirebasePushConfig, isFirebasePushConfigured, logFirebasePushEnv } from './pushConfig'
 
 type PushStatus = 'idle' | 'unsupported' | 'disabled' | 'denied' | 'error' | 'ready'
 
@@ -18,27 +18,35 @@ type FirebaseMessagePayload = {
   }
 }
 
-type FirebaseMessagingCompat = {
-  getToken: (options: { vapidKey: string; serviceWorkerRegistration: ServiceWorkerRegistration }) => Promise<string>
-  onMessage: (listener: (payload: FirebaseMessagePayload) => void) => void
+type FirebaseApp = unknown
+
+type FirebaseMessaging = {
+  __brand?: 'FirebaseMessaging'
 }
 
-type FirebaseNamespace = {
-  apps?: unknown[]
-  initializeApp: (config: Record<string, string>) => unknown
-  messaging: () => FirebaseMessagingCompat
+type FirebaseAppModule = {
+  getApps: () => FirebaseApp[]
+  initializeApp: (config: Record<string, string>) => FirebaseApp
 }
 
-declare global {
-  interface Window {
-    firebase?: FirebaseNamespace
-  }
+type FirebaseMessagingModule = {
+  getMessaging: (app?: FirebaseApp) => FirebaseMessaging
+  getToken: (
+    messaging: FirebaseMessaging,
+    options: { vapidKey: string; serviceWorkerRegistration: ServiceWorkerRegistration },
+  ) => Promise<string>
+  isSupported: () => Promise<boolean>
+  onMessage: (messaging: FirebaseMessaging, listener: (payload: FirebaseMessagePayload) => void) => void
 }
 
-const FIREBASE_APP_SCRIPT = 'https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js'
-const FIREBASE_MESSAGING_SCRIPT = 'https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js'
+const FIREBASE_APP_MODULE_URL = 'https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js'
+const FIREBASE_MESSAGING_MODULE_URL = 'https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging.js'
 
-let firebaseLoadPromise: Promise<FirebaseMessagingCompat> | null = null
+let firebaseLoadPromise: Promise<{
+  messaging: FirebaseMessaging
+  getToken: FirebaseMessagingModule['getToken']
+  onMessage: FirebaseMessagingModule['onMessage']
+}> | null = null
 let foregroundListenerBound = false
 let latestForegroundCallback: (() => void) | null = null
 
@@ -48,56 +56,41 @@ function canUsePushMessaging() {
   return 'Notification' in window && 'serviceWorker' in navigator
 }
 
-function loadScript(src: string) {
-  return new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector(`script[data-pulse-src="${src}"]`) as HTMLScriptElement | null
-    if (existing) {
-      if (existing.dataset.loaded === 'true') {
-        resolve()
-        return
-      }
-      existing.addEventListener('load', () => resolve(), { once: true })
-      existing.addEventListener('error', () => reject(new Error(`Script load failed: ${src}`)), { once: true })
-      return
-    }
+async function loadFirebaseModules() {
+  const [appModule, messagingModule] = await Promise.all([
+    import(/* @vite-ignore */ FIREBASE_APP_MODULE_URL) as Promise<FirebaseAppModule>,
+    import(/* @vite-ignore */ FIREBASE_MESSAGING_MODULE_URL) as Promise<FirebaseMessagingModule>,
+  ])
 
-    const script = document.createElement('script')
-    script.src = src
-    script.async = true
-    script.dataset.pulseSrc = src
-    script.addEventListener('load', () => {
-      script.dataset.loaded = 'true'
-      resolve()
-    }, { once: true })
-    script.addEventListener('error', () => reject(new Error(`Script load failed: ${src}`)), { once: true })
-    document.head.appendChild(script)
-  })
+  return { appModule, messagingModule }
 }
 
 async function getFirebaseMessaging() {
   if (!firebaseLoadPromise) {
     firebaseLoadPromise = (async () => {
       const config = getFirebasePushConfig()
-      await loadScript(FIREBASE_APP_SCRIPT)
-      await loadScript(FIREBASE_MESSAGING_SCRIPT)
+      const { appModule, messagingModule } = await loadFirebaseModules()
+      const isSupported = await messagingModule.isSupported()
 
-      if (!window.firebase) {
-        throw new Error('Firebase Messaging SDK nije ucitan.')
+      if (!isSupported) {
+        throw new Error('Firebase Messaging nije podrzan u ovom browser okruzenju.')
       }
 
-      if (!window.firebase.apps?.length) {
-        window.firebase.initializeApp({
-          apiKey: config.apiKey,
-          authDomain: config.authDomain,
-          projectId: config.projectId,
-          storageBucket: config.storageBucket,
-          messagingSenderId: config.messagingSenderId,
-          appId: config.appId,
-          measurementId: config.measurementId,
-        })
-      }
+      const app = appModule.getApps()[0] || appModule.initializeApp({
+        apiKey: config.apiKey,
+        authDomain: config.authDomain,
+        projectId: config.projectId,
+        storageBucket: config.storageBucket,
+        messagingSenderId: config.messagingSenderId,
+        appId: config.appId,
+        measurementId: config.measurementId,
+      })
 
-      return window.firebase.messaging()
+      return {
+        messaging: messagingModule.getMessaging(app),
+        getToken: messagingModule.getToken,
+        onMessage: messagingModule.onMessage,
+      }
     })()
   }
 
@@ -105,17 +98,23 @@ async function getFirebaseMessaging() {
 }
 
 function buildServiceWorkerUrl() {
-  const config = getFirebasePushConfig()
-  const url = new URL(`${getAppBasePath()}firebase-messaging-sw.js`, window.location.origin)
-  url.searchParams.set('apiKey', config.apiKey)
-  url.searchParams.set('authDomain', config.authDomain)
-  url.searchParams.set('projectId', config.projectId)
-  url.searchParams.set('storageBucket', config.storageBucket)
-  url.searchParams.set('messagingSenderId', config.messagingSenderId)
-  url.searchParams.set('appId', config.appId)
-  url.searchParams.set('measurementId', config.measurementId)
-  url.searchParams.set('basePath', getAppBasePath())
-  return url.toString()
+  return new URL(`${getAppBasePath()}firebase-messaging-sw.js`, window.location.origin).toString()
+}
+
+async function cleanupLegacyServiceWorkers(nextServiceWorkerUrl: string) {
+  const registrations = await navigator.serviceWorker.getRegistrations()
+
+  await Promise.all(
+    registrations.map(async (registration) => {
+      const activeScriptUrl =
+        registration.active?.scriptURL || registration.waiting?.scriptURL || registration.installing?.scriptURL || ''
+
+      if (!activeScriptUrl.includes('firebase-messaging-sw.js')) return
+      if (activeScriptUrl === nextServiceWorkerUrl) return
+
+      await registration.unregister()
+    }),
+  )
 }
 
 function getDeviceLabel() {
@@ -149,7 +148,14 @@ async function registerDeviceToken(workspaceId: string, userId: string, token: s
     )
 
   if (error) {
+    if (import.meta.env.DEV) {
+      console.error('[PULSE push] device token save failed', error)
+    }
     throw new Error(error.message || 'Device token nije sacuvan.')
+  }
+
+  if (import.meta.env.DEV) {
+    console.log('[PULSE push] device token saved')
   }
 }
 
@@ -173,30 +179,59 @@ export async function ensurePushRegistration({
   if (permission !== 'granted') return permission === 'denied' ? 'denied' : 'idle'
 
   try {
+    logFirebasePushEnv()
     latestForegroundCallback = onForegroundMessage || null
+    const serviceWorkerUrl = buildServiceWorkerUrl()
 
-    const registration = await navigator.serviceWorker.register(buildServiceWorkerUrl(), {
+    await cleanupLegacyServiceWorkers(serviceWorkerUrl)
+
+    const registration = await navigator.serviceWorker.register(serviceWorkerUrl, {
       scope: getAppBasePath(),
+      updateViaCache: 'none',
     })
+    await registration.update()
     const messaging = await getFirebaseMessaging()
 
     if (!foregroundListenerBound) {
-      messaging.onMessage(() => {
+      messaging.onMessage(messaging.messaging, () => {
         latestForegroundCallback?.()
       })
       foregroundListenerBound = true
     }
 
-    const token = await messaging.getToken({
+    const token = await messaging.getToken(messaging.messaging, {
       vapidKey: getFirebasePushConfig().vapidKey,
       serviceWorkerRegistration: registration,
     })
+
+    if (import.meta.env.DEV) {
+      console.log('[PULSE push] token acquired', {
+        hasToken: Boolean(token),
+        tokenPreview: token ? `${token.slice(0, 12)}...` : '',
+      })
+    }
 
     if (!token) return 'error'
 
     await registerDeviceToken(workspaceId, userId, token)
     return 'ready'
   } catch (error) {
+    if (import.meta.env.DEV) {
+      const firebaseError = error as {
+        code?: string
+        message?: string
+        customData?: unknown
+        stack?: string
+      }
+
+      console.error('[PULSE push] registration diagnostics', {
+        permission: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
+        serviceWorkerUrl: buildServiceWorkerUrl(),
+        errorCode: firebaseError?.code || '',
+        errorMessage: firebaseError?.message || String(error),
+        customData: firebaseError?.customData || null,
+      })
+    }
     console.error('Push registration failed', error)
     return 'error'
   }
