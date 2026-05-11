@@ -765,6 +765,7 @@ function AdminModal({
   onCreateJobFromCatalog,
   onCreateBillingFromProject,
   onAssignTask,
+  onOpenTask,
 }: {
   state: ModalState;
   clients: Client[];
@@ -795,6 +796,7 @@ function AdminModal({
     tasksForBilling: Task[],
   ) => void | Promise<void>;
   onAssignTask: (task: Task, memberId: string) => void | Promise<void>;
+  onOpenTask: (task: Task) => void;
 }) {
   if (!state) return null;
   const clientProjects =
@@ -880,7 +882,12 @@ function AdminModal({
             <div className="pulse-team-task-peek">
               {state.tasks.length ? (
                 state.tasks.map((task) => (
-                  <div key={task.id} className="pulse-team-task-row">
+                  <button
+                    key={task.id}
+                    type="button"
+                    className="pulse-team-task-row"
+                    onClick={() => onOpenTask(task)}
+                  >
                     <span>{task.title}</span>
                     <small>
                       {task.projectId
@@ -892,7 +899,7 @@ function AdminModal({
                         ? "Kasni"
                         : TASK_STATUS_LABELS[task.status]}
                     </small>
-                  </div>
+                  </button>
                 ))
               ) : (
                 <p>Nema zadataka za prikaz.</p>
@@ -1768,6 +1775,7 @@ function AdminHome() {
         onCreateJobFromCatalog={handleCreateJobFromCatalog}
         onCreateBillingFromProject={handleCreateBillingFromProject}
         onAssignTask={handleAssignTask}
+        onOpenTask={(task) => setModal({ type: "task", task })}
       />
     </section>
   );

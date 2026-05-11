@@ -120,6 +120,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   const [cloudReadError, setCloudReadError] = useState<string | null>(null)
   const [toasts, setToasts] = useState<NotificationToast[]>([])
   const [pushStatus, setPushStatus] = useState<PushStatus>('idle')
+  const [seenVersion, setSeenVersion] = useState(0)
   const seenNotificationIdsRef = useRef<Set<string>>(new Set(readSeenNotificationIds()))
 
   const notifications = useMemo(
@@ -161,13 +162,14 @@ export function NotificationProvider({ children }: PropsWithChildren) {
 
   const isNotificationSeen = useCallback((notificationId: string) => {
     return seenNotificationIdsRef.current.has(notificationId)
-  }, [])
+  }, [seenVersion])
 
   const markNotificationSeen = useCallback((notificationId: string) => {
     if (!notificationId || seenNotificationIdsRef.current.has(notificationId)) return
     seenNotificationIdsRef.current.add(notificationId)
     writeSeenNotificationIds(Array.from(seenNotificationIdsRef.current))
     setToasts((current) => current.filter((toast) => toast.notificationId !== notificationId))
+    setSeenVersion((current) => current + 1)
   }, [])
 
   const refreshNotificationsFromCloud = useCallback(async () => {
