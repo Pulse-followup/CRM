@@ -1,3 +1,5 @@
+import type { WorkspacePlanType } from '../subscription/plan'
+
 export type WorkspaceRole = 'admin' | 'finance' | 'member'
 export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expired'
 export type WorkspaceMemberStatus = 'invited' | 'active'
@@ -14,6 +16,7 @@ export interface CloudWorkspace {
   id: string
   name: string
   owner_user_id: string
+  plan_type?: WorkspacePlanType | null
   created_at?: string
   updated_at?: string
 }

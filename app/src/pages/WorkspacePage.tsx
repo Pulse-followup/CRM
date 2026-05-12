@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useCloudStore } from '../features/cloud/cloudStore'
 import type { CloudWorkspaceMember, WorkspaceRole } from '../features/cloud/types'
+import ProLimitModal from '../features/subscription/ProLimitModal'
+import { formatMemberUsage, getWorkspaceLimits, normalizePlanType } from '../features/subscription/plan'
 import { getOverdueTasks } from '../features/tasks/taskSignals'
 import { useTaskStore } from '../features/tasks/taskStore'
 
@@ -37,6 +39,7 @@ type WorkspaceSectionKey = 'members' | 'invite' | 'invites'
 function WorkspacePage() {
   const [searchParams] = useSearchParams()
   const highlightedMemberId = searchParams.get('member')
+  const setupTarget = searchParams.get('setup')
   const cloud = useCloudStore()
   const { tasks } = useTaskStore()
   const [inviteEmail, setInviteEmail] = useState('')
@@ -46,11 +49,15 @@ function WorkspacePage() {
   const [inviteProductionRole, setInviteProductionRole] = useState('')
   const [lastInviteLink, setLastInviteLink] = useState('')
   const [message, setMessage] = useState('')
+  const [proCode, setProCode] = useState('')
   const [editingRates, setEditingRates] = useState<Record<string, string>>({})
   const [editingProductionRoles, setEditingProductionRoles] = useState<Record<string, string>>({})
   const [openSection, setOpenSection] = useState<WorkspaceSectionKey | null>(null)
+  const [isProModalOpen, setIsProModalOpen] = useState(false)
 
   const isAdmin = cloud.membership?.role === 'admin'
+  const planType = normalizePlanType(cloud.activeWorkspace?.plan_type)
+  const workspaceLimits = getWorkspaceLimits(planType)
 
   const activeTasks = useMemo(
     () => tasks.filter((task) => ['dodeljen', 'u_radu', 'na_cekanju'].includes(task.status) && !(task.status === 'na_cekanju' && task.dependsOnTaskId)),
@@ -76,6 +83,10 @@ function WorkspacePage() {
   }
 
   const handleInviteMember = async () => {
+    if (usedMemberSeats >= workspaceLimits.members) {
+      setIsProModalOpen(true)
+      return
+    }
     await runAction(async () => {
       const invite = await cloud.inviteMember({
         email: inviteEmail,
@@ -106,10 +117,26 @@ function WorkspacePage() {
     }, 'Operativna rola je sacuvana.')
   }
 
+  const handleActivatePro = async () => {
+    await runAction(async () => {
+      await cloud.activateProCode(proCode)
+      setProCode('')
+    }, 'PRO workspace je aktiviran.')
+  }
+
   const sortedMembers = cloud.members
     .filter((member) => member.status !== 'invited')
     .slice()
     .sort((first, second) => readableName(first).localeCompare(readableName(second), 'sr'))
+  const pendingInvitesCount = cloud.invites.filter((invite) => invite.status === 'pending').length
+  const usedMemberSeats = sortedMembers.length + pendingInvitesCount
+
+  useEffect(() => {
+    if (!setupTarget) return
+    if (setupTarget === 'members') setOpenSection('members')
+    if (setupTarget === 'invite') setOpenSection('invite')
+    if (setupTarget === 'invites') setOpenSection('invites')
+  }, [setupTarget])
 
   if (!isAdmin) {
     return (
@@ -127,6 +154,10 @@ function WorkspacePage() {
       <div className="account-page-head workspace-page-head">
         <h2>MY WORKSPACE</h2>
         <p>Tim, pozivi i pristup workspace-u u jednom command panelu.</p>
+      </div>
+      <div className="workspace-plan-strip">
+        <span className={`workspace-plan-badge is-${planType.toLowerCase()}`}>{planType}</span>
+        <strong>{planType === 'PRO' ? 'PRO ACTIVE' : formatMemberUsage(usedMemberSeats, planType)}</strong>
       </div>
       {cloud.error ? <p className="settings-error-text">{cloud.error}</p> : null}
       {message ? <p className="settings-success-text">{message}</p> : null}
@@ -172,7 +203,7 @@ function WorkspacePage() {
           <button type="button" className="workspace-collapse-toggle" onClick={() => setOpenSection((current) => current === 'invite' ? null : 'invite')} aria-expanded={openSection === 'invite'}>
             <span className="workspace-collapse-copy">
               <strong>Pozovi novog clana</strong>
-              <small>Novi clan dobija invite link za ovaj workspace</small>
+              <small>Novi clan dobija invite link za ovaj workspace · iskorišćeno {Number.isFinite(workspaceLimits.members) ? `${usedMemberSeats} / ${workspaceLimits.members}` : 'unlimited'}</small>
             </span>
             <span className="workspace-collapse-meta">+</span>
           </button>
@@ -220,6 +251,19 @@ function WorkspacePage() {
           ) : null}
         </article>
       </section>
+      <section className="settings-dev-tools account-card workspace-section-shell">
+        <div className="settings-dev-tools-head">
+          <h3>Workspace plan</h3>
+          <p>Aktivacija PRO workspace-a preko koda koji izdaje PULSE.</p>
+        </div>
+        <div className="settings-form-grid">
+          <label><span>PLAN</span><input readOnly value={planType} /></label>
+          <label><span>Status</span><input readOnly value={planType === 'PRO' ? 'PRO ACTIVE' : formatMemberUsage(usedMemberSeats, planType)} /></label>
+          <label><span>PRO kod</span><input value={proCode} onChange={(event) => setProCode(event.target.value)} placeholder="Unesite dodeljeni PRO kod" /></label>
+          <button type="button" className="settings-secondary-button workspace-cta-button" onClick={() => void handleActivatePro()}>Aktiviraj PRO</button>
+        </div>
+      </section>
+      <ProLimitModal isOpen={isProModalOpen} onClose={() => setIsProModalOpen(false)} />
     </section>
   )
 }

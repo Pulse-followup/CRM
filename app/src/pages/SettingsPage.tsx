@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCloudStore } from '../features/cloud/cloudStore'
+import { useClientStore } from '../features/clients/clientStore'
+import { formatClientUsage, normalizePlanType } from '../features/subscription/plan'
 
 function roleLabel(role?: string | null) {
   if (role === 'admin') return 'Admin'
@@ -16,6 +18,7 @@ function readableName(profileName?: string | null, fallback?: string | null) {
 
 function SettingsPage() {
   const cloud = useCloudStore()
+  const { clients } = useClientStore()
   const navigate = useNavigate()
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -24,6 +27,8 @@ function SettingsPage() {
 
   const loggedEmail = cloud.user?.email || cloud.profile?.email || '-'
   const displayName = readableName(cloud.profile?.full_name, loggedEmail)
+  const planType = normalizePlanType(cloud.activeWorkspace?.plan_type)
+  const planBadge = planType === 'PRO' ? 'PRO ACTIVE' : formatClientUsage(clients.length, planType)
 
   const runAction = async (action: () => Promise<void>, successMessage: string) => {
     setMessage('')
@@ -89,6 +94,8 @@ function SettingsPage() {
             <div><span>Email</span><strong>{loggedEmail}</strong></div>
             <div><span>Workspace</span><strong>{cloud.activeWorkspace?.name || '-'}</strong></div>
             <div><span>Uloga</span><strong>{roleLabel(cloud.membership?.role)}</strong></div>
+            <div><span>PLAN</span><strong>{planType}</strong></div>
+            <div><span>Workspace status</span><strong>{planBadge}</strong></div>
           </div>
         ) : null}
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { gsap } from 'gsap'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useClientStore } from '../features/clients/clientStore'
@@ -59,6 +59,7 @@ function getProductClientScopeLabel(product: ProductItem, clientNameById: Map<st
 function ProductsPage() {
   const { clients } = useClientStore()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const productsListRef = useRef<HTMLDivElement | null>(null)
   const cloud = useCloudStore()
   const demo = useDemoStore()
@@ -75,6 +76,14 @@ function ProductsPage() {
   const [formError, setFormError] = useState('')
   const [syncMessage, setSyncMessage] = useState('')
   const [processTemplates, setProcessTemplates] = useState(() => demo.isDemoMode ? readDemoProcessTemplates() : readProcessTemplates())
+
+  useEffect(() => {
+    if (searchParams.get('setup') === 'create') {
+      setIsFormOpen(true)
+      setEditingProductId(null)
+      setForm(emptyForm)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     let isMounted = true

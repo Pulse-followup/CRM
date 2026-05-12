@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { gsap } from 'gsap'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import ClientCreateForm, {
   type ClientCreateFormValues,
 } from '../features/clients/components/ClientCreateForm'
@@ -9,6 +9,7 @@ import { useClientStore } from '../features/clients/clientStore'
 import type { Client } from '../features/clients/types'
 import { useProjectStore } from '../features/projects/projectStore'
 import { getClientScore } from '../features/scoring/scoringSelectors'
+import ProLimitModal from '../features/subscription/ProLimitModal'
 import { useTaskStore } from '../features/tasks/taskStore'
 import '../features/clients/pages/client-detail.css'
 
@@ -20,7 +21,8 @@ const PRIORITY_LABELS = {
 
 function ClientsPage() {
   const navigate = useNavigate()
-  const { clients: runtimeClients, getAllClients, addClient } = useClientStore()
+  const [searchParams] = useSearchParams()
+  const { clients: runtimeClients, getAllClients, addClient, limitReachedReason, clearLimitReachedReason } = useClientStore()
   const { projects } = useProjectStore()
   const { tasks } = useTaskStore()
   const { billing } = useBillingStore()
@@ -29,6 +31,12 @@ function ClientsPage() {
   const stackViewportRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef<(HTMLElement | null)[]>([])
   const clients = getAllClients()
+
+  useEffect(() => {
+    if (searchParams.get('setup') === 'create') {
+      setIsCreatingClient(true)
+    }
+  }, [searchParams])
 
   const handleCreateClient = (values: ClientCreateFormValues) => {
     const nextClient: Client = {
@@ -139,6 +147,7 @@ function ClientsPage() {
           onSubmit={handleCreateClient}
         />
       ) : null}
+      <ProLimitModal isOpen={limitReachedReason === 'clients'} onClose={clearLimitReachedReason} />
 
       {scoredClients.length > 0 ? (
         <div
@@ -180,7 +189,6 @@ function ClientsPage() {
                       </span>
                     </div>
                   </div>
-
                 </article>
               )
             })}
@@ -188,8 +196,21 @@ function ClientsPage() {
         </div>
       ) : (
         <div className="clients-empty-state">
-          <h2>Nema klijenata</h2>
-          <p>Promeni pretragu da vidiš postojeće klijente.</p>
+          <h2>{clients.length ? 'Nema rezultata za ovu pretragu' : 'Nema klijenata još'}</h2>
+          <p>
+            {clients.length
+              ? 'Promeni pretragu ili otvori karticu postojećeg klijenta.'
+              : 'Dodaj prvog klijenta da bi iz njegove kartice nastajali projekti, aktivnosti i naplata.'}
+          </p>
+          {!clients.length ? (
+            <button
+              type="button"
+              className="clients-primary-action"
+              onClick={() => setIsCreatingClient(true)}
+            >
+              Dodaj prvog klijenta
+            </button>
+          ) : null}
         </div>
       )}
     </section>

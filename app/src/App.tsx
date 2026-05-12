@@ -32,6 +32,7 @@ import DataPage from './pages/DataPage'
 import UserHome from './pages/UserHome'
 import UserTasks from './pages/UserTasks'
 import PulseWelcomeGuide, { PULSE_WELCOME_KEY } from './components/PulseWelcomeGuide'
+import SetupChecklistOverlay from './features/onboarding/SetupChecklistOverlay'
 
 function App() {
   return (
@@ -87,6 +88,7 @@ function AppRoutes() {
   return (
     <>
       <BrowserRouter basename="/CRM">
+        <SetupChecklistOverlay />
         <Routes>
         <Route element={layoutElement}>
           <Route path="/" element={homeElement} />

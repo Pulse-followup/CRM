@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useBillingStore } from "../../billing/billingStore";
 import {
   isProductVisibleForClient,
@@ -50,6 +50,7 @@ const PRIORITY_LABELS = {
 
 function ClientDetail() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { id } = useParams();
   const clientId = id ?? "";
   const { clients, getClientById, updateClient } = useClientStore();
@@ -70,6 +71,7 @@ function ClientDetail() {
     string | undefined
   >(undefined);
   const [catalogJobMessage, setCatalogJobMessage] = useState("");
+  const setupTarget = searchParams.get("setup");
 
   useEffect(() => {
     let isMounted = true;
@@ -98,6 +100,24 @@ function ClientDetail() {
       isMounted = false;
     };
   }, [cloud.activeWorkspace?.id, cloud.isConfigured]);
+
+  useEffect(() => {
+    if (setupTarget === "create-project") {
+      setIsChoosingJob(true);
+      setIsCreatingProject(true);
+      setIsCreatingActivity(false);
+      setIsCreatingFromCatalog(false);
+    }
+    if (setupTarget === "create-activity") {
+      setIsCreatingActivity(true);
+      setIsChoosingJob(false);
+      setIsCreatingProject(false);
+      setIsCreatingFromCatalog(false);
+    }
+    if (setupTarget === "create-from-catalog") {
+      openCatalogJobForm();
+    }
+  }, [setupTarget]);
 
   const client = getClientById(clientId);
   const projects = getProjectsByClientId(clientId);

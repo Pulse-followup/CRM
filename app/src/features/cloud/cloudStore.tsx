@@ -17,6 +17,7 @@ import type {
   CloudWorkspaceMember,
   WorkspaceRole,
 } from "./types";
+import { normalizePlanType, type WorkspacePlanType } from "../subscription/plan";
 
 const ACTIVE_WORKSPACE_KEY = "pulse.activeWorkspaceId.v1";
 const INVITE_PARAM = "invite";
@@ -29,6 +30,7 @@ interface SignInPayload {
 
 interface CreateWorkspacePayload {
   name: string;
+  planType?: WorkspacePlanType;
 }
 
 interface InviteMemberPayload {
@@ -63,6 +65,7 @@ interface CloudStoreValue {
   ) => Promise<CloudWorkspaceInvite | null>;
   acceptInvite: (inviteId?: string) => Promise<void>;
   buildInviteLink: (invite: CloudWorkspaceInvite) => string;
+  activateProCode: (code: string) => Promise<void>;
   updateMemberHourlyRate: (
     memberId: string,
     hourlyRate: number | null,
@@ -555,7 +558,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
   }, [loadWorkspaceContext, user]);
 
   const createWorkspace = useCallback(
-    async ({ name }: CreateWorkspacePayload) => {
+    async ({ name, planType = "FREE" }: CreateWorkspacePayload) => {
       if (!supabase || !user) throw new Error("Moras biti ulogovan.");
       if (rememberedInviteId)
         throw new Error(
@@ -580,7 +583,7 @@ export function CloudProvider({ children }: PropsWithChildren) {
 
       const { data: workspace, error: workspaceError } = await supabase
         .from("workspaces")
-        .insert({ name: cleanName, owner_user_id: user.id })
+        .insert({ name: cleanName, owner_user_id: user.id, plan_type: normalizePlanType(planType) })
         .select("*")
         .single();
 
@@ -610,6 +613,30 @@ export function CloudProvider({ children }: PropsWithChildren) {
       await loadWorkspaceContext(user);
     },
     [ensureProfile, loadWorkspaceContext, rememberedInviteId, supabase, user],
+  );
+
+  const activateProCode = useCallback(
+    async (code: string) => {
+      if (!supabase || !user || !activeWorkspace?.id) {
+        throw new Error("Workspace nije aktivan.");
+      }
+
+      const cleanCode = code.trim().toUpperCase();
+      if (!cleanCode) throw new Error("Unesi PRO kod.");
+
+      const { error: activateError } = await supabase.rpc("activate_pro_code", {
+        p_code: cleanCode,
+        p_workspace_id: activeWorkspace.id,
+      });
+
+      if (activateError) {
+        setError(activateError.message);
+        throw activateError;
+      }
+
+      await loadWorkspaceContext(user);
+    },
+    [activeWorkspace?.id, loadWorkspaceContext, supabase, user],
   );
 
   const setActiveWorkspaceId = useCallback(
@@ -800,12 +827,14 @@ export function CloudProvider({ children }: PropsWithChildren) {
       inviteMember,
       acceptInvite,
       buildInviteLink,
+      activateProCode,
       updateMemberHourlyRate,
       updateMemberProductionRole,
     }),
     [
       acceptInvite,
       activeWorkspace,
+      activateProCode,
       updateProfileName,
       buildInviteLink,
       createWorkspace,

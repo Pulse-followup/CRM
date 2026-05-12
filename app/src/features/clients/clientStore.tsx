@@ -5,6 +5,7 @@ import { useCloudStore } from '../cloud/cloudStore'
 import { useDemoStore } from '../demo/demoStore'
 import { getSupabaseClient } from '../../lib/supabaseClient'
 import type { Client, ClientContact, CommercialInputs } from './types'
+import { getWorkspaceLimits, normalizePlanType } from '../subscription/plan'
 
 const CLIENTS_STORAGE_KEY = 'pulse.clients.v1'
 
@@ -14,6 +15,8 @@ interface ClientStoreValue {
   clients: Client[]
   cloudReadStatus: CloudReadStatus
   cloudReadError: string | null
+  limitReachedReason: 'clients' | 'members' | null
+  clearLimitReachedReason: () => void
   refreshClientsFromCloud: () => Promise<void>
   getAllClients: () => Client[]
   getClientById: (clientId: string) => Client | null
@@ -139,6 +142,7 @@ export function ClientProvider({ children }: ClientProviderProps) {
   )
   const [cloudReadStatus, setCloudReadStatus] = useState<CloudReadStatus>('local')
   const [cloudReadError, setCloudReadError] = useState<string | null>(null)
+  const [limitReachedReason, setLimitReachedReason] = useState<'clients' | 'members' | null>(null)
 
   useEffect(() => {
     if (!isCloudMode && !isDemoMode) {
@@ -201,6 +205,8 @@ export function ClientProvider({ children }: ClientProviderProps) {
       clients,
       cloudReadStatus,
       cloudReadError,
+      limitReachedReason,
+      clearLimitReachedReason: () => setLimitReachedReason(null),
       refreshClientsFromCloud,
       getAllClients: () => clients,
       getClientById: (clientId: string) =>
@@ -208,6 +214,12 @@ export function ClientProvider({ children }: ClientProviderProps) {
       addClient: async (client: Client) => {
         if (isDemoMode) {
           showReadOnlyNotice()
+          return null
+        }
+
+        const limits = getWorkspaceLimits(normalizePlanType(activeWorkspace?.plan_type))
+        if (clients.length >= limits.clients) {
+          setLimitReachedReason('clients')
           return null
         }
 
@@ -282,7 +294,7 @@ export function ClientProvider({ children }: ClientProviderProps) {
         return nextClient
       },
     }),
-    [activeWorkspace?.id, clients, cloudReadError, cloudReadStatus, isCloudMode, isDemoMode, refreshClientsFromCloud, showReadOnlyNotice, user?.id],
+    [activeWorkspace?.id, activeWorkspace?.plan_type, clients, cloudReadError, cloudReadStatus, isCloudMode, isDemoMode, limitReachedReason, refreshClientsFromCloud, showReadOnlyNotice, user?.id],
   )
 
   return <ClientStoreContext.Provider value={value}>{children}</ClientStoreContext.Provider>

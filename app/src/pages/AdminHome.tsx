@@ -1067,7 +1067,7 @@ function AdminModal({
 function AdminHome() {
   const navigate = useNavigate();
   const { activeWorkspace, members, isConfigured } = useCloudStore();
-  const { users } = useAuthStore();
+  const { currentUser, users } = useAuthStore();
   const { isDemoMode } = useDemoStore();
   const [selectedTeamMemberId, setSelectedTeamMemberId] = useState<
     string | null
@@ -1434,13 +1434,10 @@ function AdminHome() {
       }),
     [billing, clients, members, projects, tasks],
   );
-  const signalStatusHeadline =
-    commandTaskSignals.some((signal) => signal.severity === "red") ||
-    commandTaskSignals.some((signal) => signal.severity === "yellow")
-      ? "Potrebna reakcija"
-      : aiSignals[0]?.severity === "green"
-      ? "Firma je trenutno pod kontrolom"
-      : "Potrebna reakcija";
+  const signalStatusHeadline = "Klikni na polja ispod";
+  const commandGreetingTitle = `ZDRAVO ${(
+    currentUser.name || "Admin"
+  ).toUpperCase()}`;
   const actionableSignalCount = commandTaskSignals.length;
   const signalReactionLabel =
     actionableSignalCount === 1
@@ -2084,7 +2081,7 @@ function AdminHome() {
           >
             <div className="command-panel-kicker">Live command feed</div>
             <div className="command-panel-title-row">
-              <h3>HITNO / BITNO</h3>
+              <h3>{commandGreetingTitle}</h3>
               <span className={`command-status-chip is-${commandStatusTone}`}>
                 {commandStatusTone === "red"
                   ? "Hitno"

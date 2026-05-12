@@ -232,8 +232,21 @@ function ProjectsPage() {
         </div>
       ) : (
         <div className="clients-empty-state">
-          <h2>Nema projekata za izabrani filter</h2>
-          <p>Promeni status ili filter po klijentu.</p>
+          <h2>{projects.length ? 'Nema projekata za izabrani filter' : 'Nema projekata još'}</h2>
+          <p>
+            {projects.length
+              ? 'Promeni status ili filter po klijentu da vidiš druge projekte.'
+              : 'Kreiraj prvi projekat iz kartice klijenta da komercijala i operativa ostanu povezane.'}
+          </p>
+          {!projects.length ? (
+            <button
+              type="button"
+              className="clients-primary-action"
+              onClick={() => navigate('/clients')}
+            >
+              Idi na klijente
+            </button>
+          ) : null}
         </div>
       )}
     </section>

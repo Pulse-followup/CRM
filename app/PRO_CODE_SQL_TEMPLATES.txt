@@ -1,0 +1,108 @@
+PRO CODE SQL TEMPLATES
+======================
+
+Ove komande pokreces u Supabase SQL Editor-u.
+One sluze da TI generises novi PRO kod za kupca.
+Kupac ne vidi ovaj SQL. Kupac samo unosi dobijeni PRO kod u aplikaciji.
+
+
+1. JEDNOKRATNI KOD BEZ ROKA
+===========================
+
+select *
+from public.issue_pro_code(
+  p_label => 'Jednokratni PRO kod bez roka',
+  p_assigned_email => null,
+  p_assigned_workspace_id => null,
+  p_expires_at => null,
+  p_max_activations => 1
+);
+
+Sta znaci:
+- kod nije vezan za email
+- kod nije vezan za workspace
+- kod nema rok isteka
+- moze samo jednom da se iskoristi
+
+
+2. JEDNOKRATNI KOD SA ROKOM 30 DANA
+===================================
+
+select *
+from public.issue_pro_code(
+  p_label => 'Jednokratni PRO kod sa rokom 30 dana',
+  p_assigned_email => null,
+  p_assigned_workspace_id => null,
+  p_expires_at => now() + interval '30 days',
+  p_max_activations => 1
+);
+
+Sta znaci:
+- kod nije vezan za email
+- kod nije vezan za workspace
+- kod mora da se iskoristi u narednih 30 dana
+- moze samo jednom da se iskoristi
+
+Vazno:
+- ovo NIJE trajanje PRO plana
+- ovo je samo rok do kada kod moze da bude aktiviran
+
+
+3. KOD VEZAN ZA TACAN EMAIL KUPCA
+=================================
+
+select *
+from public.issue_pro_code(
+  p_label => 'PRO kod za tacno odredjenog kupca',
+  p_assigned_email => 'admin@firma.rs',
+  p_assigned_workspace_id => null,
+  p_expires_at => null,
+  p_max_activations => 1
+);
+
+Sta znaci:
+- kod moze da aktivira samo user sa email adresom admin@firma.rs
+- kod nije vezan za konkretan workspace
+- kod nema rok isteka
+- moze samo jednom da se iskoristi
+
+
+4. OPCIONO: KOD VEZAN I ZA EMAIL I ZA TACAN WORKSPACE
+=====================================================
+
+select *
+from public.issue_pro_code(
+  p_label => 'PRO kod za tacan email i workspace',
+  p_assigned_email => 'admin@firma.rs',
+  p_assigned_workspace_id => 'WORKSPACE_UUID_HERE',
+  p_expires_at => null,
+  p_max_activations => 1
+);
+
+Sta znaci:
+- kod moze da aktivira samo taj email
+- kod radi samo za taj workspace
+- moze samo jednom da se iskoristi
+
+
+NAPOMENA
+========
+
+Kad pokrenes neku od ovih komandi, Supabase vrati generisani PRO kod.
+Taj vraceni kod kopiras i saljes kupcu.
+
+Primer kako da vidis sve izdate kodove:
+
+select
+  code,
+  label,
+  status,
+  used_count,
+  max_activations,
+  assigned_email,
+  assigned_workspace_id,
+  activated_workspace_id,
+  expires_at,
+  created_at
+from public.pro_codes
+order by created_at desc;
