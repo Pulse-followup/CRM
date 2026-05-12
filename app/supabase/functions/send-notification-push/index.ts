@@ -16,6 +16,16 @@ type DeviceTokenRow = {
   recipient_user_id: string
 }
 
+type FcmErrorResponse = {
+  error?: {
+    status?: string
+    message?: string
+    details?: Array<{
+      errorCode?: string
+    }>
+  }
+}
+
 type RequestBody = {
   workspaceId?: string
   notificationIds?: string[]
@@ -98,6 +108,10 @@ async function sendPushMessage(
   title: string,
   body: string,
   link: string,
+  notificationId: string,
+  entityType: NotificationRow['entity_type'],
+  entityId: string,
+  iconUrl: string,
 ) {
   const response = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
     method: 'POST',
@@ -114,13 +128,22 @@ async function sendPushMessage(
         },
         data: {
           link,
+          title,
+          body,
+          notificationId,
+          entityType,
+          entityId,
         },
         webpush: {
+          headers: {
+            Urgency: 'high',
+            TTL: '2419200',
+          },
           notification: {
             title,
             body,
-            icon: 'icon-192.png',
-            badge: 'icon-192.png',
+            icon: iconUrl,
+            badge: iconUrl,
           },
           fcm_options: {
             link,
@@ -132,8 +155,30 @@ async function sendPushMessage(
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`FCM send failed: ${response.status} ${errorText}`)
+    let parsed: FcmErrorResponse | null = null
+    try {
+      parsed = JSON.parse(errorText) as FcmErrorResponse
+    } catch {
+      parsed = null
+    }
+    const error = new Error(`FCM send failed: ${response.status} ${errorText}`) as Error & {
+      status?: string
+      errorCode?: string
+    }
+    error.status = parsed?.error?.status
+    error.errorCode = parsed?.error?.details?.[0]?.errorCode
+    throw error
   }
+}
+
+function isRevokableTokenError(error: unknown) {
+  const candidate = error as { status?: string; errorCode?: string; message?: string }
+  return (
+    candidate?.status === 'NOT_FOUND' ||
+    candidate?.errorCode === 'UNREGISTERED' ||
+    candidate?.message?.includes('registration token is not a valid FCM registration token') ||
+    candidate?.message?.includes('Requested entity was not found')
+  )
 }
 
 Deno.serve(async (request) => {
@@ -220,6 +265,8 @@ Deno.serve(async (request) => {
   const accessToken = await getAccessToken()
   let sent = 0
   let skipped = 0
+  let failed = 0
+  const revokedTokens = new Set<string>()
 
   for (const notification of typedNotifications) {
     const recipientTokens = tokenMap.get(notification.recipient_user_id) || []
@@ -231,6 +278,7 @@ Deno.serve(async (request) => {
     const relativeLink = getEntityLink(notification)
     const normalizedBaseUrl = appBaseUrl || 'https://example.com/'
     const absoluteLink = new URL(relativeLink, normalizedBaseUrl).toString()
+    const iconUrl = new URL('icon-192.png', normalizedBaseUrl).toString()
 
     for (const token of recipientTokens) {
       try {
@@ -241,13 +289,39 @@ Deno.serve(async (request) => {
           notification.title,
           notification.body,
           absoluteLink,
+          notification.id,
+          notification.entity_type,
+          notification.entity_id,
+          iconUrl,
         )
         sent += 1
       } catch (error) {
+        failed += 1
+        if (isRevokableTokenError(error)) {
+          revokedTokens.add(token)
+        }
         console.error('push send failed', notification.id, token, error)
       }
     }
   }
 
-  return jsonResponse(200, { sent, skipped })
+  if (revokedTokens.size) {
+    const revokedAt = new Date().toISOString()
+    const { error: revokeError } = await supabase
+      .from('device_tokens')
+      .update({ revoked_at: revokedAt, updated_at: revokedAt })
+      .eq('workspace_id', workspaceId)
+      .in('token', Array.from(revokedTokens))
+
+    if (revokeError) {
+      console.error('device token revoke failed', revokeError)
+    }
+  }
+
+  return jsonResponse(200, {
+    sent,
+    skipped,
+    failed,
+    revokedTokens: revokedTokens.size,
+  })
 })

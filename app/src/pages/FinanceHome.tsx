@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BILLING_STATUS_LABELS } from '../features/billing/billingLabels'
 import { getBillingStatus } from '../features/billing/billingLifecycle'
+import {
+  getBillingCollections,
+  getBillingReadyItems,
+  getInvoicedItems,
+  getOverdueBillingItems,
+  getPaidItems,
+} from '../features/billing/billingSelectors'
 import { useBillingStore } from '../features/billing/billingStore'
 import type { BillingRecord, BillingStatus } from '../features/billing/types'
 import { useClientStore } from '../features/clients/clientStore'
@@ -120,19 +127,31 @@ function FinanceHome() {
     }
   }, [isCloudBillingMode, refreshBillingFromCloud])
 
-  const billingItems = useMemo<FinanceItem[]>(() => getAllBilling().map((record) => ({
+  const billing = getAllBilling()
+  const billingCollections = useMemo(() => getBillingCollections(billing), [billing])
+  const billingItems = useMemo<FinanceItem[]>(() => billingCollections.active.map((record) => ({
     record,
     client: getClientById(record.clientId)?.name ?? (record as any).clientName ?? 'Nepoznat klijent',
     project: getProjectById(record.projectId)?.title ?? (record as any).projectName ?? record.description ?? 'Nepoznat projekat',
-  })), [getAllBilling, getClientById, getProjectById])
+  })), [billingCollections.active, getClientById, getProjectById])
+
+  const financeItemMap = useMemo(
+    () => new Map(billingItems.map((item) => [item.record.id, item])),
+    [billingItems],
+  )
 
   const by = (status: BillingStatus) =>
-    billingItems.filter((item) => {
-      if (status === 'paid') return getBillingStatus(item.record) === 'closed'
-      if (status === 'overdue') return getBillingStatus(item.record) === 'overdue'
-      if (status === 'invoiced') return getBillingStatus(item.record) === 'issued' && item.record.status === 'invoiced'
-      return getBillingStatus(item.record) === 'issued' && (item.record.status === 'ready' || item.record.status === 'draft')
-    })
+    (
+      status === 'paid'
+        ? getPaidItems(billing)
+        : status === 'overdue'
+          ? getOverdueBillingItems(billing)
+          : status === 'invoiced'
+            ? getInvoicedItems(billing)
+            : getBillingReadyItems(billing)
+    )
+      .map((record) => financeItemMap.get(record.id))
+      .filter((item): item is FinanceItem => Boolean(item))
 
   return (
     <section className="pulse-phone-screen">

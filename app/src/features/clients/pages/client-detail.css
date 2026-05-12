@@ -1,3 +1,13 @@
+.page-card.client-detail-shell,
+.page-card.billing-clean-page,
+.page-card.project-detail-clean,
+.page-card.task-detail-clean,
+.page-card.no-access-shell {
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(7, 17, 31, 0.98), rgba(12, 22, 40, 0.98));
+}
+
 .customer-card-header {
   display: flex;
   align-items: flex-start;
@@ -16,6 +26,49 @@
 .customer-card-subtitle {
   margin: 6px 0 0;
   color: #94a3b8;
+}
+
+.task-detail-header-clean {
+  align-items: center;
+}
+
+.task-detail-eyebrow {
+  margin: 0 0 8px;
+  color: #60a5fa;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.task-detail-summary {
+  gap: 16px;
+}
+
+.task-detail-summary-row {
+  display: grid;
+  gap: 6px;
+}
+
+.task-detail-summary-row span {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.task-detail-summary-row strong,
+.task-detail-description p {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.task-detail-description {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .customer-score-panel {
@@ -1342,3 +1395,4 @@
   font-weight: 800;
   letter-spacing: 0.02em;
 }
+

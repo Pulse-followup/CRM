@@ -6,7 +6,7 @@ import { useClientStore } from '../../clients/clientStore'
 import '../../clients/pages/client-detail.css'
 import { useProjectStore } from '../../projects/projectStore'
 import { completeTask, pauseTask, resumeTask, startTask } from '../taskActions'
-import { TASK_STATUS_LABELS, TASK_TYPE_LABELS } from '../taskLabels'
+import { TASK_STATUS_LABELS } from '../taskLabels'
 import { getTaskById as selectTaskById, getTasksByUser } from '../taskSelectors'
 import { useTaskStore } from '../taskStore'
 import type { Task } from '../types'
@@ -22,13 +22,6 @@ function formatDueDate(value?: string) {
     month: '2-digit',
     year: 'numeric',
   }).format(date)
-}
-
-function formatDurationMinutes(value?: number) {
-  if (!value) return '-'
-  if (value < 60) return `${value} min`
-  const hours = Math.round((value / 60) * 10) / 10
-  return `${hours}h`
 }
 
 function getStatusTone(task: Task) {
@@ -52,7 +45,7 @@ function getStatusTone(task: Task) {
 function TaskDetail() {
   const navigate = useNavigate()
   const { taskId } = useParams()
-  const { currentUser } = useAuthStore()
+  const { currentUser, users } = useAuthStore()
   const { tasks, updateTask } = useTaskStore()
   const { getClientById } = useClientStore()
   const { getProjectById } = useProjectStore()
@@ -64,8 +57,14 @@ function TaskDetail() {
     () => getTasksByUser(tasks, currentUser.id, currentUser.name),
     [tasks, currentUser.id, currentUser.name],
   )
+  const assignableUsers = useMemo(() => {
+    const operationalUsers = users.filter((user) => user.role === 'user')
+    return operationalUsers.length ? operationalUsers : users
+  }, [users])
 
   const [isCompleting, setIsCompleting] = useState(false)
+  const [isReassigning, setIsReassigning] = useState(false)
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState(task?.assignedToUserId ?? '')
   const [timeSpentMinutes, setTimeSpentMinutes] = useState(String(task?.timeSpentMinutes ?? ''))
   const [materialCost, setMaterialCost] = useState(String(task?.materialCost ?? 0))
   const [materialDescription, setMaterialDescription] = useState(task?.materialDescription ?? '')
@@ -74,15 +73,17 @@ function TaskDetail() {
     setTimeSpentMinutes(String(task?.timeSpentMinutes ?? ''))
     setMaterialCost(String(task?.materialCost ?? 0))
     setMaterialDescription(task?.materialDescription ?? '')
+    setSelectedAssigneeId(task?.assignedToUserId ?? assignableUsers[0]?.id ?? '')
+    setIsReassigning(false)
 
     if (task?.status !== 'u_radu') {
       setIsCompleting(false)
     }
-  }, [task])
+  }, [task, assignableUsers])
 
   if (!task) {
     return (
-      <section className="page-card client-detail-shell">
+      <section className="page-card client-detail-shell task-detail-clean">
         <button type="button" className="secondary-link-button" onClick={() => navigate('/')}>
           Nazad
         </button>
@@ -99,20 +100,31 @@ function TaskDetail() {
     return <NoAccessPage />
   }
 
+  const isAdminView = currentUser.role === 'admin'
+  const isAssignedUser =
+    currentUser.role === 'user' && task.assignedToUserId === currentUser.id
   const isWaitingForPreviousStep = task.status === 'na_cekanju' && Boolean(task.dependsOnTaskId)
+  const canTakeTask = isAssignedUser && task.status === 'dodeljen'
+  const canPauseTask = isAssignedUser && task.status === 'u_radu'
+  const canResumeTask =
+    isAssignedUser &&
+    !isWaitingForPreviousStep &&
+    (task.status === 'na_cekanju' || task.status === 'vracen')
+  const canCompleteTask = isAssignedUser && task.status === 'u_radu'
+  const assigneeLabel = task.assignedToLabel || 'Nije dodeljeno'
 
   const handleStart = () => {
-    if (task.status !== 'dodeljen') return
+    if (!canTakeTask) return
     updateTask(startTask(task))
   }
 
   const handlePause = () => {
-    if (task.status !== 'u_radu') return
+    if (!canPauseTask) return
     updateTask(pauseTask(task))
   }
 
   const handleResume = () => {
-    if (isWaitingForPreviousStep || (task.status !== 'na_cekanju' && task.status !== 'vracen')) return
+    if (!canResumeTask) return
     updateTask(resumeTask(task))
   }
 
@@ -124,7 +136,7 @@ function TaskDetail() {
   }
 
   const handleConfirmComplete = () => {
-    if (task.status !== 'u_radu') return
+    if (!canCompleteTask) return
 
     const parsedTime = Number(timeSpentMinutes)
     const parsedMaterial = Number(materialCost)
@@ -142,84 +154,65 @@ function TaskDetail() {
     setIsCompleting(false)
   }
 
+  const handleReturnForRevision = () => {
+    if (!isAdminView) return
+    updateTask({
+      ...task,
+      status: 'vracen',
+      completedAt: null,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  const handleConfirmReassign = () => {
+    if (!isAdminView || !selectedAssigneeId) return
+    const nextAssignee = assignableUsers.find((user) => user.id === selectedAssigneeId)
+    if (!nextAssignee) return
+
+    updateTask({
+      ...task,
+      assignedToUserId: nextAssignee.id,
+      assignedToLabel: nextAssignee.name || nextAssignee.email,
+      needsAssignment: false,
+      updatedAt: new Date().toISOString(),
+    })
+    setIsReassigning(false)
+  }
+
   return (
-    <section className="page-card client-detail-shell">
+    <section className="page-card client-detail-shell task-detail-clean">
       <button type="button" className="secondary-link-button" onClick={() => navigate('/')}>
         Nazad
       </button>
 
-      <header className="customer-card-header">
+      <header className="customer-card-header task-detail-header-clean">
         <div>
+          <p className="task-detail-eyebrow">{client?.name ?? 'Task detalj'}</p>
           <h2 className="customer-card-title">{task.title}</h2>
-          <p className="customer-card-subtitle">Task detalj</p>
         </div>
         <span className={`customer-status-badge is-${getStatusTone(task)}`}>
           {TASK_STATUS_LABELS[task.status]}
         </span>
       </header>
 
-      <section className="customer-card-section">
-        <div className="customer-card-section-head">
-          <h3>Detalji taska</h3>
+      <section className="customer-card-section task-detail-summary">
+        {project ? (
+          <div className="task-detail-summary-row">
+            <span>Projekat</span>
+            <strong>{project.title}</strong>
+          </div>
+        ) : null}
+        <div className="task-detail-summary-row task-detail-description">
+          <span>Opis taska</span>
+          <p>{task.description?.trim() ? task.description : 'Nema dodatnog opisa za ovaj task.'}</p>
         </div>
-
-        <div className="customer-card-group">
-          <dl className="customer-card-detail-list">
-            <div>
-              <dt>Tip</dt>
-              <dd>{task.type ? TASK_TYPE_LABELS[task.type] : '-'}</dd>
-            </div>
-            <div>
-              <dt>Klijent</dt>
-              <dd>{client?.name ?? 'Nepoznat klijent'}</dd>
-            </div>
-            <div>
-              <dt>Projekat</dt>
-              <dd>{project?.title ?? 'Nepoznat projekat'}</dd>
-            </div>
-            <div>
-              <dt>Opis</dt>
-              <dd>{task.description?.trim() ? task.description : '-'}</dd>
-            </div>
-            <div>
-              <dt>Operativna rola</dt>
-              <dd>{task.requiredRole || task.assignedToLabel || '-'}</dd>
-            </div>
-            {task.assignedToUserId ? (
-              <div>
-                <dt>Dodeljeno korisniku</dt>
-                <dd>{task.assignedToLabel || '-'}</dd>
-              </div>
-            ) : null}
-            <div>
-              <dt>Rok</dt>
-              <dd>{formatDueDate(task.dueDate)}</dd>
-            </div>
-            {task.sequenceOrder ? (
-              <div>
-                <dt>Korak procesa</dt>
-                <dd>{task.sequenceOrder}</dd>
-              </div>
-            ) : null}
-            {task.estimatedMinutes ? (
-              <div>
-                <dt>Procena trajanja</dt>
-                <dd>{formatDurationMinutes(task.estimatedMinutes)}</dd>
-              </div>
-            ) : null}
-            <div>
-              <dt>Utrošeno vreme</dt>
-              <dd>{typeof task.timeSpentMinutes === 'number' ? `${task.timeSpentMinutes} min` : '-'}</dd>
-            </div>
-            <div>
-              <dt>Trošak materijala</dt>
-              <dd>{typeof task.materialCost === 'number' && task.materialCost > 0 ? `${task.materialCost} RSD` : '-'}</dd>
-            </div>
-            <div>
-              <dt>Opis materijala</dt>
-              <dd>{task.materialDescription?.trim() ? task.materialDescription : '-'}</dd>
-            </div>
-          </dl>
+        <div className="task-detail-summary-row">
+          <span>Dodeljeno korisniku</span>
+          <strong>{assigneeLabel}</strong>
+        </div>
+        <div className="task-detail-summary-row">
+          <span>Rok</span>
+          <strong>{formatDueDate(task.dueDate)}</strong>
         </div>
       </section>
 
@@ -228,15 +221,79 @@ function TaskDetail() {
           <h3>Akcije</h3>
         </div>
 
-        {task.status !== 'zavrsen' ? (
+        {isAdminView ? (
+          <>
+            <div className="customer-task-actions">
+              <button
+                type="button"
+                className="customer-project-toggle"
+                onClick={() => setIsReassigning((current) => !current)}
+              >
+                Re-dodeli task
+              </button>
+              <button
+                type="button"
+                className="customer-project-toggle"
+                onClick={handleReturnForRevision}
+              >
+                Vrati na doradu
+              </button>
+              {project ? (
+                <button
+                  type="button"
+                  className="customer-project-toggle"
+                  onClick={() => navigate(`/projects/${project.id}`)}
+                >
+                  Otvori projekat
+                </button>
+              ) : null}
+            </div>
+
+            {isReassigning ? (
+              <div className="customer-task-complete-form">
+                <label className="customer-task-form-field">
+                  <span>Dodeli korisniku</span>
+                  <select
+                    value={selectedAssigneeId}
+                    onChange={(event) => setSelectedAssigneeId(event.target.value)}
+                  >
+                    <option value="">-- Izaberi člana --</option>
+                    {assignableUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name || user.email}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="customer-task-actions">
+                  <button
+                    type="button"
+                    className="customer-project-toggle"
+                    onClick={handleConfirmReassign}
+                    disabled={!selectedAssigneeId}
+                  >
+                    Sačuvaj dodelu
+                  </button>
+                  <button
+                    type="button"
+                    className="customer-project-toggle"
+                    onClick={() => setIsReassigning(false)}
+                  >
+                    Otkaži
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : task.status !== 'zavrsen' ? (
           <div className="customer-task-actions">
-            {task.status === 'dodeljen' ? (
+            {canTakeTask ? (
               <button type="button" className="customer-project-toggle" onClick={handleStart}>
                 Preuzmi
               </button>
             ) : null}
 
-            {task.status === 'u_radu' ? (
+            {canPauseTask ? (
               <>
                 <button type="button" className="customer-project-toggle" onClick={handlePause}>
                   Stavi na čekanje
@@ -255,7 +312,7 @@ function TaskDetail() {
               <span className="customer-status-badge is-muted">Čeka prethodni korak</span>
             ) : null}
 
-            {!isWaitingForPreviousStep && (task.status === 'na_cekanju' || task.status === 'vracen') ? (
+            {canResumeTask ? (
               <button type="button" className="customer-project-toggle" onClick={handleResume}>
                 Nastavi rad
               </button>
@@ -265,7 +322,7 @@ function TaskDetail() {
           <div className="customer-card-empty">Task je završen i trenutno je samo za pregled.</div>
         )}
 
-        {isCompleting ? (
+        {!isAdminView && isCompleting ? (
           <div className="customer-task-complete-form">
             <label className="customer-task-form-field">
               <span>Utrošeno vreme (min)</span>

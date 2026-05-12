@@ -30,6 +30,14 @@ function buildNotificationLink(payload) {
   return `${self.location.origin}${basePath}`
 }
 
+function getNotificationTitle(payload) {
+  return payload?.notification?.title || payload?.data?.title || 'PULSE obavestenje'
+}
+
+function getNotificationBody(payload) {
+  return payload?.notification?.body || payload?.data?.body || ''
+}
+
 if (canInitFirebase()) {
   importScripts('https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js')
   importScripts('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js')
@@ -39,14 +47,17 @@ if (canInitFirebase()) {
   const messaging = self.firebase.messaging()
 
   messaging.onBackgroundMessage((payload) => {
-    const title = payload?.notification?.title || 'PULSE obavestenje'
-    const body = payload?.notification?.body || ''
+    const title = getNotificationTitle(payload)
+    const body = getNotificationBody(payload)
     const link = buildNotificationLink(payload)
+    const tag = payload?.data?.notificationId || payload?.data?.entityId || link
 
     self.registration.showNotification(title, {
       body,
       icon: buildAssetUrl('icon-192.png'),
       badge: buildAssetUrl('icon-192.png'),
+      tag,
+      renotify: true,
       data: {
         link,
       },

@@ -1,7 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { gsap } from "gsap";
 import { useNavigate } from "react-router-dom";
 import { getBillingStatus } from "../features/billing/billingLifecycle";
 import { BILLING_STATUS_LABELS } from "../features/billing/billingLabels";
+import { getBillingCollections } from "../features/billing/billingSelectors";
 import { useBillingStore } from "../features/billing/billingStore";
 import {
   getBillingGateMessage,
@@ -57,14 +65,22 @@ import CreateTaskForm, {
   type CreateTaskFormValues,
 } from "../features/tasks/components/CreateTaskForm";
 import { useCloudStore } from "../features/cloud/cloudStore";
+import {
+  buildAdminAiSignals,
+  buildSignalSuggestion,
+  getSignalTone,
+  type PulseSignal as AiPulseSignal,
+} from "../features/admin/aiSignals";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import "../features/clients/pages/client-detail.css";
+import "./admin-home-command-center.css";
 
 type ModalState =
   | { type: "task"; task: Task }
   | { type: "project"; project: Project }
   | { type: "billing"; record: BillingRecord }
   | { type: "client"; client: Client; score: number }
+  | { type: "signal-note"; signal: AiPulseSignal; note: string }
   | {
       type: "member-tasks";
       memberName: string;
@@ -98,26 +114,6 @@ function formatAmountValue(
 
 function formatAmount(record: BillingRecord) {
   return formatAmountValue(record.amount, record.currency);
-}
-
-function isPaidThisWeek(record: BillingRecord) {
-  if (getBillingStatus(record) !== "closed") return false;
-  const value = record.paidAt || record.updatedAt || record.createdAt;
-  if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const weekStart = new Date(today);
-  const day = weekStart.getDay() || 7;
-  weekStart.setDate(weekStart.getDate() - day + 1);
-
-  return date.getTime() >= weekStart.getTime();
-}
-
-function billingAmountSum(records: BillingRecord[]) {
-  return records.reduce((sum, record) => sum + (record.amount ?? 0), 0);
 }
 
 function isOverdueDate(value?: string | null) {
@@ -226,6 +222,8 @@ function getBlockedStepSignal(projectTasks: Task[]) {
 function taskValue(task: Task) {
   return (task.laborCost ?? 0) + (task.materialCost ?? 0);
 }
+
+type CommandStatusTone = "green" | "yellow" | "red";
 
 type PulseSignalTone = "red" | "yellow" | "blue";
 
@@ -691,7 +689,7 @@ function TaskAssignmentModalContent({
         </span>
       </div>
       <p>
-        {client?.name || "Nepoznat klijent"} —{" "}
+        {client?.name || "Nepoznat klijent"} - {" "}
         {project?.title || "Nepoznat projekat"}
       </p>
       <dl className="pulse-compact-dl">
@@ -728,8 +726,8 @@ function TaskAssignmentModalContent({
             const suggested = isSuggestedAssignee(member, requiredRole);
             return (
               <option key={member.user_id} value={member.user_id}>
-                {memberDisplayName(member)} · {operationalRole || "BEZ ROLE"}
-                {suggested ? " · preporučeno" : ""}
+                {memberDisplayName(member)} - {operationalRole || "BEZ ROLE"}
+                {suggested ? " - preporučeno" : ""}
               </option>
             );
           })}
@@ -849,6 +847,19 @@ function AdminModal({
             </p>
           </>
         ) : null}
+        {state.type === "signal-note" ? (
+          <>
+            <h3>{state.signal.actionLabel || "Predlog reakcije"}</h3>
+            <p>
+              <strong>{state.signal.entityName}</strong>
+            </p>
+            <p>{state.signal.message}</p>
+            {state.signal.impact ? <p>{state.signal.impact}</p> : null}
+            <div className="pulse-project-billing-summary">
+              <p style={{ whiteSpace: "pre-wrap" }}>{state.note}</p>
+            </div>
+          </>
+        ) : null}
         {state.type === "task" ? (
           <TaskAssignmentModalContent
             task={state.task}
@@ -876,7 +887,7 @@ function AdminModal({
           <>
             <h3>{state.memberName} - taskovi</h3>
             <p>
-              <strong>{state.activeCount}</strong> aktivna ·{" "}
+              <strong>{state.activeCount}</strong> aktivna ?{" "}
               <strong>{state.lateCount}</strong> kasni
             </p>
             <div className="pulse-team-task-peek">
@@ -893,8 +904,8 @@ function AdminModal({
                       {task.projectId
                         ? projects.find((project) => project.id === task.projectId)
                             ?.title ?? "Nepoznat projekat"
-                        : `${clients.find((client) => String(client.id) === String(task.clientId))?.name ?? "Nepoznat klijent"} · Ad hoc`}{" "}
-                      ·{" "}
+                        : `${clients.find((client) => String(client.id) === String(task.clientId))?.name ?? "Nepoznat klijent"} - Ad hoc`}{" "}
+                      -{" "}
                       {isOverdueDate(task.dueDate)
                         ? "Kasni"
                         : TASK_STATUS_LABELS[task.status]}
@@ -955,13 +966,28 @@ function AdminHome() {
   const [selectedTeamMemberId, setSelectedTeamMemberId] = useState<
     string | null
   >(null);
+  const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
+  const commandCenterRef = useRef<HTMLElement | null>(null);
+  const signalsPanelRef = useRef<HTMLElement | null>(null);
+  const billingPanelRef = useRef<HTMLButtonElement | null>(null);
+  const billingOpenAmountRef = useRef<HTMLSpanElement | null>(null);
+  const billingOverdueCountRef = useRef<HTMLSpanElement | null>(null);
+  const billingPaidWeekAmountRef = useRef<HTMLSpanElement | null>(null);
+  const carouselTrackRef = useRef<HTMLDivElement | null>(null);
+  const carouselCardRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const carouselPointerStartXRef = useRef<number | null>(null);
   const { clients, addClient, updateClient } = useClientStore();
   const { projects, addProject } = useProjectStore();
   const { tasks, addTask, updateTask } = useTaskStore();
-  const { getAllBilling, createBillingForProject } = useBillingStore();
+  const { getAllBilling, createBillingForProject, isCloudBillingMode } =
+    useBillingStore();
   const [modal, setModal] = useState<ModalState>(null);
   const [pulseTypingText, setPulseTypingText] = useState("");
   const billing = getAllBilling();
+  const billingCollections = useMemo(
+    () => getBillingCollections(billing),
+    [billing],
+  );
 
   useEffect(() => {
     const updates = tasks
@@ -1086,7 +1112,7 @@ function AdminHome() {
         title: lateBy
           ? `Naplata kasni ${lateBy} dana`
           : "Naplata čeka reakciju",
-        message: `${clientName(record.clientId)} — ${formatAmount(record)} za projekat ${projectTitle(record.projectId)}`,
+        message: `${clientName(record.clientId)} - ${formatAmount(record)} za projekat ${projectTitle(record.projectId)}`,
         actionLabel: "Otvori",
         action: () => setModal({ type: "billing", record }),
       });
@@ -1102,7 +1128,7 @@ function AdminHome() {
         title: overdueDays
           ? `Faza kasni ${overdueDays} dana`
           : "Projekat traži pažnju",
-        message: `${clientName(project.clientId)} — ${project.title}${overdueStage?.name ? `: ${overdueStage.name}` : ""}`,
+        message: `${clientName(project.clientId)} - ${project.title}${overdueStage?.name ? `: ${overdueStage.name}` : ""}`,
         actionLabel: "Otvori projekat",
         action: () => setModal({ type: "project", project }),
       });
@@ -1128,7 +1154,7 @@ function AdminHome() {
           tone: "red",
           badge: "ROLA",
           title: task.title,
-          message: `${project.title} · Rok: ${formatDate(task.dueDate)} · Rola: ${normalizeRoleLabel(task.requiredRole || task.assignedToLabel)}`,
+          message: `${project.title} - Rok: ${formatDate(task.dueDate)} - Rola: ${normalizeRoleLabel(task.requiredRole || task.assignedToLabel)}`,
           actionLabel: "Re-delegiraj",
           action: () => setModal({ type: "task", task }),
         });
@@ -1140,7 +1166,7 @@ function AdminHome() {
           tone: blockedStep.tone,
           badge: blockedStep.tone === "red" ? "BLOKADA" : "USPORAVA",
           title: blockedStep.title,
-          message: `${clientName(project.clientId)} — ${project.title}: ${blockedStep.task.requiredRole || blockedStep.task.title} traje ${formatDurationShort(blockedStep.actualMinutes)} / očekivano ${formatDurationShort(blockedStep.expectedMinutes)} (${blockedStep.ratio.toFixed(1)}x)`,
+          message: `${clientName(project.clientId)} - ${project.title}: ${blockedStep.task.requiredRole || blockedStep.task.title} traje ${formatDurationShort(blockedStep.actualMinutes)} / očekivano ${formatDurationShort(blockedStep.expectedMinutes)} (${blockedStep.ratio.toFixed(1)}x)`,
           actionLabel: "Otvori task",
           action: () => setModal({ type: "task", task: blockedStep.task }),
         });
@@ -1179,7 +1205,7 @@ function AdminHome() {
           tone: "red",
           badge: "ZRELO",
           title: `Završeni taskovi čekaju ${idleDays} dana`,
-          message: `${clientName(project.clientId)} — ${project.title}: ${unbilledTasks.length} taska spremna za naplatu${pendingValue ? ` (${formatAmountValue(pendingValue)})` : ""}`,
+          message: `${clientName(project.clientId)} - ${project.title}: ${unbilledTasks.length} taska spremna za naplatu${pendingValue ? ` (${formatAmountValue(pendingValue)})` : ""}`,
           actionLabel: "Otvori projekat",
           action: () => setModal({ type: "project", project }),
         });
@@ -1189,7 +1215,7 @@ function AdminHome() {
           tone: "yellow",
           badge: "NAPLATA",
           title: "Spremno za naplatu",
-          message: `${clientName(project.clientId)} — ${project.title}: ${unbilledTasks.length} završenih taskova`,
+          message: `${clientName(project.clientId)} - ${project.title}: ${unbilledTasks.length} završenih taskova`,
           actionLabel: "Otvori projekat",
           action: () => setModal({ type: "project", project }),
         });
@@ -1201,7 +1227,7 @@ function AdminHome() {
           tone: "red",
           badge: "BLOKADA",
           title: `Projekat stoji ${idleDays} dana`,
-          message: `${clientName(project.clientId)} — ${project.title}: ${progress}% završeno, ${openTasks.length} otvorenih taskova`,
+          message: `${clientName(project.clientId)} - ${project.title}: ${progress}% završeno, ${openTasks.length} otvorenih taskova`,
           actionLabel: "Otvori projekat",
           action: () => setModal({ type: "project", project }),
         });
@@ -1211,7 +1237,7 @@ function AdminHome() {
           tone: "yellow",
           badge: "BITNO",
           title: `Projekat je ${progress}% završen`,
-          message: `${clientName(project.clientId)} — ${project.title}: blizu završetka, proveri sledeći korak`,
+          message: `${clientName(project.clientId)} - ${project.title}: blizu završetka, proveri sledeći korak`,
           actionLabel: "Pogledaj",
           action: () => setModal({ type: "project", project }),
         });
@@ -1223,7 +1249,7 @@ function AdminHome() {
           tone: "red",
           badge: "100%",
           title: "Završeno, nije naplaćeno",
-          message: `${clientName(project.clientId)} — ${project.title}: sve završeno, pošalji na naplatu`,
+          message: `${clientName(project.clientId)} - ${project.title}: sve završeno, pošalji na naplatu`,
           actionLabel: "Naplata",
           action: () => setModal({ type: "project", project }),
         });
@@ -1236,7 +1262,7 @@ function AdminHome() {
         tone: "red",
         badge: "TASK",
         title: "Task kasni",
-        message: `${clientName(String(task.clientId))} — ${projectTitle(task.projectId)}: ${task.title}`,
+        message: `${clientName(String(task.clientId))} - ${projectTitle(task.projectId)}: ${task.title}`,
         actionLabel: "Otvori",
         action: () => setModal({ type: "task", task }),
       });
@@ -1262,6 +1288,29 @@ function AdminHome() {
     clientById,
     projectById,
   ]);
+  void pulseSignals;
+  const aiSignals = useMemo(
+    () =>
+      buildAdminAiSignals({
+        clients,
+        projects,
+        tasks,
+        billing,
+        members,
+      }),
+    [billing, clients, members, projects, tasks],
+  );
+  const signalStatusHeadline =
+    aiSignals[0]?.severity === "green"
+      ? "Firma je trenutno pod kontrolom"
+      : "Potrebna reakcija";
+  const actionableSignalCount = aiSignals.filter(
+    (signal) => signal.severity === "red" || signal.severity === "yellow",
+  ).length;
+  const signalReactionLabel =
+    actionableSignalCount === 1
+      ? "potrebna reakcija"
+      : "potrebnih reakcija";
   const validTeamTasks = tasks.filter((task) => {
     if (!task.clientId || !clientById.has(String(task.clientId))) return false;
     if (task.projectId && !projectById.has(task.projectId)) return false;
@@ -1277,67 +1326,323 @@ function AdminHome() {
     );
   const teamActiveTasksForMember = (memberId: string) =>
     teamActiveTasks.filter((task) => task.assignedToUserId === memberId);
-  const openWorkspaceMember = (memberId: string) => {
-    navigate(`/workspace?member=${encodeURIComponent(memberId)}`);
-  };
   const billingSummaryCards = useMemo(() => {
-    const activeBillingRecords = billing.filter(
-      (record) => record.status !== "cancelled",
-    );
-    const readyRecords = activeBillingRecords.filter(
-      (record) =>
-        getBillingStatus(record) === "issued" &&
-        (record.status === "ready" || record.status === "draft"),
-    );
-    const invoicedRecords = activeBillingRecords.filter(
-      (record) =>
-        getBillingStatus(record) === "issued" && record.status === "invoiced",
-    );
-    const overdueRecords = activeBillingRecords.filter(
-      (record) => getBillingStatus(record) === "overdue",
-    );
-    const paidThisWeekRecords = activeBillingRecords.filter(
-      (record) => getBillingStatus(record) === "closed" && isPaidThisWeek(record),
-    );
-
     return [
       {
         key: "draft",
         label: "Za fakturisanje",
-        amount: billingAmountSum(readyRecords),
-        count: readyRecords.length,
+        amount: billingCollections.readyTotal,
+        count: billingCollections.ready.length,
         tone: "blue" as const,
         filter: "draft",
       },
       {
         key: "invoiced",
         label: "Fakturisano",
-        amount: billingAmountSum(invoicedRecords),
-        count: invoicedRecords.length,
+        amount: billingCollections.invoicedTotal,
+        count: billingCollections.invoiced.length,
         tone: "blue" as const,
         filter: "invoiced",
       },
       {
         key: "overdue",
         label: "Kasni sa naplatom",
-        amount: billingAmountSum(overdueRecords),
-        count: overdueRecords.length,
+        amount: billingCollections.overdueTotal,
+        count: billingCollections.overdue.length,
         tone: "red" as const,
         filter: "overdue",
       },
       {
         key: "paid-week",
         label: "Plaćeno ove nedelje",
-        amount: billingAmountSum(paidThisWeekRecords),
-        count: paidThisWeekRecords.length,
+        amount: billingCollections.paidWeekTotal,
+        count: billingCollections.paidThisWeek.length,
         tone: "green" as const,
         filter: "paid-week",
       },
     ];
-  }, [billing]);
+  }, [billingCollections]);
 
   const openBillingFilter = (filter: string) => {
     navigate(`/billing?filter=${filter}`);
+  };
+
+  const commandStatusTone = useMemo(
+    () => getSignalTone(aiSignals),
+    [aiSignals],
+  );
+  const selectedMember = useMemo(() => {
+    if (!activeTeamMembers.length) return null;
+    return (
+      activeTeamMembers.find((member) => member.user_id === selectedTeamMemberId) ??
+      activeTeamMembers[0]
+    );
+  }, [activeTeamMembers, selectedTeamMemberId]);
+  const selectedMemberIndex = selectedMember
+    ? activeTeamMembers.findIndex(
+        (member) => member.user_id === selectedMember.user_id,
+      )
+    : -1;
+  const selectedMemberTasks = selectedMember
+    ? teamActiveTasksForMember(selectedMember.user_id)
+    : [];
+  const selectedMemberLateTasks = selectedMemberTasks.filter((task) =>
+    isOverdueDate(task.dueDate),
+  );
+  const billingCommandStats = useMemo(() => {
+    const draftCard = billingSummaryCards.find((card) => card.key === "draft");
+    const overdueCard = billingSummaryCards.find(
+      (card) => card.key === "overdue",
+    );
+    const paidWeekCard = billingSummaryCards.find(
+      (card) => card.key === "paid-week",
+    );
+    const readyCount = draftCard?.count ?? 0;
+    const openAmount = draftCard?.amount ?? 0;
+    const overdueCount = overdueCard?.count ?? 0;
+    return {
+      readyCount,
+      openAmount,
+      overdueCount,
+      paidWeekAmount: paidWeekCard?.amount ?? 0,
+      targetFilter: overdueCount ? "overdue" : "draft",
+    };
+  }, [billingSummaryCards]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+
+    const projectTaskCandidates = projects
+      .map((project) => {
+        const projectTasks = tasks.filter((task) => task.projectId === project.id);
+        const unbilledTasks = getBillableTasksForProject(project, projectTasks, billing);
+
+        return {
+          projectId: project.id,
+          projectTitle: project.title,
+          readyTaskCount: unbilledTasks.length,
+          readyAmount: unbilledTasks.reduce((sum, task) => sum + taskValue(task), 0),
+        };
+      })
+      .filter((item) => item.readyTaskCount > 0);
+
+    console.debug("[billing-debug]", {
+      source: isCloudBillingMode ? "supabase" : "local",
+      recordCount: billing.length,
+      readyCount: billingCollections.ready.length,
+      readyTotal: billingCollections.readyTotal,
+      invoicedCount: billingCollections.invoiced.length,
+      overdueCount: billingCollections.overdue.length,
+      paidCount: billingCollections.paid.length,
+      statuses: billing.map((record) => ({
+        id: record.id,
+        projectId: record.projectId,
+        status: record.status,
+        normalizedStatus: getBillingStatus(record),
+        amount: record.amount ?? 0,
+      })),
+      projectTaskCandidates,
+    });
+  }, [billing, billingCollections, isCloudBillingMode, projects, tasks]);
+
+  useEffect(() => {
+    if (!activeTeamMembers.length) return;
+    if (
+      !selectedTeamMemberId ||
+      !activeTeamMembers.some((member) => member.user_id === selectedTeamMemberId)
+    ) {
+      setSelectedTeamMemberId(activeTeamMembers[0].user_id);
+    }
+  }, [activeTeamMembers, selectedTeamMemberId]);
+
+  useEffect(() => {
+    if (!signalsPanelRef.current) return;
+
+    const glowMap: Record<
+      CommandStatusTone,
+      { border: string; shadow: string; shadowSoft: string }
+    > = {
+      green: {
+        border: "#4df7a1",
+        shadow: "0 0 0 1px rgba(77, 247, 161, 0.35), 0 0 28px rgba(77, 247, 161, 0.22)",
+        shadowSoft:
+          "0 0 0 1px rgba(77, 247, 161, 0.2), 0 0 14px rgba(77, 247, 161, 0.1)",
+      },
+      yellow: {
+        border: "#ffcc66",
+        shadow: "0 0 0 1px rgba(255, 204, 102, 0.35), 0 0 28px rgba(255, 204, 102, 0.22)",
+        shadowSoft:
+          "0 0 0 1px rgba(255, 204, 102, 0.18), 0 0 14px rgba(255, 204, 102, 0.1)",
+      },
+      red: {
+        border: "#ff627d",
+        shadow: "0 0 0 1px rgba(255, 98, 125, 0.4), 0 0 30px rgba(255, 98, 125, 0.24)",
+        shadowSoft:
+          "0 0 0 1px rgba(255, 98, 125, 0.2), 0 0 16px rgba(255, 98, 125, 0.1)",
+      },
+    };
+
+    const glow = glowMap[commandStatusTone];
+    const ctx = gsap.context(() => {
+      gsap.set(signalsPanelRef.current, {
+        borderColor: glow.border,
+        boxShadow: glow.shadowSoft,
+      });
+      gsap.to(signalsPanelRef.current, {
+        boxShadow: glow.shadow,
+        duration: 1.8,
+        repeat: -1,
+        yoyo: true,
+        ease: "sine.inOut",
+      });
+    }, commandCenterRef);
+
+    return () => ctx.revert();
+  }, [commandStatusTone]);
+
+  useEffect(() => {
+    if (!billingPanelRef.current) return;
+
+    const amountTarget = billingCommandStats.openAmount;
+    const overdueTarget = billingCommandStats.overdueCount;
+    const paidWeekTarget = billingCommandStats.paidWeekAmount;
+    const counters = { amount: 0, overdue: 0, paidWeek: 0 };
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        billingPanelRef.current,
+        { y: 18, opacity: 0.7 },
+        { y: 0, opacity: 1, duration: 0.7, ease: "power2.out" },
+      );
+      gsap.to(counters, {
+        amount: amountTarget,
+        overdue: overdueTarget,
+        paidWeek: paidWeekTarget,
+        duration: 1.3,
+        ease: "power2.out",
+        onUpdate: () => {
+          if (billingOpenAmountRef.current) {
+            billingOpenAmountRef.current.textContent = formatAmountValue(
+              Math.round(counters.amount),
+            );
+          }
+          if (billingOverdueCountRef.current) {
+            billingOverdueCountRef.current.textContent = String(
+              Math.round(counters.overdue),
+            );
+          }
+          if (billingPaidWeekAmountRef.current) {
+            billingPaidWeekAmountRef.current.textContent = formatAmountValue(
+              Math.round(counters.paidWeek),
+            );
+          }
+        },
+      });
+      gsap.to(".command-billing-stat", {
+        y: -2,
+        boxShadow:
+          "0 0 0 1px rgba(96, 165, 250, 0.16), 0 18px 30px rgba(15, 23, 42, 0.22)",
+        duration: 1.4,
+        ease: "sine.inOut",
+        repeat: -1,
+        yoyo: true,
+        stagger: 0.08,
+      });
+    }, commandCenterRef);
+
+    return () => ctx.revert();
+  }, [billingCommandStats]);
+
+  useEffect(() => {
+    if (!carouselTrackRef.current || selectedMemberIndex < 0) return;
+
+    const ctx = gsap.context(() => {
+      carouselCardRefs.current.forEach((card, index) => {
+        if (!card) return;
+        const offset = index - selectedMemberIndex;
+        const absOffset = Math.abs(offset);
+        const isActive = offset === 0;
+        const limitedOffset = Math.max(-2, Math.min(2, offset));
+
+        gsap.to(card, {
+          xPercent: -50 + limitedOffset * 50,
+          y: absOffset === 0 ? 0 : absOffset === 1 ? 14 : 24,
+          rotateY: limitedOffset * -38,
+          scale: isActive ? 1 : absOffset === 1 ? 0.82 : 0.66,
+          opacity:
+            absOffset > 2 ? 0 : absOffset === 2 ? 0.16 : absOffset === 1 ? 0.58 : 1,
+          zIndex: 100 - absOffset,
+          filter:
+            absOffset === 0
+              ? "blur(0px)"
+              : absOffset === 1
+                ? "blur(0.4px)"
+                : "blur(1.2px)",
+          duration: 0.65,
+          ease: "power3.out",
+          transformPerspective: 1200,
+          transformOrigin: "center center",
+        });
+      });
+    }, commandCenterRef);
+
+    return () => ctx.revert();
+  }, [activeTeamMembers, selectedMemberIndex]);
+
+  const shiftSelectedMember = (direction: -1 | 1) => {
+    if (!activeTeamMembers.length || selectedMemberIndex < 0) return;
+    const nextIndex =
+      direction < 0
+        ? selectedMemberIndex <= 0
+          ? activeTeamMembers.length - 1
+          : selectedMemberIndex - 1
+        : selectedMemberIndex >= activeTeamMembers.length - 1
+          ? 0
+          : selectedMemberIndex + 1;
+    setSelectedTeamMemberId(activeTeamMembers[nextIndex]?.user_id ?? null);
+  };
+
+  const handleCarouselPointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    carouselPointerStartXRef.current = event.clientX;
+  };
+
+  const handleCarouselPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (carouselPointerStartXRef.current === null) return;
+    const deltaX = event.clientX - carouselPointerStartXRef.current;
+    carouselPointerStartXRef.current = null;
+    if (Math.abs(deltaX) < 36) return;
+    shiftSelectedMember(deltaX > 0 ? -1 : 1);
+  };
+
+  const openSignalCard = (signal: AiPulseSignal) => {
+    if (signal.actionType === "open_billing" || signal.actionType === "billing_summary") {
+      openBillingFilter("draft");
+      return;
+    }
+    if (signal.relatedTaskId) {
+      navigate(`/tasks/${signal.relatedTaskId}`);
+      return;
+    }
+    if (signal.relatedProjectId) {
+      const project = projects.find((item) => item.id === signal.relatedProjectId);
+      if (project) {
+        setModal({ type: "project", project });
+      }
+    }
+  };
+
+  const openSignalNote = (signal: AiPulseSignal) => {
+    const note = buildSignalSuggestion(signal);
+    if (!note) {
+      openSignalCard(signal);
+      return;
+    }
+    setModal({
+      type: "signal-note",
+      signal,
+      note,
+    });
   };
 
   const handleCreateClient = async (values: ClientCreateFormValues) => {
@@ -1407,7 +1712,7 @@ function AdminHome() {
     const member = members.find((item) => item.user_id === memberId);
     if (!member) return;
     const now = new Date().toISOString();
-    const label = `${memberDisplayName(member)} · ${memberOperationalRole(member)}`;
+    const label = `${memberDisplayName(member)} - ${memberOperationalRole(member)}`;
     await updateTask({
       ...task,
       assignedToUserId: member.user_id,
@@ -1594,169 +1899,250 @@ function AdminHome() {
   };
 
   return (
-    <section className="pulse-phone-screen admin-phone-screen">
-      <h2>Pregled poslovanja</h2>
-      <section className="pulse-panel pulse-panel-red pulse-signals-panel">
-        <h3>HITNO – BITNO !!!</h3>
-        <div className="pulse-ai-line">
-          <span className="pulse-ai-cursor">▌</span>
-          {pulseTypingText || "PULSE analizira..."}
-        </div>
-        <div className="pulse-list">
-          {pulseSignals.length ? (
-            pulseSignals.map((signal) => (
-              <article
-                className={`pulse-item pulse-signal-card pulse-signal-${signal.tone}`}
-                key={signal.id}
-              >
-                <div className="pulse-item-title-row">
-                  <h4>{signal.title}</h4>
-                  <span
-                    className={`pulse-pill ${signal.tone === "red" ? "pulse-pill-red" : signal.tone === "yellow" ? "pulse-pill-blue" : "pulse-pill-cyan"}`}
-                  >
-                    {signal.badge}
-                  </span>
-                </div>
-                <p>{signal.message}</p>
-                <button
-                  className="pulse-outline-btn pulse-card-open"
-                  type="button"
-                  onClick={signal.action}
-                >
-                  {signal.actionLabel}
-                </button>
-              </article>
-            ))
-          ) : (
-            <p className="pulse-empty">
-              Sve je pod kontrolom. Nema kritičnih signala trenutno.
-            </p>
-          )}
-        </div>
-      </section>
-      <section className="pulse-panel pulse-panel-green pulse-team-overview-panel">
-        <h3>MOJ TIM</h3>
-        <div className="pulse-team-bubbles" aria-label="Filter po clanu tima">
+    <section
+      className="pulse-phone-screen admin-phone-screen command-center-screen"
+      ref={commandCenterRef}
+    >
+      <div className="command-center-shell">
+        <section
+          ref={signalsPanelRef}
+          className={`command-panel command-signals-panel is-${commandStatusTone}`}
+        >
           <button
             type="button"
-            className={`pulse-team-bubble ${selectedTeamMemberId === null ? "is-active" : ""}`}
-            onClick={() => setSelectedTeamMemberId(null)}
+            className="command-signals-summary"
+            onClick={() => setIsSignalsExpanded((current) => !current)}
           >
-            Svi
+            <div className="command-panel-kicker">Live command feed</div>
+            <div className="command-panel-title-row">
+              <h3>HITNO / BITNO</h3>
+              <span className={`command-status-chip is-${commandStatusTone}`}>
+                {commandStatusTone === "red"
+                  ? "Hitno"
+                  : commandStatusTone === "yellow"
+                    ? "Rizik"
+                    : "Stabilno"}
+              </span>
+            </div>
+            <div className="pulse-ai-line command-ai-line">
+              <span className="pulse-ai-cursor">|</span>
+              {pulseTypingText || "PULSE analizira..."}
+            </div>
+            <p className="command-signal-headline">{signalStatusHeadline}</p>
+            <div className="command-signal-stats">
+              <div>
+                <strong>{lateTasks.length}</strong>
+                <span>kasnih taskova</span>
+              </div>
+              <div>
+                <strong>{urgentBilling.length}</strong>
+                <span>naplata alarm</span>
+              </div>
+              <div>
+                <strong>{actionableSignalCount}</strong>
+                <span>{signalReactionLabel}</span>
+              </div>
+            </div>
           </button>
-          {activeTeamMembers.map((member) => (
-            <button
-              key={member.id || member.user_id}
-              type="button"
-              className={`pulse-team-bubble ${selectedTeamMemberId === member.user_id ? "is-active" : ""}`}
-              onClick={() => setSelectedTeamMemberId(member.user_id)}
-            >
-              {memberDisplayName(member)}
-            </button>
-          ))}
-        </div>
-        <div className="pulse-team-grid">
-          {activeTeamMembers.length ? (
-            activeTeamMembers
-              .filter(
-                (member) =>
-                  !selectedTeamMemberId ||
-                  member.user_id === selectedTeamMemberId,
-              )
-              .map((member) => {
-                const activeMemberTasks = teamActiveTasksForMember(
-                  member.user_id,
-                );
-                const lateMemberTasks = activeMemberTasks.filter((task) =>
-                  isOverdueDate(task.dueDate),
-                );
-                return (
-                  <article
-                    className={`pulse-team-member-card ${lateMemberTasks.length ? "has-late" : ""}`}
-                    key={member.id || member.user_id}
-                    onClick={() => openWorkspaceMember(member.user_id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter")
-                        openWorkspaceMember(member.user_id);
-                    }}
-                  >
-                    <div className="pulse-team-member-head">
-                      <div className="pulse-team-member-id">
-                        <span className="pulse-team-avatar">
-                          {memberInitials(member)}
-                        </span>
-                        <div>
-                          <h4>{memberDisplayName(member)}</h4>
-                          <p>{memberOperationalRole(member)}</p>
-                        </div>
-                      </div>
-                      <span
-                        className={
-                          lateMemberTasks.length
-                            ? "pulse-team-status is-late"
-                            : "pulse-team-status"
-                        }
-                      >
-                        {lateMemberTasks.length
-                          ? `${lateMemberTasks.length} kasni`
-                          : "OK"}
-                      </span>
-                    </div>
-                    <div className="pulse-team-member-stats">
-                      <span>
-                        <strong>{activeMemberTasks.length}</strong> aktivna
-                      </span>
-                      <span>
-                        <strong>{lateMemberTasks.length}</strong> kasni
-                      </span>
-                    </div>
+          <div
+            className={`command-signal-drawer ${isSignalsExpanded ? "is-open" : ""}`}
+          >
+            {aiSignals.length ? (
+              aiSignals.map((signal) => (
+                <article
+                  key={signal.id}
+                  className={`command-signal-item is-${signal.severity}`}
+                  onClick={() => openSignalCard(signal)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openSignalCard(signal);
+                    }
+                  }}
+                >
+                  <div className="command-signal-item-top">
+                    <strong>{signal.entityName}</strong>
+                    <span className={`command-signal-badge is-${signal.severity}`}>
+                      {signal.severity === "red"
+                        ? "Potrebna reakcija"
+                        : signal.severity === "yellow"
+                          ? "Prati"
+                          : "Pod kontrolom"}
+                    </span>
+                  </div>
+                  <p>{signal.message}</p>
+                  {signal.impact ? <small>{signal.impact}</small> : null}
+                  {signal.actionLabel ? (
                     <button
                       type="button"
-                      className="pulse-outline-btn pulse-team-tasks-button"
+                      className="command-signal-action"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setModal({
-                          type: "member-tasks",
-                          memberName: memberDisplayName(member),
-                          tasks: activeMemberTasks,
-                          activeCount: activeMemberTasks.length,
-                          lateCount: lateMemberTasks.length,
-                        });
+                        openSignalNote(signal);
                       }}
                     >
-                      Taskovi
+                      {signal.actionLabel}
                     </button>
-                  </article>
-                );
-              })
-          ) : (
-            <p className="pulse-empty">Nema clanova tima u workspace-u.</p>
-          )}
-        </div>
-      </section>
-      <section className="pulse-panel pulse-panel-white pulse-admin-billing-summary-panel">
-        <h3>NAPLATA</h3>
-        <div className="admin-billing-summary-grid">
-          {billingSummaryCards.map((card) => (
-            <button
-              key={card.key}
-              type="button"
-              className={`admin-billing-summary-card is-${card.tone}`}
-              onClick={() => openBillingFilter(card.filter)}
+                  ) : null}
+                </article>
+              ))
+            ) : (
+              <p className="pulse-empty command-inline-empty">
+                Sve je pod kontrolom. Nema kriticnih signala trenutno.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <div className="command-center-grid">
+          <button
+            ref={billingPanelRef}
+            type="button"
+            className="command-panel command-billing-panel"
+            onClick={() => openBillingFilter(billingCommandStats.targetFilter)}
+          >
+            <div className="command-panel-kicker">Cash visibility</div>
+            <div className="command-panel-title-row">
+              <h3>NAPLATA</h3>
+              <span className="command-link-hint">
+                {billingCommandStats.readyCount} za fakturisanje
+              </span>
+            </div>
+            <div className="command-billing-body">
+              <div className="command-billing-metrics">
+                <div className="command-billing-stat">
+                  <span>Otvoren iznos</span>
+                  <strong ref={billingOpenAmountRef}>
+                    {formatAmountValue(billingCommandStats.openAmount)}
+                  </strong>
+                </div>
+                <div className="command-billing-stat">
+                  <span>Overdue stavke</span>
+                  <strong ref={billingOverdueCountRef}>
+                    {billingCommandStats.overdueCount}
+                  </strong>
+                </div>
+                <div className="command-billing-stat">
+                  <span>Placeno ove nedelje</span>
+                  <strong ref={billingPaidWeekAmountRef}>
+                    {formatAmountValue(billingCommandStats.paidWeekAmount)}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <section className="command-panel command-team-panel">
+            <div className="command-team-header">
+              <button
+                type="button"
+                className="command-title-link"
+                onClick={() => navigate("/workspace")}
+              >
+                <span>MOJ TIM</span>
+                <span className="command-title-arrow" aria-hidden="true">
+                  ›
+                </span>
+              </button>
+              <span className="command-carousel-hint">
+                Otvori workspace • klik ili prevuci karticu
+              </span>
+            </div>
+            <div
+              ref={carouselTrackRef}
+              className="command-team-carousel"
+              aria-label="Carousel clanova tima"
+              onPointerDown={handleCarouselPointerDown}
+              onPointerUp={handleCarouselPointerUp}
+              onPointerLeave={() => {
+                carouselPointerStartXRef.current = null;
+              }}
             >
-              <span className="admin-billing-summary-amount">
-                {formatAmountValue(card.amount)}
-              </span>
-              <span className="admin-billing-summary-label">{card.label}</span>
-              <span className="admin-billing-summary-count">
-                {card.count} nalog{card.count === 1 ? "" : "a"}
-              </span>
-            </button>
-          ))}
+              {activeTeamMembers.length ? (
+                activeTeamMembers.map((member, index) => {
+                  const isActive = selectedMember?.user_id === member.user_id;
+                  const activeTasks = teamActiveTasksForMember(member.user_id);
+                  return (
+                    <button
+                      key={member.id || member.user_id}
+                      ref={(node) => {
+                        carouselCardRefs.current[index] = node;
+                      }}
+                      type="button"
+                      className={`command-team-card ${isActive ? "is-active" : ""}`}
+                      onClick={() => setSelectedTeamMemberId(member.user_id)}
+                    >
+                      <span className="command-team-avatar">
+                        {memberInitials(member)}
+                      </span>
+                      <strong>{memberDisplayName(member)}</strong>
+                      <small>{memberOperationalRole(member)}</small>
+                      <span className="command-team-meta">
+                        {activeTasks.length} aktivna
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="pulse-empty command-inline-empty">
+                  Nema clanova tima u workspace-u.
+                </p>
+              )}
+            </div>
+          </section>
+
+          <section className="command-panel command-task-panel">
+            <div className="command-task-header">
+              <div>
+                <span className="command-panel-kicker">Assigned focus</span>
+                <h3>
+                  {selectedMember
+                    ? memberDisplayName(selectedMember)
+                    : "Izaberi clana tima"}
+                </h3>
+              </div>
+              <div className="command-task-stats">
+                <span>{selectedMemberTasks.length} aktivna</span>
+                <span>{selectedMemberLateTasks.length} kasni</span>
+              </div>
+            </div>
+            <div className="command-task-scroll">
+              {selectedMemberTasks.length ? (
+                selectedMemberTasks.map((task) => (
+                  <button
+                    key={task.id}
+                    type="button"
+                    className={`command-task-card ${isOverdueDate(task.dueDate) ? "is-late" : ""}`}
+                    onClick={() => navigate(`/tasks/${task.id}`)}
+                  >
+                    <div className="command-task-card-top">
+                      <strong>{task.title}</strong>
+                      <span>{TASK_STATUS_LABELS[task.status]}</span>
+                    </div>
+                    <small>
+                      {task.projectId
+                        ? projectTitle(task.projectId)
+                        : `${clientName(String(task.clientId))} · Ad hoc`}
+                    </small>
+                    <div className="command-task-card-meta">
+                      <span>Rok: {formatDate(task.dueDate)}</span>
+                      <span>
+                        {isOverdueDate(task.dueDate) ? "Kasni" : "Na vreme"}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <p className="pulse-empty command-inline-empty">
+                  Nema aktivnih taskova za prikaz.
+                </p>
+              )}
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
 
       <AdminModal
         state={modal}

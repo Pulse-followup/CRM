@@ -50,6 +50,40 @@ let firebaseLoadPromise: Promise<{
 let foregroundListenerBound = false
 let latestForegroundCallback: (() => void) | null = null
 
+function getForegroundNotificationTitle(payload: FirebaseMessagePayload) {
+  return payload.notification?.title || payload.data?.title || 'PULSE obavestenje'
+}
+
+function getForegroundNotificationBody(payload: FirebaseMessagePayload) {
+  return payload.notification?.body || payload.data?.body || ''
+}
+
+async function showForegroundNotification(payload: FirebaseMessagePayload) {
+  if (typeof window === 'undefined') return
+  if (Notification.permission !== 'granted') return
+
+  const title = getForegroundNotificationTitle(payload)
+  const body = getForegroundNotificationBody(payload)
+  if (!title && !body) return
+
+  try {
+    const registration = await navigator.serviceWorker.getRegistration(getAppBasePath())
+    if (registration) {
+      await registration.showNotification(title, {
+        body,
+        data: {
+          link: payload.data?.link || new URL(getAppBasePath(), window.location.origin).toString(),
+        },
+      })
+      return
+    }
+  } catch {
+    // fall through to Notification API
+  }
+
+  new Notification(title, { body })
+}
+
 function canUsePushMessaging() {
   if (typeof window === 'undefined') return false
   if (!window.isSecureContext && window.location.hostname !== 'localhost') return false
@@ -189,11 +223,13 @@ export async function ensurePushRegistration({
       scope: getAppBasePath(),
       updateViaCache: 'none',
     })
+    await navigator.serviceWorker.ready
     await registration.update()
     const messaging = await getFirebaseMessaging()
 
     if (!foregroundListenerBound) {
-      messaging.onMessage(messaging.messaging, () => {
+      messaging.onMessage(messaging.messaging, (payload) => {
+        void showForegroundNotification(payload)
         latestForegroundCallback?.()
       })
       foregroundListenerBound = true

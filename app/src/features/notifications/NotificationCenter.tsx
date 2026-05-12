@@ -2,6 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../auth/authStore'
 import type { AppUser } from '../auth/types'
+import {
+  getBillingReadyItems,
+  getInvoicedItems,
+  getOverdueBillingItems,
+  getPaidItems,
+} from '../billing/billingSelectors'
+import { useBillingStore } from '../billing/billingStore'
+import type { BillingRecord } from '../billing/types'
 import { useTaskStore } from '../tasks/taskStore'
 import { getCompletedTasks, getLateTasks, getTasksByUser } from '../tasks/taskSelectors'
 import type { Task } from '../tasks/types'
@@ -25,6 +33,11 @@ function sortByNewest(items: NotificationFeedItem[]) {
   return [...items].sort(
     (first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime(),
   )
+}
+
+function formatAmount(amount?: number | null) {
+  if (!amount) return ''
+  return `${amount.toLocaleString('sr-RS')} RSD`
 }
 
 function buildAssignedTaskNotifications(tasks: Task[], currentUser: AppUser): NotificationFeedItem[] {
@@ -78,9 +91,67 @@ function buildAdminStatusNotifications(tasks: Task[]): NotificationFeedItem[] {
   return [...takenItems, ...lateItems, ...completedItems]
 }
 
-function buildDerivedNotificationFeed(tasks: Task[], currentUser: AppUser) {
-  if (currentUser.role === 'admin' || currentUser.role === 'finance') {
+function buildFinanceNotifications(records: BillingRecord[]): NotificationFeedItem[] {
+  const createItem = (
+    prefix: string,
+    title: string,
+    bodyBuilder: (label: string, amount: string) => string,
+    createdAtBuilder: (record: BillingRecord) => string,
+    list: BillingRecord[],
+  ) =>
+    list.map((record) => {
+      const label = record.projectName || record.clientName || record.description || 'Naplata'
+      const amount = formatAmount(record.amount)
+
+      return {
+        id: `${prefix}-${record.id}`,
+        title,
+        body: bodyBuilder(label, amount),
+        entityType: 'billing' as const,
+        entityId: record.id,
+        createdAt: createdAtBuilder(record),
+      }
+    })
+
+  return [
+    ...createItem(
+      'billing-ready',
+      'Nalog za fakturisanje',
+      (label, amount) => amount ? `${label} je spreman za fakturisanje: ${amount}.` : `${label} je spreman za fakturisanje.`,
+      (record) => record.updatedAt || record.createdAt,
+      getBillingReadyItems(records),
+    ),
+    ...createItem(
+      'billing-invoiced',
+      'Fakturisano',
+      (label, amount) => amount ? `${label} je fakturisan u iznosu ${amount}.` : `${label} je fakturisan.`,
+      (record) => record.invoicedAt || record.updatedAt || record.createdAt,
+      getInvoicedItems(records),
+    ),
+    ...createItem(
+      'billing-overdue',
+      'Kasni uplata',
+      (label, amount) => amount ? `${label} kasni sa uplatom za ${amount}.` : `${label} kasni sa uplatom.`,
+      (record) => record.dueDate ? `${record.dueDate}T00:00:00` : record.updatedAt || record.createdAt,
+      getOverdueBillingItems(records),
+    ),
+    ...createItem(
+      'billing-paid',
+      'Placeno',
+      (label, amount) => amount ? `${label} je placeno u iznosu ${amount}.` : `${label} je placeno.`,
+      (record) => record.paidAt || record.updatedAt || record.createdAt,
+      getPaidItems(records),
+    ),
+  ]
+}
+
+function buildDerivedNotificationFeed(tasks: Task[], billing: BillingRecord[], currentUser: AppUser) {
+  if (currentUser.role === 'admin') {
     return sortByNewest(buildAdminStatusNotifications(tasks)).slice(0, 12)
+  }
+
+  if (currentUser.role === 'finance') {
+    return sortByNewest(buildFinanceNotifications(billing)).slice(0, 12)
   }
 
   return sortByNewest(buildAssignedTaskNotifications(tasks, currentUser)).slice(0, 12)
@@ -90,9 +161,11 @@ function NotificationCenter() {
   const { enablePushNotifications, isNotificationSeen, markNotificationSeen } = useNotificationStore()
   const { currentUser } = useAuthStore()
   const { tasks } = useTaskStore()
+  const { getAllBilling } = useBillingStore()
+  const billing = getAllBilling()
   const [isOpen, setIsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
-  const items = useMemo(() => buildDerivedNotificationFeed(tasks, currentUser), [currentUser, tasks])
+  const items = useMemo(() => buildDerivedNotificationFeed(tasks, billing, currentUser), [billing, currentUser, tasks])
   const unreadItems = useMemo(
     () => items.filter((item) => !isNotificationSeen(item.id)),
     [isNotificationSeen, items],
@@ -135,7 +208,7 @@ function NotificationCenter() {
         aria-label="Notifikacije"
         aria-expanded={isOpen}
       >
-        <span aria-hidden="true">🔔</span>
+        <span aria-hidden="true">{"\uD83D\uDD14"}</span>
         {unreadCount > 0 ? <span className="pulse-bell-counter">{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
       </button>
       {isOpen ? (
@@ -167,3 +240,4 @@ function NotificationCenter() {
 }
 
 export default NotificationCenter
+

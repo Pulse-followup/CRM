@@ -4,6 +4,14 @@ import { useClientStore } from '../../clients/clientStore'
 import { useProjectStore } from '../../projects/projectStore'
 import '../../clients/pages/client-detail.css'
 import { getBillingStatus } from '../billingLifecycle'
+import {
+  getBillingCollections,
+  getBillingReadyItems,
+  getInvoicedItems,
+  getOverdueBillingItems,
+  getPaidItems,
+  getPaidThisWeekItems,
+} from '../billingSelectors'
 import { useBillingStore } from '../billingStore'
 import BillingCard from '../components/BillingCard'
 import type { BillingStatus } from '../types'
@@ -23,20 +31,6 @@ function normalizeFilterParam(value: string | null): 'all' | BillingStatus {
   return 'all'
 }
 
-function isPaidThisWeek(value?: string | null) {
-  if (!value) return false
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return false
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const weekStart = new Date(today)
-  const day = weekStart.getDay() || 7
-  weekStart.setDate(weekStart.getDate() - day + 1)
-
-  return date.getTime() >= weekStart.getTime()
-}
-
 function BillingPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -45,7 +39,8 @@ function BillingPage() {
   const { getAllBilling, markBillingInvoiced, markBillingOverdue, markBillingPaid } = useBillingStore()
   const { getClientById } = useClientStore()
   const { getProjectById } = useProjectStore()
-  const billing = getAllBilling().filter((record) => record.status !== 'cancelled')
+  const billing = getAllBilling()
+  const billingCollections = useMemo(() => getBillingCollections(billing), [billing])
   const isPaidWeekFilter = externalFilter === 'paid-week'
 
   useEffect(() => {
@@ -55,35 +50,35 @@ function BillingPage() {
   const counts = useMemo(() => {
     return FILTER_OPTIONS.reduce<Record<string, number>>((acc, option) => {
       acc[option.key] = option.key === 'all'
-        ? billing.length
+        ? billingCollections.active.length
         : option.key === 'draft'
-          ? billing.filter((record) => getBillingStatus(record) === 'issued' && (record.status === 'draft' || record.status === 'ready')).length
+          ? billingCollections.ready.length
           : option.key === 'invoiced'
-            ? billing.filter((record) => getBillingStatus(record) === 'issued' && record.status === 'invoiced').length
+            ? billingCollections.invoiced.length
             : option.key === 'overdue'
-              ? billing.filter((record) => getBillingStatus(record) === 'overdue').length
-              : billing.filter((record) => getBillingStatus(record) === 'closed').length
+              ? billingCollections.overdue.length
+              : billingCollections.paid.length
       return acc
     }, {})
-  }, [billing])
+  }, [billingCollections])
 
   const filteredBilling = useMemo(() => {
     if (isPaidWeekFilter) {
-      return billing.filter((record) => getBillingStatus(record) === 'closed' && isPaidThisWeek(record.paidAt || record.updatedAt || record.createdAt))
+      return getPaidThisWeekItems(billing)
     }
 
-    if (activeFilter === 'all') return billing
+    if (activeFilter === 'all') return billingCollections.active
     if (activeFilter === 'draft') {
-      return billing.filter((record) => getBillingStatus(record) === 'issued' && (record.status === 'draft' || record.status === 'ready'))
+      return getBillingReadyItems(billing)
     }
     if (activeFilter === 'invoiced') {
-      return billing.filter((record) => getBillingStatus(record) === 'issued' && record.status === 'invoiced')
+      return getInvoicedItems(billing)
     }
     if (activeFilter === 'overdue') {
-      return billing.filter((record) => getBillingStatus(record) === 'overdue')
+      return getOverdueBillingItems(billing)
     }
-    return billing.filter((record) => getBillingStatus(record) === 'closed')
-  }, [activeFilter, billing, isPaidWeekFilter])
+    return getPaidItems(billing)
+  }, [activeFilter, billing, billingCollections.active, isPaidWeekFilter])
 
   return (
     <section className="page-card client-detail-shell billing-clean-page">

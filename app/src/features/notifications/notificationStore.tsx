@@ -209,6 +209,28 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     setPushStatus('idle')
   }, [isCloudNotificationMode])
 
+  useEffect(() => {
+    if (!isCloudNotificationMode) return
+    if (!activeWorkspace?.id || !currentUser.id) return
+    if (typeof window === 'undefined' || !('Notification' in window)) return
+    if (Notification.permission !== 'granted') return
+
+    let isCancelled = false
+
+    void ensurePushRegistration({
+      workspaceId: activeWorkspace.id,
+      userId: currentUser.id,
+      allowPrompt: false,
+      onForegroundMessage: () => undefined,
+    }).then((status) => {
+      if (!isCancelled) setPushStatus(status)
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeWorkspace?.id, currentUser.id, isCloudNotificationMode])
+
   const createNotifications = useCallback(async (inputs: CreateNotificationInput[]) => {
     const deduped = inputs.filter((input, index, array) =>
       Boolean(input.recipientUserId) &&
@@ -257,13 +279,19 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       setCloudNotifications((current) => mergeNotifications([...savedRecords, ...current]))
       enqueueToasts(savedRecords)
       if (savedRecords.length) {
-        void supabase.functions.invoke('send-notification-push', {
-          body: {
-            workspaceId: activeWorkspace.id,
-            notificationIds: savedRecords.map((record) => record.id),
-            appBaseUrl: getAppBaseUrl(),
-          },
-        })
+        void supabase.functions
+          .invoke('send-notification-push', {
+            body: {
+              workspaceId: activeWorkspace.id,
+              notificationIds: savedRecords.map((record) => record.id),
+              appBaseUrl: getAppBaseUrl(),
+            },
+          })
+          .then(({ error }) => {
+            if (error) {
+              console.error('[PULSE push] send-notification-push invoke failed', error)
+            }
+          })
       }
       return savedRecords
     }
