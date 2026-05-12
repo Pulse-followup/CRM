@@ -4,30 +4,30 @@ import type { ProductItem, ProductClientScope } from './types'
 
 export const PRODUCT_STORAGE_KEY = 'pulse.products.v1'
 
-const defaultProducts: ProductItem[] = [
+export const demoProducts: ProductItem[] = [
   {
-    id: 'prod-rollup-standard',
-    title: 'Roll-up banner standard',
-    category: 'Štampa / POSM',
-    description: 'Standardni roll-up za promocije, događaje i prodajna mesta.',
-    price: 8500,
+    id: 'prod-demo-social-launch',
+    title: 'Social launch paket',
+    category: 'Digitalna kampanja',
+    description: 'Paket za lansiranje nove lokacije kroz reels, story set i community objavu.',
+    price: 38000,
     currency: 'RSD',
-    productionTime: '2-3 dana',
-    processTemplateId: 'tpl-posm-standard',
+    productionTime: '3 dana',
+    processTemplateId: 'tpl-demo-social-launch',
     clientScope: 'all',
     clientIds: [],
     status: 'active',
     createdAt: '2026-05-01T00:00:00.000Z',
   },
   {
-    id: 'prod-vizit-karte',
-    title: 'Vizit karte 500 kom',
-    category: 'Digitalna štampa',
-    description: 'Priprema i štampa vizit karti u standardnom formatu.',
-    price: 3500,
+    id: 'prod-demo-opening-kit',
+    title: 'Opening promo kit',
+    category: 'Event / Branding',
+    description: 'Mini promo paket za otvaranje lokacije: key visual, promo video i POS set.',
+    price: 126000,
     currency: 'RSD',
-    productionTime: '1-2 dana',
-    processTemplateId: 'tpl-digitalna-stampa-standard',
+    productionTime: '5 dana',
+    processTemplateId: 'tpl-demo-opening-kit',
     clientScope: 'all',
     clientIds: [],
     status: 'active',
@@ -63,7 +63,11 @@ function asUuidOrNull(value: string | undefined) {
 }
 
 export function readProducts() {
-  return readStoredArray<ProductItem>(PRODUCT_STORAGE_KEY, defaultProducts)
+  return readStoredArray<ProductItem>(PRODUCT_STORAGE_KEY, demoProducts)
+}
+
+export function readDemoProducts() {
+  return demoProducts
 }
 
 export function saveProducts(products: ProductItem[]) {
@@ -240,9 +244,6 @@ export async function deleteProductFromSupabase(workspaceId: string, productId: 
   const supabase = getSupabaseClient()
   if (!supabase || !workspaceId || !productId) return { deleted: false, skipped: true }
 
-  // Products table uses UUID primary keys. Local/dev fallback products can still have
-  // legacy slug ids such as "prod-vizit-karte". Sending those to Supabase creates
-  // a 400 Bad Request, so cloud delete is intentionally skipped for local-only items.
   if (!isUuid(productId)) {
     return { deleted: false, skipped: true }
   }

@@ -38,6 +38,7 @@ import {
 } from "../features/projects/projectLifecycle";
 import {
   isProductVisibleForClient,
+  readDemoProducts,
   readProducts,
   readProductsFromSupabase,
   saveProducts,
@@ -51,6 +52,7 @@ import {
   getTemplateIdForProjectType,
 } from "../features/projects/projectTemplates";
 import {
+  readDemoProcessTemplates,
   readProcessTemplates,
   readProcessTemplatesFromSupabase,
   saveProcessTemplates,
@@ -70,6 +72,8 @@ import CreateTaskForm, {
   type CreateTaskFormValues,
 } from "../features/tasks/components/CreateTaskForm";
 import { useCloudStore } from "../features/cloud/cloudStore";
+import { useAuthStore } from "../features/auth/authStore";
+import { useDemoStore } from "../features/demo/demoStore";
 import {
   buildAdminAiSignals,
   buildSignalSuggestion,
@@ -517,14 +521,17 @@ function ClientCardDrawer({
     values: CatalogJobFormValues,
   ) => void | Promise<void>;
 }) {
+  const { isDemoMode } = useDemoStore();
   const [isEditingClient, setIsEditingClient] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isCreatingActivity, setIsCreatingActivity] = useState(false);
   const [isChoosingJob, setIsChoosingJob] = useState(false);
   const [isCreatingFromCatalog, setIsCreatingFromCatalog] = useState(false);
   const [catalogJobMessage, setCatalogJobMessage] = useState("");
-  const products = readProducts();
-  const processTemplates = readProcessTemplates();
+  const products = isDemoMode ? readDemoProducts() : readProducts();
+  const processTemplates = isDemoMode
+    ? readDemoProcessTemplates()
+    : readProcessTemplates();
 
   return (
     <div className="pulse-client-drawer-content">
@@ -1060,6 +1067,8 @@ function AdminModal({
 function AdminHome() {
   const navigate = useNavigate();
   const { activeWorkspace, members, isConfigured } = useCloudStore();
+  const { users } = useAuthStore();
+  const { isDemoMode } = useDemoStore();
   const [selectedTeamMemberId, setSelectedTeamMemberId] = useState<
     string | null
   >(null);
@@ -1081,6 +1090,27 @@ function AdminHome() {
   const [modal, setModal] = useState<ModalState>(null);
   const [pulseTypingText, setPulseTypingText] = useState("");
   const billing = getAllBilling();
+  const demoMembers = useMemo<CloudWorkspaceMember[]>(
+    () =>
+      users
+        .filter((user) => user.role !== "admin")
+        .map((user, index) => ({
+          id: `demo-member-${index + 1}`,
+          workspace_id: activeWorkspace?.id || "demo-workspace",
+          user_id: user.id,
+          role: user.role === "finance" ? "finance" : "member",
+          status: "active",
+          hourly_rate: user.role === "finance" ? 1800 : 1400,
+          production_role: user.productionRole || null,
+          display_name: user.name,
+          profile: {
+            id: user.id,
+            email: user.email,
+            full_name: user.name,
+          },
+        })),
+    [activeWorkspace?.id, users],
+  );
   const billingCollections = useMemo(
     () => getBillingCollections(billing),
     [billing],
@@ -1423,9 +1453,9 @@ function AdminHome() {
         projects,
         tasks,
         billing,
-        members,
+        members: isDemoMode ? demoMembers : members,
       }),
-    [billing, clients, members, projects, tasks],
+    [billing, clients, demoMembers, isDemoMode, members, projects, tasks],
   );
   const validTeamTasks = tasks.filter((task) => {
     if (!task.clientId || !clientById.has(String(task.clientId))) return false;
@@ -1433,9 +1463,10 @@ function AdminHome() {
     return true;
   });
   const teamActiveTasks = validTeamTasks.filter(isTaskOpen);
-  const activeTeamMembers = members
+  const effectiveMembers = isDemoMode ? demoMembers : members;
+  const activeTeamMembers = effectiveMembers
     .filter((member) => member.status !== "invited")
-    .filter((member) => member.role === "member")
+    .filter((member) => member.role === "member" || member.role === "finance")
     .slice()
     .sort((first, second) =>
       memberDisplayName(first).localeCompare(memberDisplayName(second), "sr"),
@@ -1867,8 +1898,10 @@ function AdminHome() {
     clientId: string,
     values: CatalogJobFormValues,
   ) => {
-    const products = readProducts();
-    const templates = readProcessTemplates();
+    const products = isDemoMode ? readDemoProducts() : readProducts();
+    const templates = isDemoMode
+      ? readDemoProcessTemplates()
+      : readProcessTemplates();
     const product = products.find(
       (item) =>
         item.id === values.productId &&

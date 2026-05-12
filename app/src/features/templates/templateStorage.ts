@@ -4,35 +4,35 @@ import type { ProcessTemplate, ProcessTemplateStep } from './types'
 
 export const PROCESS_TEMPLATE_STORAGE_KEY = 'pulse.processTemplates.v1'
 
-const defaultTemplates: ProcessTemplate[] = [
+export const demoProcessTemplates: ProcessTemplate[] = [
   {
-    id: 'tpl-digitalna-stampa-standard',
-    title: 'Digitalna štampa — standard',
-    description: 'Osnovni proces za manje poslove digitalne štampe i pripreme.',
-    projectType: 'Digitalna štampa',
+    id: 'tpl-demo-social-launch',
+    title: 'Social launch flow',
+    description: 'Kratak produkcijski tok za lansiranje nove lokacije kroz social i community paket.',
+    projectType: 'Digital launch',
     status: 'active',
     createdAt: '2026-05-01T00:00:00.000Z',
     steps: [
-      { id: 'step-brief', title: 'Prijem briefa', role: 'Admin', estimatedMinutes: 15, order: 1 },
-      { id: 'step-prepress', title: 'Priprema fajla / prepress', role: 'Dizajner', estimatedMinutes: 45, order: 2 },
-      { id: 'step-print', title: 'Štampa', role: 'Produkcija', estimatedMinutes: 60, order: 3 },
-      { id: 'step-pack', title: 'Pakovanje', role: 'Produkcija', estimatedMinutes: 30, order: 4 },
-      { id: 'step-delivery', title: 'Dostava / preuzimanje', role: 'Logistika', estimatedMinutes: 30, order: 5 },
+      { id: 'step-demo-brief', title: 'Brief i prioriteti', role: 'ACCOUNT', estimatedMinutes: 45, order: 1 },
+      { id: 'step-demo-copy', title: 'Copy i objave', role: 'OPERATIVA', estimatedMinutes: 80, order: 2 },
+      { id: 'step-demo-design', title: 'Vizuali i story set', role: 'DIZAJNER', estimatedMinutes: 180, order: 3 },
+      { id: 'step-demo-video', title: 'Kratki video edit', role: 'PRODUKCIJA', estimatedMinutes: 120, order: 4 },
+      { id: 'step-demo-approval', title: 'Finalna provera', role: 'ACCOUNT', estimatedMinutes: 30, order: 5 },
     ],
   },
   {
-    id: 'tpl-posm-standard',
-    title: 'POSM izrada — standard',
-    description: 'Proces za POSM elemente, brendiranje i postavku na prodajnom mestu.',
-    projectType: 'POSM / Branding',
+    id: 'tpl-demo-opening-kit',
+    title: 'Opening promo kit flow',
+    description: 'Operativni tok za otvaranje lokacije sa promo videom, POS setom i aktivacijom na terenu.',
+    projectType: 'Opening activation',
     status: 'active',
     createdAt: '2026-05-01T00:00:00.000Z',
     steps: [
-      { id: 'step-posm-brief', title: 'Prijem zahteva i specifikacije', role: 'Admin', estimatedMinutes: 20, order: 1 },
-      { id: 'step-posm-design', title: 'Dizajn / adaptacija', role: 'Dizajner', estimatedMinutes: 90, order: 2 },
-      { id: 'step-posm-approval', title: 'Interna provera i odobrenje', role: 'Admin', estimatedMinutes: 20, order: 3 },
-      { id: 'step-posm-production', title: 'Izrada / produkcija', role: 'Produkcija', estimatedMinutes: 120, order: 4 },
-      { id: 'step-posm-install', title: 'Isporuka / montaža', role: 'Logistika', estimatedMinutes: 60, order: 5 },
+      { id: 'step-open-brief', title: 'Kickoff i scope', role: 'ACCOUNT', estimatedMinutes: 40, order: 1 },
+      { id: 'step-open-design', title: 'Key visual i adaptacije', role: 'DIZAJNER', estimatedMinutes: 210, order: 2 },
+      { id: 'step-open-video', title: 'Promo video finalizacija', role: 'PRODUKCIJA', estimatedMinutes: 160, order: 3 },
+      { id: 'step-open-pos', title: 'POS priprema i logistika', role: 'OPERATIVA', estimatedMinutes: 110, order: 4 },
+      { id: 'step-open-finance', title: 'Zakljucak i naplata', role: 'FINANCE', estimatedMinutes: 45, order: 5 },
     ],
   },
 ]
@@ -79,7 +79,11 @@ function ensureCloudTemplate(template: ProcessTemplate): ProcessTemplate {
 }
 
 export function readProcessTemplates() {
-  return readStoredArray<ProcessTemplate>(PROCESS_TEMPLATE_STORAGE_KEY, defaultTemplates)
+  return readStoredArray<ProcessTemplate>(PROCESS_TEMPLATE_STORAGE_KEY, demoProcessTemplates)
+}
+
+export function readDemoProcessTemplates() {
+  return demoProcessTemplates
 }
 
 export function saveProcessTemplates(templates: ProcessTemplate[]) {
@@ -87,8 +91,8 @@ export function saveProcessTemplates(templates: ProcessTemplate[]) {
 }
 
 export function getProcessTemplateLabel(templateId: string | undefined, templates: ProcessTemplate[]) {
-  if (!templateId) return 'Nije povezan šablon'
-  return templates.find((template) => template.id === templateId)?.title ?? 'Nepoznat šablon'
+  if (!templateId) return 'Nije povezan sablon'
+  return templates.find((template) => template.id === templateId)?.title ?? 'Nepoznat sablon'
 }
 
 export async function readProcessTemplatesFromSupabase(workspaceId: string): Promise<ProcessTemplate[]> {
@@ -260,9 +264,6 @@ export async function deleteProcessTemplateFromSupabase(workspaceId: string, tem
   const supabase = getSupabaseClient()
   if (!supabase || !workspaceId || !templateId) return { deleted: false, skipped: true }
 
-  // Process template table uses UUID primary keys. Local/dev fallback templates can
-  // still have legacy slug ids such as "tpl-posm-standard". Do not send those
-  // to Supabase because PostgREST returns 400 for invalid uuid filters.
   if (!isTemplateUuid(templateId)) {
     return { deleted: false, skipped: true }
   }

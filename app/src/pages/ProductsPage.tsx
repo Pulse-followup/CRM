@@ -7,6 +7,7 @@ import { compressProductImage } from '../features/products/imageCompress'
 import {
   deleteProductFromSupabase,
   isUuid,
+  readDemoProducts,
   readProducts,
   readProductsFromSupabase,
   saveProducts,
@@ -14,6 +15,7 @@ import {
 } from '../features/products/productStorage'
 import {
   getProcessTemplateLabel,
+  readDemoProcessTemplates,
   readProcessTemplates,
   readProcessTemplatesFromSupabase,
   saveProcessTemplates,
@@ -62,7 +64,7 @@ function ProductsPage() {
   const demo = useDemoStore()
   const workspaceId = cloud.activeWorkspace?.id || ''
   const isCloudProductsMode = Boolean(cloud.isConfigured && workspaceId)
-  const [products, setProducts] = useState<ProductItem[]>(() => readProducts())
+  const [products, setProducts] = useState<ProductItem[]>(() => demo.isDemoMode ? readDemoProducts() : readProducts())
   const [query, setQuery] = useState('')
   const [clientFilter, setClientFilter] = useState('all')
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -72,12 +74,24 @@ function ProductsPage() {
   const [imageMessage, setImageMessage] = useState('')
   const [formError, setFormError] = useState('')
   const [syncMessage, setSyncMessage] = useState('')
-  const [processTemplates, setProcessTemplates] = useState(() => readProcessTemplates())
+  const [processTemplates, setProcessTemplates] = useState(() => demo.isDemoMode ? readDemoProcessTemplates() : readProcessTemplates())
 
   useEffect(() => {
     let isMounted = true
 
     async function loadProductsFromCloud() {
+      if (demo.isDemoMode) {
+        setProducts(readDemoProducts())
+        setProcessTemplates(readDemoProcessTemplates())
+        setSelectedProductId((current) =>
+          current && readDemoProducts().some((product) => product.id === current)
+            ? current
+            : readDemoProducts()[0]?.id ?? null,
+        )
+        setSyncMessage('Demo katalog je spreman za pregled.')
+        return
+      }
+
       if (!isCloudProductsMode) {
         setSyncMessage('')
         return
@@ -116,7 +130,7 @@ function ProductsPage() {
     return () => {
       isMounted = false
     }
-  }, [isCloudProductsMode, workspaceId])
+  }, [demo.isDemoMode, isCloudProductsMode, workspaceId])
 
   const clientNameById = useMemo(
     () => new Map(clients.map((client) => [String(client.id), client.name])),

@@ -4,6 +4,7 @@ import { gsap } from 'gsap'
 import type { FormEvent, MouseEvent } from 'react'
 import {
   deleteProcessTemplateFromSupabase,
+  readDemoProcessTemplates,
   readProcessTemplates,
   readProcessTemplatesFromSupabase,
   saveProcessTemplates,
@@ -74,7 +75,7 @@ function TemplatesPage() {
   const demo = useDemoStore()
   const workspaceId = cloud.activeWorkspace?.id || ''
   const isCloudTemplatesMode = Boolean(cloud.isConfigured && workspaceId)
-  const [templates, setTemplates] = useState<ProcessTemplate[]>(() => readProcessTemplates())
+  const [templates, setTemplates] = useState<ProcessTemplate[]>(() => demo.isDemoMode ? readDemoProcessTemplates() : readProcessTemplates())
   const [query, setQuery] = useState('')
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
@@ -90,6 +91,18 @@ function TemplatesPage() {
     let isMounted = true
 
     async function loadTemplatesFromCloud() {
+      if (demo.isDemoMode) {
+        const nextTemplates = readDemoProcessTemplates()
+        setTemplates(nextTemplates)
+        setSelectedTemplateId((current) =>
+          current && nextTemplates.some((template) => template.id === current)
+            ? current
+            : nextTemplates[0]?.id ?? null,
+        )
+        setSyncMessage('Demo procesi su spremni za pregled.')
+        return
+      }
+
       if (!isCloudTemplatesMode) {
         setSyncMessage('')
         return
@@ -120,7 +133,7 @@ function TemplatesPage() {
     return () => {
       isMounted = false
     }
-  }, [isCloudTemplatesMode, workspaceId])
+  }, [demo.isDemoMode, isCloudTemplatesMode, workspaceId])
 
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? templates[0]
   const workspaceProductionRoles = useMemo(() => {
