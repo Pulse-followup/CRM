@@ -20,6 +20,7 @@ import {
 } from '../features/templates/templateStorage'
 import type { ProductFormValues, ProductItem } from '../features/products/types'
 import { useCloudStore } from '../features/cloud/cloudStore'
+import { useDemoStore } from '../features/demo/demoStore'
 import { formatTemplateEstimate } from '../features/workflows/createJobFromProduct'
 
 const emptyForm: ProductFormValues = {
@@ -58,6 +59,7 @@ function ProductsPage() {
   const navigate = useNavigate()
   const productsListRef = useRef<HTMLDivElement | null>(null)
   const cloud = useCloudStore()
+  const demo = useDemoStore()
   const workspaceId = cloud.activeWorkspace?.id || ''
   const isCloudProductsMode = Boolean(cloud.isConfigured && workspaceId)
   const [products, setProducts] = useState<ProductItem[]>(() => readProducts())
@@ -237,6 +239,10 @@ function ProductsPage() {
   }
 
   const openNewProductForm = () => {
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
     setEditingProductId(null)
     setForm(emptyForm)
     setImageMessage('')
@@ -253,6 +259,10 @@ function ProductsPage() {
   }
 
   const startEditProduct = (product: ProductItem) => {
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
     setEditingProductId(product.id)
     setSelectedProductId(product.id)
     setForm({
@@ -273,6 +283,10 @@ function ProductsPage() {
   }
 
   const duplicateProduct = (product: ProductItem) => {
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
     const duplicatedProduct: ProductItem = {
       ...product,
       id: createCloudSafeId('prod'),
@@ -286,6 +300,10 @@ function ProductsPage() {
   }
 
   const deleteProduct = (productId: string) => {
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
     const product = products.find((item) => item.id === productId)
     if (!product) return
     if (!window.confirm(`Obrisati proizvod "${product.title}"? Postojeći projekti i taskovi ostaju sačuvani.`)) return
@@ -335,6 +353,11 @@ function ProductsPage() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
 
     const title = form.title.trim()
     const category = form.category.trim()

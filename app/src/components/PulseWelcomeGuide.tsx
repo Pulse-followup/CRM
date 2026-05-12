@@ -88,6 +88,16 @@ function markOnboardingCompleted() {
   }
 }
 
+function markDemoIntroSeen() {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(PULSE_WELCOME_KEY, 'seen')
+  } catch {
+    // localStorage is optional.
+  }
+}
+
 function PulseWelcomeGuide({ isOpen, onClose }: PulseWelcomeGuideProps) {
   const cloud = useCloudStore()
   const [step, setStep] = useState(0)
@@ -306,6 +316,12 @@ function PulseWelcomeGuide({ isOpen, onClose }: PulseWelcomeGuideProps) {
     }
   }
 
+  const startDemoWorkspace = () => {
+    markDemoIntroSeen()
+    setMessage('')
+    onClose()
+  }
+
   const visualTitle = shouldUseInviteOnboarding
     ? inviteVisual.visualTitle
     : shouldUseOnboarding
@@ -426,8 +442,8 @@ function PulseWelcomeGuide({ isOpen, onClose }: PulseWelcomeGuideProps) {
               {message ? <p className="pulse-onboarding-message">{message}</p> : null}
 
               <div className="pulse-guide-actions">
-                <button className="pulse-guide-secondary" type="button" onClick={onClose} disabled={isSubmitting}>
-                  Kasnije
+                <button className="pulse-guide-secondary" type="button" onClick={startDemoWorkspace} disabled={isSubmitting}>
+                  Explore Demo Workspace
                 </button>
                 <button className="pulse-guide-primary" type="button" onClick={() => void submitOnboarding()} disabled={isSubmitting}>
                   {isSubmitting ? 'Kreiram...' : 'Kreiraj workspace'}

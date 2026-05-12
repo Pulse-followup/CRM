@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { mockProjects } from './mockProjects'
 import { readStoredArray, writeStoredValue } from '../../shared/storage'
 import { useCloudStore } from '../cloud/cloudStore'
+import { useDemoStore } from '../demo/demoStore'
 import { getSupabaseClient } from '../../lib/supabaseClient'
 import type { Project, ProjectFrequency, ProjectStatus, ProjectType } from './types'
 
@@ -105,24 +106,31 @@ function mapProjectToSupabaseRow(project: Project, workspaceId: string) {
 
 export function ProjectProvider({ children }: ProjectProviderProps) {
   const { isConfigured, activeWorkspace } = useCloudStore()
+  const { isDemoMode, showReadOnlyNotice } = useDemoStore()
   const isCloudMode = Boolean(isConfigured && activeWorkspace?.id)
   const [projects, setProjects] = useState<Project[]>(() =>
-    readStoredArray(PROJECTS_STORAGE_KEY, mockProjects),
+    isDemoMode ? mockProjects : readStoredArray(PROJECTS_STORAGE_KEY, mockProjects),
   )
   const [cloudReadStatus, setCloudReadStatus] = useState<CloudReadStatus>('local')
   const [cloudReadError, setCloudReadError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isCloudMode) {
+    if (!isCloudMode && !isDemoMode) {
       writeStoredValue(PROJECTS_STORAGE_KEY, projects)
     }
-  }, [isCloudMode, projects])
+  }, [isCloudMode, isDemoMode, projects])
 
   useEffect(() => {
     if (isCloudMode) {
       setProjects([])
     }
   }, [isCloudMode])
+
+  useEffect(() => {
+    if (isDemoMode) {
+      setProjects(mockProjects)
+    }
+  }, [isDemoMode])
 
   const refreshProjectsFromCloud = useCallback(async () => {
     const supabase = getSupabaseClient()
@@ -163,6 +171,11 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   }, [refreshProjectsFromCloud])
 
   const addProject = useCallback(async (project: Project) => {
+    if (isDemoMode) {
+      showReadOnlyNotice()
+      return null
+    }
+
     if (isCloudMode) {
       if (!activeWorkspace?.id) return null
       const supabase = getSupabaseClient()
@@ -195,9 +208,14 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
     setProjects((current) => [...current, project])
     return project
-  }, [activeWorkspace?.id, isCloudMode])
+  }, [activeWorkspace?.id, isCloudMode, isDemoMode, showReadOnlyNotice])
 
   const updateProject = useCallback(async (project: Project) => {
+    if (isDemoMode) {
+      showReadOnlyNotice()
+      return null
+    }
+
     if (isCloudMode) {
       if (!activeWorkspace?.id) return null
       const supabase = getSupabaseClient()
@@ -226,7 +244,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
     setProjects((current) => current.map((item) => (item.id === project.id ? project : item)))
     return project
-  }, [activeWorkspace?.id, isCloudMode])
+  }, [activeWorkspace?.id, isCloudMode, isDemoMode, showReadOnlyNotice])
 
   const archiveProject = useCallback(async (projectId: string) => {
     const project = projects.find((item) => item.id === projectId)

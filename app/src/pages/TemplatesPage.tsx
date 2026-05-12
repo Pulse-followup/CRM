@@ -11,6 +11,7 @@ import {
 } from '../features/templates/templateStorage'
 import type { ProcessTemplate, ProcessTemplateFormValues, ProcessTemplateStep, ProcessTemplateStepFormValues } from '../features/templates/types'
 import { useCloudStore } from '../features/cloud/cloudStore'
+import { useDemoStore } from '../features/demo/demoStore'
 
 const PRODUCTION_ROLES = [
   'ACCOUNT',
@@ -70,6 +71,7 @@ function TemplatesPage() {
   const navigate = useNavigate()
   const templatesListRef = useRef<HTMLDivElement | null>(null)
   const cloud = useCloudStore()
+  const demo = useDemoStore()
   const workspaceId = cloud.activeWorkspace?.id || ''
   const isCloudTemplatesMode = Boolean(cloud.isConfigured && workspaceId)
   const [templates, setTemplates] = useState<ProcessTemplate[]>(() => readProcessTemplates())
@@ -199,6 +201,10 @@ function TemplatesPage() {
   }
 
   const openNewTemplateForm = () => {
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
     resetTemplateForm()
     setIsFormOpen(true)
   }
@@ -209,6 +215,10 @@ function TemplatesPage() {
   }
 
   const startEditTemplate = (template: ProcessTemplate) => {
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
     setEditingTemplateId(template.id)
     setSelectedTemplateId(template.id)
     setTemplateForm({
@@ -224,6 +234,10 @@ function TemplatesPage() {
   }
 
   const duplicateTemplate = (template: ProcessTemplate) => {
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
     const duplicatedTemplate: ProcessTemplate = {
       ...template,
       id: createCloudSafeId('tpl'),
@@ -244,6 +258,10 @@ function TemplatesPage() {
   }
 
   const deleteTemplate = (templateId: string) => {
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
     const template = templates.find((item) => item.id === templateId)
     if (!template) return
     if (!window.confirm(`Obrisati šablon "${template.title}"? Postojeći projekti i taskovi ostaju sačuvani.`)) return
@@ -328,6 +346,12 @@ function TemplatesPage() {
 
   const handleTemplateSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    if (demo.isDemoMode) {
+      demo.showReadOnlyNotice()
+      return
+    }
+
     const title = templateForm.title.trim()
     const projectType = templateForm.projectType.trim()
 

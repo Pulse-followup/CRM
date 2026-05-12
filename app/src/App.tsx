@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { AuthProvider, useAuthStore } from './features/auth/authStore'
 import { CloudProvider, useCloudStore } from './features/cloud/cloudStore'
+import { DemoProvider } from './features/demo/demoStore'
 import { BillingProvider } from './features/billing/billingStore'
 import { ClientProvider } from './features/clients/clientStore'
 import NotificationToasts from './features/notifications/NotificationToasts'
@@ -35,19 +36,21 @@ import PulseWelcomeGuide, { PULSE_WELCOME_KEY } from './components/PulseWelcomeG
 function App() {
   return (
     <CloudProvider>
-      <AuthProvider>
-        <NotificationProvider>
-          <ClientProvider>
-            <ProjectProvider>
-              <TaskProvider>
-                <BillingProvider>
-                  <AppRoutes />
-                </BillingProvider>
-              </TaskProvider>
-            </ProjectProvider>
-          </ClientProvider>
-        </NotificationProvider>
-      </AuthProvider>
+      <DemoProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <ClientProvider>
+              <ProjectProvider>
+                <TaskProvider>
+                  <BillingProvider>
+                    <AppRoutes />
+                  </BillingProvider>
+                </TaskProvider>
+              </ProjectProvider>
+            </ClientProvider>
+          </NotificationProvider>
+        </AuthProvider>
+      </DemoProvider>
     </CloudProvider>
   )
 }

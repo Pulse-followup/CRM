@@ -5,6 +5,7 @@ import { useAuthStore } from '../features/auth/authStore'
 import { useBillingStore } from '../features/billing/billingStore'
 import { useClientStore } from '../features/clients/clientStore'
 import { useCloudStore } from '../features/cloud/cloudStore'
+import { useDemoStore } from '../features/demo/demoStore'
 import NotificationCenter from '../features/notifications/NotificationCenter'
 import { useProjectStore } from '../features/projects/projectStore'
 import { useTaskStore } from '../features/tasks/taskStore'
@@ -24,6 +25,7 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
   const { currentUser } = useAuthStore()
   const location = useLocation()
   const cloud = useCloudStore()
+  const demo = useDemoStore()
   const clientStore = useClientStore()
   const projectStore = useProjectStore()
   const taskStore = useTaskStore()
@@ -127,42 +129,52 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
   }
 
   return (
-    <header className="pulse-topbar">
-      <Link to="/" className="pulse-logo-wrap" aria-label="PULSE home">
-        <img src="/CRM/pulse-header-logo.png" alt="PULSE" className="pulse-logo" />
-      </Link>
-      <div className="pulse-user-block">
-        <button className="pulse-sync-button" type="button" onClick={() => void handleSync()} disabled={isSyncing}>
-          {isSyncing ? 'SYNC...' : 'SYNC'}
-        </button>
-        <NotificationCenter />
-        <strong>{userName}</strong>
-      </div>
-      <nav className="pulse-desktop-nav" aria-label="Glavni meni">
-        {menuItems.map((item) => renderMenuItem(item))}
-      </nav>
-      <div className="pulse-menu" ref={menuRef}>
-        <button className={`pulse-hamburger${isOpen ? ' is-open' : ''}`} type="button" onClick={() => setIsOpen((v) => !v)} aria-label="Meni" aria-expanded={isOpen}>
-          <span />
-          <span />
-          <span />
-        </button>
-        {isOpen ? (
-          <>
-            <button className="pulse-menu-backdrop" type="button" aria-label="Zatvori meni" onClick={() => setIsOpen(false)} />
-            <div className="pulse-dropdown" ref={dropdownRef}>
-              <div className="pulse-dropdown-section">
-                {menuItems.filter((item) => item.section !== 'secondary').map((item) => renderMenuItem(item, true))}
+    <div className="pulse-topbar-shell">
+      {demo.isDemoMode ? (
+        <div className="pulse-demo-banner">
+          <span>DEMO WORKSPACE — istražite kako PULSE funkcioniše</span>
+          <button type="button" className="pulse-demo-banner-button" onClick={() => onOpenGuide?.()}>
+            Kreiraj svoj workspace
+          </button>
+        </div>
+      ) : null}
+      <header className="pulse-topbar">
+        <Link to="/" className="pulse-logo-wrap" aria-label="PULSE home">
+          <img src="/CRM/pulse-header-logo.png" alt="PULSE" className="pulse-logo" />
+        </Link>
+        <div className="pulse-user-block">
+          <button className="pulse-sync-button" type="button" onClick={() => void handleSync()} disabled={isSyncing}>
+            {isSyncing ? 'SYNC...' : 'SYNC'}
+          </button>
+          <NotificationCenter />
+          <strong>{userName}</strong>
+        </div>
+        <nav className="pulse-desktop-nav" aria-label="Glavni meni">
+          {menuItems.map((item) => renderMenuItem(item))}
+        </nav>
+        <div className="pulse-menu" ref={menuRef}>
+          <button className={`pulse-hamburger${isOpen ? ' is-open' : ''}`} type="button" onClick={() => setIsOpen((v) => !v)} aria-label="Meni" aria-expanded={isOpen}>
+            <span />
+            <span />
+            <span />
+          </button>
+          {isOpen ? (
+            <>
+              <button className="pulse-menu-backdrop" type="button" aria-label="Zatvori meni" onClick={() => setIsOpen(false)} />
+              <div className="pulse-dropdown" ref={dropdownRef}>
+                <div className="pulse-dropdown-section">
+                  {menuItems.filter((item) => item.section !== 'secondary').map((item) => renderMenuItem(item, true))}
+                </div>
+                <div className="pulse-dropdown-divider" />
+                <div className="pulse-dropdown-section pulse-dropdown-section-secondary">
+                  {menuItems.filter((item) => item.section === 'secondary').map((item) => renderMenuItem(item, true))}
+                </div>
               </div>
-              <div className="pulse-dropdown-divider" />
-              <div className="pulse-dropdown-section pulse-dropdown-section-secondary">
-                {menuItems.filter((item) => item.section === 'secondary').map((item) => renderMenuItem(item, true))}
-              </div>
-            </div>
-          </>
-        ) : null}
-      </div>
-    </header>
+            </>
+          ) : null}
+        </div>
+      </header>
+    </div>
   )
 }
 

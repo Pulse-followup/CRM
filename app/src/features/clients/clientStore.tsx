@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { mockClients } from './mockClients'
 import { readStoredArray, writeStoredValue } from '../../shared/storage'
 import { useCloudStore } from '../cloud/cloudStore'
+import { useDemoStore } from '../demo/demoStore'
 import { getSupabaseClient } from '../../lib/supabaseClient'
 import type { Client, ClientContact, CommercialInputs } from './types'
 
@@ -131,24 +132,31 @@ function mapClientToSupabaseRow(client: Client, workspaceId: string, userId?: st
 
 export function ClientProvider({ children }: ClientProviderProps) {
   const { isConfigured, activeWorkspace, user } = useCloudStore()
+  const { isDemoMode, showReadOnlyNotice } = useDemoStore()
   const isCloudMode = Boolean(isConfigured && activeWorkspace?.id)
   const [clients, setClients] = useState<Client[]>(() =>
-    readStoredArray(CLIENTS_STORAGE_KEY, Object.values(mockClients)),
+    isDemoMode ? Object.values(mockClients) : readStoredArray(CLIENTS_STORAGE_KEY, Object.values(mockClients)),
   )
   const [cloudReadStatus, setCloudReadStatus] = useState<CloudReadStatus>('local')
   const [cloudReadError, setCloudReadError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isCloudMode) {
+    if (!isCloudMode && !isDemoMode) {
       writeStoredValue(CLIENTS_STORAGE_KEY, clients)
     }
-  }, [clients, isCloudMode])
+  }, [clients, isCloudMode, isDemoMode])
 
   useEffect(() => {
     if (isCloudMode) {
       setClients([])
     }
   }, [isCloudMode])
+
+  useEffect(() => {
+    if (isDemoMode) {
+      setClients(Object.values(mockClients))
+    }
+  }, [isDemoMode])
 
   const refreshClientsFromCloud = useCallback(async () => {
     const supabase = getSupabaseClient()
@@ -198,6 +206,11 @@ export function ClientProvider({ children }: ClientProviderProps) {
       getClientById: (clientId: string) =>
         clients.find((client) => String(client.id) === clientId) ?? null,
       addClient: async (client: Client) => {
+        if (isDemoMode) {
+          showReadOnlyNotice()
+          return null
+        }
+
         if (isCloudMode) {
           if (!activeWorkspace?.id || !user?.id) return null
           const supabase = getSupabaseClient()
@@ -226,6 +239,11 @@ export function ClientProvider({ children }: ClientProviderProps) {
         return client
       },
       updateClient: async (clientId: string, patch: Partial<Omit<Client, 'id'>>) => {
+        if (isDemoMode) {
+          showReadOnlyNotice()
+          return null
+        }
+
         const existingClient = clients.find((client) => String(client.id) === clientId)
         if (!existingClient) return null
         const nextClient = { ...existingClient, ...patch }
@@ -264,7 +282,7 @@ export function ClientProvider({ children }: ClientProviderProps) {
         return nextClient
       },
     }),
-    [activeWorkspace?.id, clients, cloudReadError, cloudReadStatus, isCloudMode, refreshClientsFromCloud, user?.id],
+    [activeWorkspace?.id, clients, cloudReadError, cloudReadStatus, isCloudMode, isDemoMode, refreshClientsFromCloud, showReadOnlyNotice, user?.id],
   )
 
   return <ClientStoreContext.Provider value={value}>{children}</ClientStoreContext.Provider>

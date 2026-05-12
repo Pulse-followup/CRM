@@ -660,9 +660,11 @@
   }
 
   .command-center-screen {
-    min-height: auto;
+    min-height: 100dvh;
     height: auto;
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .command-center-shell {
@@ -672,6 +674,11 @@
 
   .command-signal-drawer {
     grid-template-columns: 1fr;
+  }
+
+  .command-signal-drawer.is-open {
+    max-height: none;
+    overflow: visible;
   }
 
   .command-task-scroll {

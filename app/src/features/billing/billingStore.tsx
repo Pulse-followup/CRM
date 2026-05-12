@@ -10,6 +10,7 @@ import {
 import { readStoredArray, writeStoredValue } from '../../shared/storage'
 import { useAuthStore } from '../auth/authStore'
 import { useCloudStore } from '../cloud/cloudStore'
+import { useDemoStore } from '../demo/demoStore'
 import { useNotificationStore } from '../notifications/notificationStore'
 import { useProjectStore } from '../projects/projectStore'
 import { useTaskStore } from '../tasks/taskStore'
@@ -196,11 +197,12 @@ function mergeBillingRows(records: BillingRecord[]) {
 
 export function BillingProvider({ children }: PropsWithChildren) {
   const { isConfigured, activeWorkspace, members } = useCloudStore()
+  const { isDemoMode, showReadOnlyNotice } = useDemoStore()
   const { users } = useAuthStore()
   const { createNotifications } = useNotificationStore()
   const isCloudBillingMode = Boolean(isConfigured && activeWorkspace?.id)
   const [localBilling, setLocalBilling] = useState<BillingRecord[]>(() =>
-    readStoredArray(BILLING_STORAGE_KEY, mockBilling).map(normalizeRuntimeStatus),
+    (isDemoMode ? mockBilling : readStoredArray(BILLING_STORAGE_KEY, mockBilling)).map(normalizeRuntimeStatus),
   )
   const [cloudBilling, setCloudBilling] = useState<BillingRecord[]>([])
   const [cloudReadStatus, setCloudReadStatus] = useState<CloudReadStatus>('local')
@@ -210,10 +212,16 @@ export function BillingProvider({ children }: PropsWithChildren) {
   const { getTasksByProjectId } = useTaskStore()
 
   useEffect(() => {
-    if (!isCloudBillingMode) {
+    if (!isCloudBillingMode && !isDemoMode) {
       writeStoredValue(BILLING_STORAGE_KEY, localBilling)
     }
-  }, [isCloudBillingMode, localBilling])
+  }, [isCloudBillingMode, isDemoMode, localBilling])
+
+  useEffect(() => {
+    if (isDemoMode) {
+      setLocalBilling(mockBilling.map(normalizeRuntimeStatus))
+    }
+  }, [isDemoMode])
 
   const persistCloudBilling = useCallback(
     async (record: BillingRecord) => {
@@ -388,6 +396,11 @@ export function BillingProvider({ children }: PropsWithChildren) {
 
   const createBillingForProject = useCallback(
     async (projectId: string, payload: CreateBillingPayload) => {
+      if (isDemoMode) {
+        showReadOnlyNotice()
+        return null
+      }
+
       // One project must not generate multiple billing records.
       // Any non-cancelled billing record (ready/draft/invoiced/overdue/paid) owns the project.
       const existingRecord = selectBillingByProjectId(billing, projectId).find(isActiveOrClosedBilling)
@@ -429,11 +442,16 @@ export function BillingProvider({ children }: PropsWithChildren) {
 
       return await replaceRecord(nextRecord)
     },
-    [billing, getProjectById, getTasksByProjectId, replaceRecord],
+    [billing, getProjectById, getTasksByProjectId, isDemoMode, replaceRecord, showReadOnlyNotice],
   )
 
   const updateBillingRecord = useCallback(
     async (billingId: string, patch: Partial<BillingRecord>) => {
+      if (isDemoMode) {
+        showReadOnlyNotice()
+        return null
+      }
+
       const currentRecord = selectBillingById(billing, billingId)
       if (!currentRecord) return null
 
@@ -444,7 +462,7 @@ export function BillingProvider({ children }: PropsWithChildren) {
         updatedAt: new Date().toISOString(),
       })
     },
-    [billing, replaceRecord],
+    [billing, isDemoMode, replaceRecord, showReadOnlyNotice],
   )
 
   const markBillingInvoiced = useCallback(

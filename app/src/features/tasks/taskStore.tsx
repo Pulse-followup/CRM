@@ -3,6 +3,7 @@ import { mockTasks } from './mockTasks'
 import { readStoredArray, writeStoredValue } from '../../shared/storage'
 import { useAuthStore } from '../auth/authStore'
 import { useCloudStore } from '../cloud/cloudStore'
+import { useDemoStore } from '../demo/demoStore'
 import { useNotificationStore } from '../notifications/notificationStore'
 import { getSupabaseClient } from '../../lib/supabaseClient'
 import {
@@ -281,10 +282,13 @@ function getTaskCompletedNotifications(task: Task, recipientIds: string[]) {
 
 export function TaskProvider({ children }: PropsWithChildren) {
   const { isConfigured, activeWorkspace, user, members } = useCloudStore()
+  const { isDemoMode, showReadOnlyNotice } = useDemoStore()
   const { users } = useAuthStore()
   const { createNotifications } = useNotificationStore()
   const isCloudTaskMode = Boolean(isConfigured && activeWorkspace?.id)
-  const [localTasks, setLocalTasks] = useState<Task[]>(() => readStoredArray(TASKS_STORAGE_KEY, mockTasks))
+  const [localTasks, setLocalTasks] = useState<Task[]>(() =>
+    isDemoMode ? mockTasks : readStoredArray(TASKS_STORAGE_KEY, mockTasks),
+  )
   const [cloudTasks, setCloudTasks] = useState<Task[]>([])
   const [cloudReadStatus, setCloudReadStatus] = useState<CloudReadStatus>('local')
   const [cloudReadError, setCloudReadError] = useState<string | null>(null)
@@ -295,10 +299,16 @@ export function TaskProvider({ children }: PropsWithChildren) {
   )
 
   useEffect(() => {
-    if (!isCloudTaskMode) {
+    if (!isCloudTaskMode && !isDemoMode) {
       writeStoredValue(TASKS_STORAGE_KEY, localTasks)
     }
-  }, [isCloudTaskMode, localTasks])
+  }, [isCloudTaskMode, isDemoMode, localTasks])
+
+  useEffect(() => {
+    if (isDemoMode) {
+      setLocalTasks(mockTasks)
+    }
+  }, [isDemoMode])
 
   const refreshTasksFromCloud = useCallback(async () => {
     const supabase = getSupabaseClient()
@@ -357,6 +367,11 @@ export function TaskProvider({ children }: PropsWithChildren) {
 
   const updateTask = useCallback(
     async (updatedTask: Task) => {
+      if (isDemoMode) {
+        showReadOnlyNotice()
+        return
+      }
+
       const now = new Date().toISOString()
       const previousTask = tasks.find((task) => task.id === updatedTask.id) || null
       const normalizedTask: Task =
@@ -447,11 +462,16 @@ export function TaskProvider({ children }: PropsWithChildren) {
         void createNotifications(notifications)
       }
     },
-    [activeWorkspace?.id, createNotifications, isCloudTaskMode, members, tasks, user?.id, users],
+    [activeWorkspace?.id, createNotifications, isCloudTaskMode, isDemoMode, members, showReadOnlyNotice, tasks, user?.id, users],
   )
 
   const addTask = useCallback(
     async (task: Task) => {
+      if (isDemoMode) {
+        showReadOnlyNotice()
+        return null
+      }
+
       if (isCloudTaskMode) {
         if (!activeWorkspace?.id || !task.clientId) return null
         const supabase = getSupabaseClient()
@@ -484,7 +504,7 @@ export function TaskProvider({ children }: PropsWithChildren) {
       if (assignedNotification) void createNotifications([assignedNotification])
       return task
     },
-    [activeWorkspace?.id, createNotifications, isCloudTaskMode, user?.id],
+    [activeWorkspace?.id, createNotifications, isCloudTaskMode, isDemoMode, showReadOnlyNotice, user?.id],
   )
 
   const value = useMemo<TaskStoreValue>(
