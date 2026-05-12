@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { gsap } from 'gsap'
 import type { FormEvent, MouseEvent } from 'react'
 import {
   deleteProcessTemplateFromSupabase,
@@ -65,6 +67,8 @@ function formatMinutes(minutes: number) {
 }
 
 function TemplatesPage() {
+  const navigate = useNavigate()
+  const templatesListRef = useRef<HTMLDivElement | null>(null)
   const cloud = useCloudStore()
   const workspaceId = cloud.activeWorkspace?.id || ''
   const isCloudTemplatesMode = Boolean(cloud.isConfigured && workspaceId)
@@ -142,6 +146,23 @@ function TemplatesPage() {
     })
   }, [templates, query])
 
+
+  useEffect(() => {
+    const root = templatesListRef.current
+    if (!root || isFormOpen) return undefined
+
+    const ctx = gsap.context(() => {
+      const cards = Array.from(root.querySelectorAll<HTMLElement>('.templates-card'))
+      gsap.fromTo(
+        cards,
+        { autoAlpha: 0, y: 18, scale: 0.98 },
+        { autoAlpha: 1, y: 0, scale: 1, duration: 0.42, ease: 'power3.out', stagger: 0.06 },
+      )
+    }, root)
+
+    return () => ctx.revert()
+  }, [filteredTemplates.length, query, isFormOpen])
+
   const persistTemplates = (nextTemplates: ProcessTemplate[]) => {
     setTemplates(nextTemplates)
     saveProcessTemplates(nextTemplates)
@@ -151,7 +172,18 @@ function TemplatesPage() {
     if (!isCloudTemplatesMode) return
 
     void upsertProcessTemplateToSupabase(workspaceId, template)
-      .then(() => setSyncMessage('Proces je sačuvan u Supabase.'))
+      .then((cloudTemplate) => {
+        if (cloudTemplate && cloudTemplate.id !== template.id) {
+          setTemplates((current) => {
+            const nextTemplates = current.map((item) => (item.id === template.id ? cloudTemplate : item))
+            saveProcessTemplates(nextTemplates)
+            return nextTemplates
+          })
+          setSelectedTemplateId(cloudTemplate.id)
+          if (editingTemplateId === template.id) setEditingTemplateId(cloudTemplate.id)
+        }
+        setSyncMessage('Proces je sačuvan u Supabase.')
+      })
       .catch((error) => {
         setSyncMessage(error instanceof Error ? `Supabase sync greška: ${error.message}` : 'Proces nije sačuvan u Supabase.')
       })
@@ -220,8 +252,12 @@ function TemplatesPage() {
     persistTemplates(nextTemplates)
     if (isCloudTemplatesMode) {
       void deleteProcessTemplateFromSupabase(workspaceId, templateId)
-        .then(() => setSyncMessage('Proces je obrisan iz Supabase.'))
+        .then((result) => {
+          setSyncMessage(result?.skipped ? 'Lokalni/dev proces je obrisan lokalno.' : 'Proces je obrisan iz Supabase.')
+        })
         .catch((error) => {
+          persistTemplates(templates)
+          setSelectedTemplateId(templateId)
           setSyncMessage(error instanceof Error ? `Supabase sync greška: ${error.message}` : 'Proces nije obrisan iz Supabase.')
         })
     }
@@ -352,15 +388,19 @@ function TemplatesPage() {
   }
 
   return (
-    <section className="pulse-phone-screen templates-page-shell">
-      <div className="templates-page-header">
+    <section className="pulse-phone-screen templates-page-shell catalog-command-page">
+      <button type="button" className="command-back-btn" onClick={() => navigate('/')}>
+        ← Dashboard
+      </button>
+
+      <div className="templates-page-header catalog-command-header">
         <div>
           <p className="pulse-kicker">OPERATIVNI FLOW</p>
-          <h2>Procesi</h2>
-          <p>Definišite korake procesa koji će se automatski pretvoriti u taskove.</p>
+          <h2>PROCESI</h2>
+          <p>Katalog procesa i šablona koji se pretvaraju u operativne taskove.</p>
         </div>
         <button type="button" className="pulse-primary-btn" onClick={openNewTemplateForm}>
-          + NOVI ŠABLON
+          + Novi šablon
         </button>
       </div>
 
@@ -524,7 +564,7 @@ function TemplatesPage() {
             <span>{filteredTemplates.length} šablona</span>
           </div>
 
-          <div className="templates-grid">
+          <div className="templates-grid" ref={templatesListRef}>
             {filteredTemplates.map((template) => (
               <article
                 className={`templates-card ${selectedTemplate?.id === template.id ? 'templates-card-active' : ''}`}

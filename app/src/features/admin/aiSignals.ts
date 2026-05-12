@@ -3,7 +3,12 @@ import type { BillingRecord } from '../billing/types';
 import type { Client } from '../clients/types';
 import type { CloudWorkspaceMember } from '../cloud/types';
 import type { Project } from '../projects/types';
-import { isTaskCompleted, isTaskOpen } from '../tasks/taskLifecycle';
+import { isTaskOpen } from '../tasks/taskLifecycle';
+import {
+  buildCommandCenterSignals,
+  getOverdueTasks,
+  getTaskOverdueDays,
+} from '../tasks/taskSignals';
 import type { Task } from '../tasks/types';
 
 export type PulseSignal = {
@@ -35,15 +40,6 @@ export function getSignalTone(
 
 function formatAmountValue(amount: number) {
   return `${amount.toLocaleString('sr-RS')} RSD`;
-}
-
-function daysLate(value?: string | null) {
-  if (!value) return 0;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86400000));
 }
 
 function memberName(member?: CloudWorkspaceMember) {
@@ -107,12 +103,10 @@ export function buildAdminAiSignals({
   const clientById = new Map(clients.map((client) => [String(client.id), client]));
   const memberById = new Map(members.map((member) => [member.user_id, member]));
 
-  tasks
-    .filter((task) => task.dueDate && !isTaskCompleted(task) && daysLate(task.dueDate) > 0)
-    .forEach((task) => {
+  getOverdueTasks(tasks).forEach((task) => {
+      const lateBy = getTaskOverdueDays(task);
       const relatedProject = task.projectId ? projectById.get(task.projectId) : null;
       const relatedClient = clientById.get(String(task.clientId));
-      const lateBy = daysLate(task.dueDate);
       signals.push({
         id: `late-${task.id}`,
         severity: 'red',
@@ -167,6 +161,30 @@ export function buildAdminAiSignals({
         relatedUserId: userId,
       });
     });
+
+  const commandSignals = buildCommandCenterSignals(tasks, billing, projects);
+  if (commandSignals.some((signal) => signal.kind === 'task_overdue')) {
+    const overdueTaskIds = new Set(getOverdueTasks(tasks).map((task) => task.id));
+    if (!signals.some((signal) => signal.relatedTaskId && overdueTaskIds.has(signal.relatedTaskId))) {
+      getOverdueTasks(tasks).slice(0, 4).forEach((task) => {
+        const relatedProject = task.projectId ? projectById.get(task.projectId) : null;
+        const relatedClient = clientById.get(String(task.clientId));
+        signals.push({
+          id: `late-fallback-${task.id}`,
+          severity: 'red',
+          entityName: task.title,
+          message: `${task.title} kasni.`,
+          impact: 'Moguce pomeranje projekta ili reakcije klijenta.',
+          actionLabel: 'Predlozi follow-up',
+          actionType: 'follow_up',
+          relatedTaskId: task.id,
+          relatedProjectId: relatedProject?.id,
+          relatedClientId: relatedClient?.id ? String(relatedClient.id) : undefined,
+          relatedUserId: task.assignedToUserId,
+        });
+      });
+    }
+  }
 
   const prioritized = sortSignals(signals).slice(0, 4);
   if (prioritized.length) return prioritized;

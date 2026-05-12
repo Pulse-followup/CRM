@@ -11,7 +11,8 @@ import {
 import { useBillingStore } from '../billing/billingStore'
 import type { BillingRecord } from '../billing/types'
 import { useTaskStore } from '../tasks/taskStore'
-import { getCompletedTasks, getLateTasks, getTasksByUser } from '../tasks/taskSelectors'
+import { getCompletedTasks, getTasksByUser } from '../tasks/taskSelectors'
+import { getOverdueTasks } from '../tasks/taskSignals'
 import type { Task } from '../tasks/types'
 import { useNotificationStore } from './notificationStore'
 
@@ -54,7 +55,7 @@ function buildAssignedTaskNotifications(tasks: Task[], currentUser: AppUser): No
 }
 
 function buildAdminStatusNotifications(tasks: Task[]): NotificationFeedItem[] {
-  const lateIds = new Set(getLateTasks(tasks).map((task) => task.id))
+  const lateIds = new Set(getOverdueTasks(tasks).map((task) => task.id))
   const takenItems = tasks
     .filter((task) => task.status === 'u_radu' && !lateIds.has(task.id))
     .map((task) => ({
@@ -68,7 +69,7 @@ function buildAdminStatusNotifications(tasks: Task[]): NotificationFeedItem[] {
       createdAt: task.updatedAt || task.createdAt,
     }))
 
-  const lateItems = getLateTasks(tasks).map((task) => ({
+  const lateItems = getOverdueTasks(tasks).map((task) => ({
     id: `late-${task.id}`,
     title: 'Task kasni',
     body: task.title || 'Jedan task je probio rok.',

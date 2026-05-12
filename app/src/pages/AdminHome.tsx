@@ -59,6 +59,11 @@ import { buildCatalogJobPayload } from "../features/workflows/createJobFromProdu
 import { TASK_STATUS_LABELS } from "../features/tasks/taskLabels";
 import { isTaskCompleted, isTaskOpen } from "../features/tasks/taskLifecycle";
 import { getLateTasks } from "../features/tasks/taskSelectors";
+import {
+  buildCommandCenterSignals,
+  getActionRequiredTasks,
+  isTaskOverdue,
+} from "../features/tasks/taskSignals";
 import { useTaskStore } from "../features/tasks/taskStore";
 import type { Task } from "../features/tasks/types";
 import CreateTaskForm, {
@@ -71,6 +76,15 @@ import {
   getSignalTone,
   type PulseSignal as AiPulseSignal,
 } from "../features/admin/aiSignals";
+import {
+  buildFollowUpMessage,
+  buildFollowUpProposals,
+  canOpenFollowUpEmail,
+  getFollowUpBadgeTone,
+  getFollowUpToneLabel,
+  type FollowUpProposal,
+  type FollowUpTone,
+} from "../features/commandCenter/followupEngine";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import "../features/clients/pages/client-detail.css";
 import "./admin-home-command-center.css";
@@ -81,6 +95,7 @@ type ModalState =
   | { type: "billing"; record: BillingRecord }
   | { type: "client"; client: Client; score: number }
   | { type: "signal-note"; signal: AiPulseSignal; note: string }
+  | { type: "followup"; proposal: FollowUpProposal }
   | {
       type: "member-tasks";
       memberName: string;
@@ -796,6 +811,15 @@ function AdminModal({
   onAssignTask: (task: Task, memberId: string) => void | Promise<void>;
   onOpenTask: (task: Task) => void;
 }) {
+  const [followUpTone, setFollowUpTone] = useState<FollowUpTone>("neutral");
+  const [followUpCopied, setFollowUpCopied] = useState(false);
+
+  useEffect(() => {
+    if (state?.type !== "followup") return;
+    setFollowUpTone(state.proposal.category === "Interno" ? "internal" : "neutral");
+    setFollowUpCopied(false);
+  }, [state?.type, state?.type === "followup" ? state.proposal.id : null]);
+
   if (!state) return null;
   const clientProjects =
     state.type === "client"
@@ -860,6 +884,79 @@ function AdminModal({
             </div>
           </>
         ) : null}
+        {state.type === "followup" ? (
+          <>
+            <h3>Follow-up predlog</h3>
+            <div className="command-followup-modal-head">
+              <span
+                className={`command-followup-badge ${getFollowUpBadgeTone(state.proposal.category)}`}
+              >
+                {state.proposal.category}
+              </span>
+              <span className="command-followup-priority">
+                Prioritet: {state.proposal.priority}
+              </span>
+            </div>
+            <p className="command-followup-context">{state.proposal.contextLabel}</p>
+            <div className="command-followup-tone-row">
+              {(
+                ["neutral", "warm", "direct", "internal"] as FollowUpTone[]
+              ).map((tone) => (
+                <button
+                  key={tone}
+                  type="button"
+                  className={`command-followup-tone ${followUpTone === tone ? "is-active" : ""}`}
+                  onClick={() => {
+                    setFollowUpTone(tone);
+                    setFollowUpCopied(false);
+                  }}
+                >
+                  {getFollowUpToneLabel(tone)}
+                </button>
+              ))}
+            </div>
+            <div className="pulse-project-billing-summary command-followup-copy-box">
+              <p style={{ whiteSpace: "pre-wrap" }}>
+                {buildFollowUpMessage(state.proposal, followUpTone)}
+              </p>
+            </div>
+            {followUpCopied ? (
+              <p className="command-followup-feedback">Tekst je kopiran.</p>
+            ) : null}
+            <div className="command-followup-actions">
+              <button
+                type="button"
+                className="command-signal-action"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(
+                    buildFollowUpMessage(state.proposal, followUpTone),
+                  );
+                  setFollowUpCopied(true);
+                }}
+              >
+                Kopiraj za mail / Viber / WhatsApp
+              </button>
+              {canOpenFollowUpEmail(state.proposal) ? (
+                <button
+                  type="button"
+                  className="command-signal-action"
+                  onClick={() => {
+                    const body = buildFollowUpMessage(state.proposal, followUpTone);
+                    const mailto = `mailto:${state.proposal.recipientEmail}?subject=${encodeURIComponent(
+                      state.proposal.subject,
+                    )}&body=${encodeURIComponent(body)}`;
+                    window.location.href = mailto;
+                  }}
+                >
+                  Otvori email
+                </button>
+              ) : null}
+              <button type="button" className="command-signal-action" onClick={onClose}>
+                Zatvori
+              </button>
+            </div>
+          </>
+        ) : null}
         {state.type === "task" ? (
           <TaskAssignmentModalContent
             task={state.task}
@@ -906,7 +1003,7 @@ function AdminModal({
                             ?.title ?? "Nepoznat projekat"
                         : `${clients.find((client) => String(client.id) === String(task.clientId))?.name ?? "Nepoznat klijent"} - Ad hoc`}{" "}
                       -{" "}
-                      {isOverdueDate(task.dueDate)
+                      {isTaskOverdue(task)
                         ? "Kasni"
                         : TASK_STATUS_LABELS[task.status]}
                     </small>
@@ -1088,9 +1185,16 @@ function AdminHome() {
   const lateTasks = getLateTasks(tasks).filter(
     (task) =>
       task.clientId &&
-      task.projectId &&
       clientById.has(String(task.clientId)) &&
-      projectById.has(task.projectId),
+      (!task.projectId || projectById.has(task.projectId)),
+  );
+  const actionRequired = useMemo(
+    () => getActionRequiredTasks(tasks, billing, projects),
+    [billing, projects, tasks],
+  );
+  const commandTaskSignals = useMemo(
+    () => buildCommandCenterSignals(tasks, billing, projects),
+    [billing, projects, tasks],
   );
   const riskyProjects = projects.filter((project) =>
     Boolean(findOverdueStage(project)),
@@ -1301,16 +1405,28 @@ function AdminHome() {
     [billing, clients, members, projects, tasks],
   );
   const signalStatusHeadline =
-    aiSignals[0]?.severity === "green"
+    commandTaskSignals.some((signal) => signal.severity === "red") ||
+    commandTaskSignals.some((signal) => signal.severity === "yellow")
+      ? "Potrebna reakcija"
+      : aiSignals[0]?.severity === "green"
       ? "Firma je trenutno pod kontrolom"
       : "Potrebna reakcija";
-  const actionableSignalCount = aiSignals.filter(
-    (signal) => signal.severity === "red" || signal.severity === "yellow",
-  ).length;
+  const actionableSignalCount = commandTaskSignals.length;
   const signalReactionLabel =
     actionableSignalCount === 1
       ? "potrebna reakcija"
       : "potrebnih reakcija";
+  const followUpProposals = useMemo(
+    () =>
+      buildFollowUpProposals({
+        clients,
+        projects,
+        tasks,
+        billing,
+        members,
+      }),
+    [billing, clients, members, projects, tasks],
+  );
   const validTeamTasks = tasks.filter((task) => {
     if (!task.clientId || !clientById.has(String(task.clientId))) return false;
     if (task.projectId && !projectById.has(task.projectId)) return false;
@@ -1387,7 +1503,7 @@ function AdminHome() {
     ? teamActiveTasksForMember(selectedMember.user_id)
     : [];
   const selectedMemberLateTasks = selectedMemberTasks.filter((task) =>
-    isOverdueDate(task.dueDate),
+    isTaskOverdue(task),
   );
   const billingCommandStats = useMemo(() => {
     const draftCard = billingSummaryCards.find((card) => card.key === "draft");
@@ -1633,6 +1749,26 @@ function AdminHome() {
   };
 
   const openSignalNote = (signal: AiPulseSignal) => {
+    if (signal.actionType === "follow_up") {
+      const matchingProposal =
+        followUpProposals.find(
+          (proposal) =>
+            (signal.relatedTaskId && proposal.relatedTaskId === signal.relatedTaskId) ||
+            (signal.relatedProjectId &&
+              proposal.relatedProjectId === signal.relatedProjectId) ||
+            (signal.relatedClientId &&
+              proposal.relatedClientId === signal.relatedClientId),
+        ) ?? null;
+
+      if (matchingProposal) {
+        setModal({
+          type: "followup",
+          proposal: matchingProposal,
+        });
+        return;
+      }
+    }
+
     const note = buildSignalSuggestion(signal);
     if (!note) {
       openSignalCard(signal);
@@ -1931,7 +2067,7 @@ function AdminHome() {
             <p className="command-signal-headline">{signalStatusHeadline}</p>
             <div className="command-signal-stats">
               <div>
-                <strong>{lateTasks.length}</strong>
+                <strong>{actionRequired.overdueTasks.length}</strong>
                 <span>kasnih taskova</span>
               </div>
               <div>
@@ -2114,7 +2250,7 @@ function AdminHome() {
                   <button
                     key={task.id}
                     type="button"
-                    className={`command-task-card ${isOverdueDate(task.dueDate) ? "is-late" : ""}`}
+                    className={`command-task-card ${isTaskOverdue(task) ? "is-late" : ""}`}
                     onClick={() => navigate(`/tasks/${task.id}`)}
                   >
                     <div className="command-task-card-top">
@@ -2129,7 +2265,7 @@ function AdminHome() {
                     <div className="command-task-card-meta">
                       <span>Rok: {formatDate(task.dueDate)}</span>
                       <span>
-                        {isOverdueDate(task.dueDate) ? "Kasni" : "Na vreme"}
+                        {isTaskOverdue(task) ? "Kasni" : "Na vreme"}
                       </span>
                     </div>
                   </button>

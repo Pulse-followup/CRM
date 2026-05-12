@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { gsap } from 'gsap'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useClientStore } from '../features/clients/clientStore'
 import { compressProductImage } from '../features/products/imageCompress'
 import {
   deleteProductFromSupabase,
+  isUuid,
   readProducts,
   readProductsFromSupabase,
   saveProducts,
@@ -52,6 +55,8 @@ function getProductClientScopeLabel(product: ProductItem, clientNameById: Map<st
 
 function ProductsPage() {
   const { clients } = useClientStore()
+  const navigate = useNavigate()
+  const productsListRef = useRef<HTMLDivElement | null>(null)
   const cloud = useCloudStore()
   const workspaceId = cloud.activeWorkspace?.id || ''
   const isCloudProductsMode = Boolean(cloud.isConfigured && workspaceId)
@@ -136,9 +141,47 @@ function ProductsPage() {
     })
   }, [products, query, clientFilter])
 
+
+  useEffect(() => {
+    const root = productsListRef.current
+    if (!root) return undefined
+
+    const ctx = gsap.context(() => {
+      const cards = Array.from(root.querySelectorAll<HTMLElement>('.products-card'))
+      gsap.fromTo(
+        cards,
+        { autoAlpha: 0, y: 20, scale: 0.98 },
+        { autoAlpha: 1, y: 0, scale: 1, duration: 0.42, ease: 'power3.out', stagger: 0.06 },
+      )
+    }, root)
+
+    return () => ctx.revert()
+  }, [filteredProducts.length, query, clientFilter])
+
   const persistProducts = (nextProducts: ProductItem[]) => {
     setProducts(nextProducts)
     saveProducts(nextProducts)
+  }
+
+  const persistProductToCloudWithHydration = (product: ProductItem) => {
+    if (!isCloudProductsMode) return
+
+    void upsertProductToSupabase(workspaceId, product)
+      .then((savedProduct) => {
+        if (savedProduct && savedProduct.id !== product.id) {
+          setProducts((current) => {
+            const nextProducts = current.map((item) => (item.id === product.id ? savedProduct : item))
+            saveProducts(nextProducts)
+            return nextProducts
+          })
+          setSelectedProductId(savedProduct.id)
+          if (editingProductId === product.id) setEditingProductId(savedProduct.id)
+        }
+        setSyncMessage('Proizvod je sačuvan u Supabase.')
+      })
+      .catch((error) => {
+        setSyncMessage(error instanceof Error ? `Supabase sync greška: ${error.message}` : 'Proizvod nije sačuvan u Supabase.')
+      })
   }
 
   const persistProductToCloud = (product: ProductItem) => {
@@ -150,6 +193,8 @@ function ProductsPage() {
         setSyncMessage(error instanceof Error ? `Supabase sync greška: ${error.message}` : 'Proizvod nije sačuvan u Supabase.')
       })
   }
+
+  void persistProductToCloud
 
   const getTemplateProductionTime = (templateId?: string) => {
     const template = processTemplates.find((item) => item.id === templateId)
@@ -236,7 +281,7 @@ function ProductsPage() {
     }
     const nextProducts = [duplicatedProduct, ...products]
     persistProducts(nextProducts)
-    persistProductToCloud(duplicatedProduct)
+    persistProductToCloudWithHydration(duplicatedProduct)
     setSelectedProductId(duplicatedProduct.id)
   }
 
@@ -247,13 +292,27 @@ function ProductsPage() {
 
     const nextProducts = products.filter((item) => item.id !== productId)
     persistProducts(nextProducts)
+
     if (isCloudProductsMode) {
-      void deleteProductFromSupabase(workspaceId, productId)
-        .then(() => setSyncMessage('Proizvod je obrisan iz Supabase.'))
-        .catch((error) => {
-          setSyncMessage(error instanceof Error ? `Supabase sync greška: ${error.message}` : 'Proizvod nije obrisan iz Supabase.')
-        })
+      if (!isUuid(productId)) {
+        setSyncMessage('Lokalni dev proizvod je obrisan. Supabase brisanje nije potrebno za fallback stavke.')
+      } else {
+        void deleteProductFromSupabase(workspaceId, productId)
+          .then((result) => {
+            if (result?.deleted) {
+              setSyncMessage('Proizvod je obrisan iz Supabase.')
+              return
+            }
+            setSyncMessage('Proizvod nije pronađen u Supabase; uklonjen je iz lokalnog prikaza.')
+          })
+          .catch((error) => {
+            persistProducts(products)
+            setSelectedProductId(productId)
+            setSyncMessage(error instanceof Error ? `Supabase sync greška: ${error.message}` : 'Proizvod nije obrisan iz Supabase.')
+          })
+      }
     }
+
     if (selectedProductId === productId) setSelectedProductId(nextProducts[0]?.id ?? null)
     if (editingProductId === productId) closeProductForm()
   }
@@ -319,7 +378,7 @@ function ProductsPage() {
       )
       persistProducts(nextProducts)
       const savedProduct = nextProducts.find((product) => product.id === editingProductId)
-      if (savedProduct) persistProductToCloud(savedProduct)
+      if (savedProduct) persistProductToCloudWithHydration(savedProduct)
       setSelectedProductId(editingProductId)
       closeProductForm()
       return
@@ -343,18 +402,27 @@ function ProductsPage() {
 
     const nextProducts = [newProduct, ...products]
     persistProducts(nextProducts)
-    persistProductToCloud(newProduct)
+    persistProductToCloudWithHydration(newProduct)
     setSelectedProductId(newProduct.id)
     closeProductForm()
   }
 
   return (
-    <section className="pulse-phone-screen products-page-shell">
-      <div className="products-page-header products-page-header-compact">
-        <h2>MOJI PROIZVODI</h2>
-        <button type="button" className="pulse-primary-btn" onClick={openNewProductForm}>
-          + NOVI PROIZVOD
+    <section className="pulse-phone-screen products-page-shell products-command-page">
+      <div className="products-command-header">
+        <button type="button" className="products-dashboard-link" onClick={() => navigate('/')}>
+          ← Dashboard
         </button>
+        <div className="products-command-title-row">
+          <div>
+            <p className="products-eyebrow">CATALOG COMMAND VIEW</p>
+            <h2>PROIZVODI</h2>
+            <p>Katalog ponuda i šablona poslova</p>
+          </div>
+          <button type="button" className="pulse-primary-btn products-new-button" onClick={openNewProductForm}>
+            + Novi proizvod
+          </button>
+        </div>
       </div>
 
       <div className="products-toolbar">
@@ -368,7 +436,7 @@ function ProductsPage() {
       {syncMessage ? <p className="products-help-text">{syncMessage}</p> : null}
 
       <div className="products-client-filter">
-        <span>Filter:</span>
+        <span>Dostupnost</span>
         <button
           type="button"
           className={`products-client-chip ${clientFilter === 'all' ? 'products-client-chip-active' : ''}`}
@@ -532,13 +600,13 @@ function ProductsPage() {
             <span>{filteredProducts.length} stavki</span>
           </div>
 
-          <div className="products-grid">
+          <div className="products-grid" ref={productsListRef}>
             {filteredProducts.map((product) => (
               <article
                 className={`products-card ${selectedProduct?.id === product.id ? 'products-card-active' : ''}`}
                 key={product.id}
               >
-                <button type="button" onClick={() => setSelectedProductId(product.id)}>
+                <button type="button" onClick={() => setSelectedProductId(product.id)} aria-label={`Prikaži detalje proizvoda ${product.title}`}>
                   <div className="products-card-image">
                     {product.imageDataUrl ? <img src={product.imageDataUrl} alt={product.title} /> : <span>{product.title.slice(0, 2).toUpperCase()}</span>}
                   </div>
@@ -609,9 +677,6 @@ function ProductsPage() {
               </div>
 
               <div className="products-detail-actions">
-                <button type="button" className="pulse-primary-btn" onClick={() => window.alert('Za konkretan posao koristi: Klijent → Novi posao → Iz kataloga.')}>
-                  KREIRAJ POSAO
-                </button>
                 <button type="button" className="pulse-outline-btn" onClick={() => startEditProduct(selectedProduct)}>
                   IZMENI
                 </button>

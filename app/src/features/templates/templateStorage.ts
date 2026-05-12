@@ -46,6 +46,38 @@ function asNumber(value: unknown) {
   return Number.isFinite(next) ? next : 0
 }
 
+export function isTemplateUuid(value: string | undefined) {
+  const cleanValue = value || ''
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanValue)
+}
+
+function createCloudUuid() {
+  return crypto.randomUUID?.() || `tpl-${Date.now()}`
+}
+
+function ensureCloudTemplate(template: ProcessTemplate): ProcessTemplate {
+  if (isTemplateUuid(template.id)) {
+    return {
+      ...template,
+      steps: template.steps.map((step) => ({
+        ...step,
+        id: isTemplateUuid(step.id) ? step.id : createCloudUuid(),
+      })),
+    }
+  }
+
+  return {
+    ...template,
+    id: createCloudUuid(),
+    createdAt: new Date().toISOString(),
+    steps: template.steps.map((step, index) => ({
+      ...step,
+      id: isTemplateUuid(step.id) ? step.id : createCloudUuid(),
+      order: index + 1,
+    })),
+  }
+}
+
 export function readProcessTemplates() {
   return readStoredArray<ProcessTemplate>(PROCESS_TEMPLATE_STORAGE_KEY, defaultTemplates)
 }
@@ -130,43 +162,126 @@ function templateToSupabaseRow(template: ProcessTemplate, workspaceId: string) {
   }
 }
 
-export async function upsertProcessTemplateToSupabase(workspaceId: string, template: ProcessTemplate) {
+function templateFromSupabaseRow(row: Record<string, unknown>, fallback?: ProcessTemplate): ProcessTemplate {
+  return {
+    id: asString(row.id) || fallback?.id || crypto.randomUUID?.() || `tpl-${Date.now()}`,
+    title: asString(row.title) || fallback?.title || '',
+    projectType: asString(row.type) || fallback?.projectType || '',
+    description: asString(row.description) || fallback?.description || '',
+    status: row.is_active === false ? 'archived' : fallback?.status || 'active',
+    createdAt: asString(row.created_at) || fallback?.createdAt || new Date().toISOString(),
+    steps: fallback?.steps || [],
+  }
+}
+
+async function syncTemplateStepsInSupabase(templateId: string, steps: ProcessTemplateStep[]) {
   const supabase = getSupabaseClient()
-  if (!supabase || !workspaceId) return
+  if (!supabase) return
 
-  const { error } = await supabase
-    .from('process_templates')
-    .upsert(templateToSupabaseRow(template, workspaceId), { onConflict: 'id' })
-
-  if (error) throw error
-
-  const { error: deleteStepsError } = await supabase.from('process_template_steps').delete().eq('template_id', template.id)
+  const { error: deleteStepsError } = await supabase.from('process_template_steps').delete().eq('template_id', templateId)
   if (deleteStepsError) throw deleteStepsError
 
-  const steps = template.steps.map((step, index) => ({
+  const mappedSteps = steps.map((step, index) => ({
     id: step.id,
-    template_id: template.id,
+    template_id: templateId,
     title: step.title,
     required_role: step.role,
     estimated_minutes: step.estimatedMinutes,
     sort_order: index + 1,
   }))
 
-  if (steps.length) {
-    const { error: stepsError } = await supabase.from('process_template_steps').insert(steps)
+  if (mappedSteps.length) {
+    const { error: stepsError } = await supabase.from('process_template_steps').insert(mappedSteps)
     if (stepsError) throw stepsError
+  }
+}
+
+export async function upsertProcessTemplateToSupabase(workspaceId: string, template: ProcessTemplate) {
+  const supabase = getSupabaseClient()
+  if (!supabase || !workspaceId) return template
+
+  const cloudTemplate = ensureCloudTemplate(template)
+  const payload = templateToSupabaseRow(cloudTemplate, workspaceId)
+
+  if (isTemplateUuid(template.id)) {
+    const { id: _templateId, ...updatePayload } = payload
+    const { data, error } = await supabase
+      .from('process_templates')
+      .update(updatePayload)
+      .eq('id', cloudTemplate.id)
+      .eq('workspace_id', workspaceId)
+      .select()
+      .maybeSingle()
+
+    if (error) throw error
+
+    if (data) {
+      await syncTemplateStepsInSupabase(cloudTemplate.id, cloudTemplate.steps)
+      return {
+        ...templateFromSupabaseRow(data, cloudTemplate),
+        steps: cloudTemplate.steps,
+      }
+    }
+
+    const { data: insertedData, error: insertError } = await supabase
+      .from('process_templates')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (insertError) throw insertError
+
+    const insertedTemplate = templateFromSupabaseRow(insertedData, cloudTemplate)
+    await syncTemplateStepsInSupabase(insertedTemplate.id, cloudTemplate.steps)
+    return {
+      ...insertedTemplate,
+      steps: cloudTemplate.steps,
+    }
+  }
+
+  const { id: _localId, ...insertPayload } = payload
+  const { data, error } = await supabase
+    .from('process_templates')
+    .insert(insertPayload)
+    .select()
+    .single()
+
+  if (error) throw error
+
+  const savedTemplate = templateFromSupabaseRow(data, cloudTemplate)
+  await syncTemplateStepsInSupabase(savedTemplate.id, cloudTemplate.steps)
+  return {
+    ...savedTemplate,
+    steps: cloudTemplate.steps,
   }
 }
 
 export async function deleteProcessTemplateFromSupabase(workspaceId: string, templateId: string) {
   const supabase = getSupabaseClient()
-  if (!supabase || !workspaceId || !templateId) return
+  if (!supabase || !workspaceId || !templateId) return { deleted: false, skipped: true }
 
-  const { error } = await supabase
+  // Process template table uses UUID primary keys. Local/dev fallback templates can
+  // still have legacy slug ids such as "tpl-posm-standard". Do not send those
+  // to Supabase because PostgREST returns 400 for invalid uuid filters.
+  if (!isTemplateUuid(templateId)) {
+    return { deleted: false, skipped: true }
+  }
+
+  const { error: stepsError } = await supabase
+    .from('process_template_steps')
+    .delete()
+    .eq('template_id', templateId)
+
+  if (stepsError) throw stepsError
+
+  const { data, error } = await supabase
     .from('process_templates')
     .delete()
     .eq('id', templateId)
     .eq('workspace_id', workspaceId)
+    .select('id')
 
   if (error) throw error
+
+  return { deleted: Array.isArray(data) && data.length > 0, skipped: false }
 }

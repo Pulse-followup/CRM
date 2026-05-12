@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { gsap } from 'gsap'
 import { useAuthStore } from '../features/auth/authStore'
 import { useBillingStore } from '../features/billing/billingStore'
 import { useClientStore } from '../features/clients/clientStore'
@@ -16,10 +17,12 @@ type MenuItem = {
   to?: string
   label: string
   action?: () => void
+  section?: 'primary' | 'secondary'
 }
 
 function AppTopBar({ onOpenGuide }: AppTopBarProps) {
   const { currentUser } = useAuthStore()
+  const location = useLocation()
   const cloud = useCloudStore()
   const clientStore = useClientStore()
   const projectStore = useProjectStore()
@@ -28,6 +31,7 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const dropdownRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -43,6 +47,25 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
       document.removeEventListener('keydown', esc)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isOpen || !dropdownRef.current) return undefined
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        dropdownRef.current,
+        { autoAlpha: 0, x: 20, y: -8, scale: 0.98 },
+        { autoAlpha: 1, x: 0, y: 0, scale: 1, duration: 0.22, ease: 'power2.out' },
+      )
+      gsap.fromTo(
+        '.pulse-dropdown-section > *',
+        { autoAlpha: 0, x: 10 },
+        { autoAlpha: 1, x: 0, duration: 0.18, stagger: 0.035, ease: 'power2.out', delay: 0.04 },
+      )
+    }, dropdownRef)
+
+    return () => ctx.revert()
+  }, [isOpen])
 
   const handleSync = async () => {
     if (isSyncing) return
@@ -65,21 +88,24 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
   const userName = currentUser.name || currentUser.email || 'Korisnik'
 
   const menuItems: MenuItem[] = [
-    { to: '/settings', label: 'Moj nalog' },
-    ...(isAdmin ? [{ to: '/workspace', label: 'Moj Workspace' }] : []),
-    ...(isAdmin ? [{ to: '/clients', label: 'Klijenti' }] : []),
-    ...(isAdmin ? [{ to: '/projects', label: 'Projekti' }] : []),
-    ...(isAdmin || isFinance ? [{ to: '/billing', label: 'Naplata' }] : []),
-    ...(isAdmin ? [{ to: '/products', label: 'Proizvodi' }] : []),
-    ...(isAdmin ? [{ to: '/templates', label: 'Procesi' }] : []),
-    ...(isAdmin ? [{ to: '/data', label: 'Data' }] : []),
-    { label: 'Kako koristiti Pulse', action: () => onOpenGuide?.() },
+    ...(isAdmin ? [{ to: '/workspace', label: 'Moj Workspace', section: 'primary' as const }] : []),
+    ...(isAdmin ? [{ to: '/clients', label: 'Klijenti', section: 'primary' as const }] : []),
+    ...(isAdmin ? [{ to: '/projects', label: 'Projekti', section: 'primary' as const }] : []),
+    ...(isAdmin || isFinance ? [{ to: '/billing', label: 'Naplata', section: 'primary' as const }] : []),
+    ...(isAdmin ? [{ to: '/products', label: 'Proizvodi', section: 'primary' as const }] : []),
+    ...(isAdmin ? [{ to: '/templates', label: 'Procesi', section: 'primary' as const }] : []),
+    ...(isAdmin ? [{ to: '/data', label: 'Data', section: 'primary' as const }] : []),
+    { to: '/settings', label: 'Moj nalog', section: 'secondary' },
+    { label: 'Uputstvo', action: () => onOpenGuide?.(), section: 'secondary' },
   ]
 
   const renderMenuItem = (item: MenuItem, isDropdown = false) => {
+    const isActive = Boolean(item.to) && (location.pathname === item.to || location.pathname.startsWith(`${item.to}/`))
+    const itemClassName = `${isDropdown ? 'pulse-dropdown-item' : 'pulse-desktop-nav-item'}${isActive ? ' is-active' : ''}`
+
     if (item.to) {
       return (
-        <Link key={item.label} to={item.to} onClick={isDropdown ? () => setIsOpen(false) : undefined}>
+        <Link key={item.label} className={itemClassName} to={item.to} onClick={isDropdown ? () => setIsOpen(false) : undefined}>
           {item.label}
         </Link>
       )
@@ -88,7 +114,7 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
     return (
       <button
         key={item.label}
-        className="pulse-dropdown-button"
+        className={`${isDropdown ? 'pulse-dropdown-item pulse-dropdown-button' : 'pulse-desktop-nav-item pulse-dropdown-button'}`}
         type="button"
         onClick={() => {
           if (isDropdown) setIsOpen(false)
@@ -124,7 +150,15 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
         {isOpen ? (
           <>
             <button className="pulse-menu-backdrop" type="button" aria-label="Zatvori meni" onClick={() => setIsOpen(false)} />
-            <div className="pulse-dropdown">{menuItems.map((item) => renderMenuItem(item, true))}</div>
+            <div className="pulse-dropdown" ref={dropdownRef}>
+              <div className="pulse-dropdown-section">
+                {menuItems.filter((item) => item.section !== 'secondary').map((item) => renderMenuItem(item, true))}
+              </div>
+              <div className="pulse-dropdown-divider" />
+              <div className="pulse-dropdown-section pulse-dropdown-section-secondary">
+                {menuItems.filter((item) => item.section === 'secondary').map((item) => renderMenuItem(item, true))}
+              </div>
+            </div>
           </>
         ) : null}
       </div>

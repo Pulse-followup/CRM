@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PULSE CRM</title>
+    <script>
+      (() => {
+        const fallbackRoot = '/CRM/'
+        const nextPath = window.location.pathname + window.location.search + window.location.hash
+
+        sessionStorage.setItem('pulse-gh-pages-redirect', nextPath)
+        window.location.replace(fallbackRoot)
+      })()
+    </script>
+  </head>
+  <body></body>
+</html>

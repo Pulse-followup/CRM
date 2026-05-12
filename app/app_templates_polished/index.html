@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <link rel="icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>PULSE CRM</title>
+
+    <script>
+      (() => {
+        const redirectPath = sessionStorage.getItem('pulse-gh-pages-redirect')
+
+        if (redirectPath) {
+          sessionStorage.removeItem('pulse-gh-pages-redirect')
+          window.history.replaceState(null, '', redirectPath)
+        }
+      })()
+    </script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

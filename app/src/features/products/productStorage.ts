@@ -52,9 +52,14 @@ function normalizeClientScope(value: unknown): ProductClientScope {
   return asString(value) === 'selected' ? 'selected' : 'all'
 }
 
+export function isUuid(value: string | undefined) {
+  const cleanValue = value || ''
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanValue)
+}
+
 function asUuidOrNull(value: string | undefined) {
   const cleanValue = value || ''
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanValue) ? cleanValue : null
+  return isUuid(cleanValue) ? cleanValue : null
 }
 
 export function readProducts() {
@@ -146,28 +151,117 @@ function productToSupabaseRow(product: ProductItem, workspaceId: string) {
   }
 }
 
-export async function upsertProductToSupabase(workspaceId: string, product: ProductItem) {
+function productFromSupabaseRow(row: Record<string, unknown>, fallback?: ProductItem): ProductItem {
+  const clientScope = normalizeClientScope(row.client_scope ?? fallback?.clientScope)
+
+  return {
+    id: asString(row.id) || fallback?.id || crypto.randomUUID?.() || `prod-${Date.now()}`,
+    title: asString(row.title) || fallback?.title || '',
+    category: asString(row.category) || fallback?.category || '',
+    description: asString(row.description) || fallback?.description || '',
+    price: asNumber(row.price ?? fallback?.price),
+    currency: normalizeCurrency(row.currency ?? fallback?.currency),
+    productionTime: asString(row.delivery_time_label) || fallback?.productionTime || '',
+    processTemplateId: asString(row.source_template_id || row.template_id) || fallback?.processTemplateId || undefined,
+    clientScope,
+    clientIds: clientScope === 'selected' ? fallback?.clientIds || [] : [],
+    imageDataUrl: asString(row.image_data_url) || fallback?.imageDataUrl || undefined,
+    status: row.is_active === false ? 'archived' : fallback?.status || 'active',
+    createdAt: asString(row.created_at) || fallback?.createdAt || new Date().toISOString(),
+  }
+}
+
+async function syncProductClientsInSupabase(productId: string, product: ProductItem) {
   const supabase = getSupabaseClient()
-  if (!supabase || !workspaceId) return
+  if (!supabase) return
 
-  const { error } = await supabase.from('products').upsert(productToSupabaseRow(product, workspaceId), { onConflict: 'id' })
-  if (error) throw error
-
-  const { error: deleteClientsError } = await supabase.from('product_clients').delete().eq('product_id', product.id)
+  const { error: deleteClientsError } = await supabase.from('product_clients').delete().eq('product_id', productId)
   if (deleteClientsError) throw deleteClientsError
 
   if (product.clientScope === 'selected' && product.clientIds?.length) {
     const { error: clientsError } = await supabase.from('product_clients').insert(
-      product.clientIds.map((clientId) => ({ product_id: product.id, client_id: clientId })),
+      product.clientIds.map((clientId) => ({ product_id: productId, client_id: clientId })),
     )
     if (clientsError) throw clientsError
   }
 }
 
+export async function upsertProductToSupabase(workspaceId: string, product: ProductItem) {
+  const supabase = getSupabaseClient()
+  if (!supabase || !workspaceId) return product
+
+  const payload = productToSupabaseRow(product, workspaceId)
+
+  if (isUuid(product.id)) {
+    const { id: _productId, ...updatePayload } = payload
+    const { data, error } = await supabase
+      .from('products')
+      .update(updatePayload)
+      .eq('id', product.id)
+      .eq('workspace_id', workspaceId)
+      .select()
+      .maybeSingle()
+
+    if (error) throw error
+
+    if (data) {
+      await syncProductClientsInSupabase(product.id, product)
+      return productFromSupabaseRow(data, product)
+    }
+
+    const { data: insertedData, error: insertError } = await supabase
+      .from('products')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (insertError) throw insertError
+
+    const insertedProduct = productFromSupabaseRow(insertedData, product)
+    await syncProductClientsInSupabase(insertedProduct.id, insertedProduct)
+    return insertedProduct
+  }
+
+  const { id: _localId, ...insertPayload } = payload
+  const { data, error } = await supabase
+    .from('products')
+    .insert(insertPayload)
+    .select()
+    .single()
+
+  if (error) throw error
+
+  const savedProduct = productFromSupabaseRow(data, product)
+  await syncProductClientsInSupabase(savedProduct.id, savedProduct)
+  return savedProduct
+}
+
 export async function deleteProductFromSupabase(workspaceId: string, productId: string) {
   const supabase = getSupabaseClient()
-  if (!supabase || !workspaceId || !productId) return
+  if (!supabase || !workspaceId || !productId) return { deleted: false, skipped: true }
 
-  const { error } = await supabase.from('products').delete().eq('id', productId).eq('workspace_id', workspaceId)
+  // Products table uses UUID primary keys. Local/dev fallback products can still have
+  // legacy slug ids such as "prod-vizit-karte". Sending those to Supabase creates
+  // a 400 Bad Request, so cloud delete is intentionally skipped for local-only items.
+  if (!isUuid(productId)) {
+    return { deleted: false, skipped: true }
+  }
+
+  const { error: clientDeleteError } = await supabase
+    .from('product_clients')
+    .delete()
+    .eq('product_id', productId)
+
+  if (clientDeleteError) throw clientDeleteError
+
+  const { data, error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', productId)
+    .eq('workspace_id', workspaceId)
+    .select('id')
+
   if (error) throw error
+
+  return { deleted: Array.isArray(data) && data.length > 0, skipped: false }
 }

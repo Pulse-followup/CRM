@@ -1,6 +1,7 @@
 import type { AppUser } from '../auth/types'
 import type { Task, TaskBillingState, TaskStatus } from './types'
 import { isTaskCompleted, isTaskOpen, isWorkflowWaitingTask } from './taskLifecycle'
+import { getOverdueTasks, isTaskOverdue } from './taskSignals'
 
 function getDateKey(date: Date) {
   const year = date.getFullYear()
@@ -8,15 +9,6 @@ function getDateKey(date: Date) {
   const day = String(date.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
-}
-
-function parseDateOnly(value?: string) {
-  if (!value) {
-    return null
-  }
-
-  const parsed = new Date(`${value}T00:00:00`)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
 export function getAllTasks(tasks: Task[]) {
@@ -68,20 +60,7 @@ export function isTaskDone(task: Task) {
 }
 
 export function isTaskLate(task: Task, referenceDate: Date = new Date()) {
-  if (!isTaskActive(task) || !task.dueDate) {
-    return false
-  }
-
-  const dueDate = parseDateOnly(task.dueDate)
-
-  if (!dueDate) {
-    return false
-  }
-
-  const today = new Date(referenceDate)
-  today.setHours(0, 0, 0, 0)
-
-  return dueDate.getTime() < today.getTime()
+  return isTaskActive(task) && isTaskOverdue(task, referenceDate)
 }
 
 export function isTaskDueToday(task: Task, referenceDate: Date = new Date()) {
@@ -93,7 +72,7 @@ export function isTaskDueToday(task: Task, referenceDate: Date = new Date()) {
 }
 
 export function getLateTasks(tasks: Task[], referenceDate: Date = new Date()) {
-  return tasks.filter((task) => isTaskLate(task, referenceDate))
+  return getOverdueTasks(tasks, referenceDate).filter(isTaskActive)
 }
 
 export function getTodayTasks(tasks: Task[], referenceDate: Date = new Date()) {
