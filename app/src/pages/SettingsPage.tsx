@@ -22,7 +22,7 @@ function readableName(profileName?: string | null, fallback?: string | null) {
 function SettingsPage() {
   const cloud = useCloudStore()
   const { clients } = useClientStore()
-  const { pushStatus, enablePushNotifications } = useNotificationStore()
+  const { pushStatus, enablePushNotifications, lastPushResult } = useNotificationStore()
   const navigate = useNavigate()
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -225,6 +225,11 @@ function SettingsPage() {
           <div><span>Service worker</span><strong>{hasPushServiceWorker === null ? 'Provera...' : hasPushServiceWorker ? 'Registrovan' : 'Nije registrovan'}</strong></div>
           <div><span>Aktivni device tokeni</span><strong>{registeredDeviceCount === null ? '-' : String(registeredDeviceCount)}</strong></div>
           <div><span>Poslednji device seen</span><strong>{lastDeviceSeenAt ? new Date(lastDeviceSeenAt).toLocaleString('sr-RS') : '-'}</strong></div>
+          <div><span>Last push sent</span><strong>{lastPushResult ? String(lastPushResult.sent) : '-'}</strong></div>
+          <div><span>Last push failed</span><strong>{lastPushResult ? String(lastPushResult.failed) : '-'}</strong></div>
+          <div><span>Last push skipped</span><strong>{lastPushResult ? String(lastPushResult.skipped) : '-'}</strong></div>
+          <div><span>Revoked tokens</span><strong>{lastPushResult ? String(lastPushResult.revokedTokens) : '-'}</strong></div>
+          <div><span>Last push at</span><strong>{lastPushResult?.recordedAt ? new Date(lastPushResult.recordedAt).toLocaleString('sr-RS') : '-'}</strong></div>
         </div>
 
         <div className="settings-button-row">

@@ -28,6 +28,13 @@ interface NotificationStoreValue {
   cloudReadStatus: CloudReadStatus
   cloudReadError: string | null
   pushStatus: PushStatus
+  lastPushResult: {
+    sent: number
+    skipped: number
+    failed: number
+    revokedTokens: number
+    recordedAt: string
+  } | null
   isNotificationSeen: (notificationId: string) => boolean
   markNotificationSeen: (notificationId: string) => void
   refreshNotificationsFromCloud: () => Promise<void>
@@ -125,6 +132,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   const [cloudReadError, setCloudReadError] = useState<string | null>(null)
   const [toasts, setToasts] = useState<NotificationToast[]>([])
   const [pushStatus, setPushStatus] = useState<PushStatus>('idle')
+  const [lastPushResult, setLastPushResult] = useState<NotificationStoreValue['lastPushResult']>(null)
   const [seenVersion, setSeenVersion] = useState(0)
   const seenNotificationIdsRef = useRef<Set<string>>(new Set(readSeenNotificationIds()))
 
@@ -390,10 +398,32 @@ export function NotificationProvider({ children }: PropsWithChildren) {
               appBaseUrl: getAppBaseUrl(),
             },
           })
-          .then(({ error }) => {
+          .then(({ data, error }) => {
             if (error) {
               console.error('[PULSE push] send-notification-push invoke failed', error)
+              setLastPushResult({
+                sent: 0,
+                skipped: 0,
+                failed: savedRecords.length,
+                revokedTokens: 0,
+                recordedAt: new Date().toISOString(),
+              })
+              return
             }
+
+            const payload = (data || {}) as Partial<{
+              sent: number
+              skipped: number
+              failed: number
+              revokedTokens: number
+            }>
+            setLastPushResult({
+              sent: Number(payload.sent || 0),
+              skipped: Number(payload.skipped || 0),
+              failed: Number(payload.failed || 0),
+              revokedTokens: Number(payload.revokedTokens || 0),
+              recordedAt: new Date().toISOString(),
+            })
           })
       }
       return savedRecords
@@ -460,6 +490,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       cloudReadStatus,
       cloudReadError,
       pushStatus,
+      lastPushResult,
       isNotificationSeen,
       markNotificationSeen,
       refreshNotificationsFromCloud,
@@ -480,6 +511,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       isNotificationSeen,
       markNotificationSeen,
       markNotificationRead,
+      lastPushResult,
       notifications,
       pushToast,
       pushStatus,
