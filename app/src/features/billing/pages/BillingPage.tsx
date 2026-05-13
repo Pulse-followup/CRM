@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuthStore } from '../../auth/authStore'
 import { useClientStore } from '../../clients/clientStore'
 import { useProjectStore } from '../../projects/projectStore'
 import '../../clients/pages/client-detail.css'
@@ -33,6 +34,7 @@ function normalizeFilterParam(value: string | null): 'all' | BillingStatus {
 
 function BillingPage() {
   const navigate = useNavigate()
+  const { currentUser } = useAuthStore()
   const [searchParams, setSearchParams] = useSearchParams()
   const externalFilter = searchParams.get('filter')
   const [activeFilter, setActiveFilter] = useState<'all' | BillingStatus>(normalizeFilterParam(externalFilter))
@@ -79,6 +81,7 @@ function BillingPage() {
     }
     return getPaidItems(billing)
   }, [activeFilter, billing, billingCollections.active, isPaidWeekFilter])
+  const canManageBillingStatus = currentUser.role === 'finance'
 
   return (
     <section className="page-card client-detail-shell billing-clean-page">
@@ -112,9 +115,9 @@ function BillingPage() {
                 record={record}
                 clientName={client?.name || record.clientName}
                 projectTitle={project?.title || record.projectName}
-                onMarkInvoiced={billingStatus === 'issued' && (record.status === 'draft' || record.status === 'ready') ? () => markBillingInvoiced(record.id) : undefined}
-                onMarkOverdue={billingStatus === 'issued' && record.status === 'invoiced' ? () => markBillingOverdue(record.id) : undefined}
-                onMarkPaid={billingStatus === 'issued' || billingStatus === 'overdue' ? () => markBillingPaid(record.id) : undefined}
+                onMarkInvoiced={canManageBillingStatus && billingStatus === 'issued' && (record.status === 'draft' || record.status === 'ready') ? () => markBillingInvoiced(record.id) : undefined}
+                onMarkOverdue={canManageBillingStatus && billingStatus === 'issued' && record.status === 'invoiced' ? () => markBillingOverdue(record.id) : undefined}
+                onMarkPaid={canManageBillingStatus && (billingStatus === 'issued' || billingStatus === 'overdue') ? () => markBillingPaid(record.id) : undefined}
               />
             )
           })}

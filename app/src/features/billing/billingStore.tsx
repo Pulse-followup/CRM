@@ -211,6 +211,34 @@ export function BillingProvider({ children }: PropsWithChildren) {
   const { getProjectById, updateProject } = useProjectStore()
   const { getTasksByProjectId } = useTaskStore()
 
+  const getProjectCommercialValue = useCallback((projectId: string) => {
+    const project = getProjectById(projectId)
+    if (!project) return 0
+    const unitPrice = project.unitPrice ?? 0
+    const quantity =
+      project.quantity ||
+      (unitPrice > 0 && project.value ? Math.round(project.value / unitPrice) : 0)
+    const totalValue =
+      project.value ||
+      (unitPrice > 0 && quantity > 0 ? unitPrice * quantity : 0)
+    return Number.isFinite(totalValue) && totalValue > 0 ? Math.round(totalValue) : 0
+  }, [getProjectById])
+
+  const alignBillingWithCommercialValue = useCallback((record: BillingRecord) => {
+    if (record.status !== 'ready' && record.status !== 'draft') return record
+    const commercialAmount = getProjectCommercialValue(record.projectId)
+    if (!commercialAmount) return record
+    if ((record.amount ?? 0) === commercialAmount && (record.netAmount ?? 0) === commercialAmount) return record
+
+    return normalizeRuntimeStatus({
+      ...record,
+      amount: commercialAmount,
+      netAmount: commercialAmount,
+      marginPercent: 0,
+      updatedAt: record.updatedAt || new Date().toISOString(),
+    })
+  }, [getProjectCommercialValue])
+
   useEffect(() => {
     if (!isCloudBillingMode && !isDemoMode) {
       writeStoredValue(BILLING_STORAGE_KEY, localBilling)
@@ -305,14 +333,26 @@ export function BillingProvider({ children }: PropsWithChildren) {
       ...(Array.isArray(recordQuery.data) ? recordQuery.data : []),
     ]
       .map((row) => mapBillingRowToReact(row as Record<string, unknown>))
+      .map(alignBillingWithCommercialValue)
       .filter((record) => record.id)
 
     const nextBilling = mergeBillingRows(records)
     setCloudBilling(nextBilling)
     setCloudReadStatus(nextBilling.length ? 'cloud' : 'cloud-empty')
 
+    nextBilling
+      .filter((record) => {
+        const commercialAmount = getProjectCommercialValue(record.projectId)
+        return Boolean(
+          commercialAmount &&
+          (record.status === 'ready' || record.status === 'draft') &&
+          ((record.amount ?? 0) !== commercialAmount || (record.netAmount ?? 0) !== commercialAmount),
+        )
+      })
+      .forEach((record) => void persistCloudBilling(alignBillingWithCommercialValue(record)))
+
     nextBilling.filter((record) => record.status === 'overdue').forEach((record) => void persistCloudBilling(record))
-  }, [activeWorkspace?.id, isConfigured, persistCloudBilling])
+  }, [activeWorkspace?.id, alignBillingWithCommercialValue, getProjectCommercialValue, isConfigured, persistCloudBilling])
 
   useEffect(() => {
     if (isCloudBillingMode) {
@@ -403,11 +443,31 @@ export function BillingProvider({ children }: PropsWithChildren) {
 
       // One project must not generate multiple billing records.
       // Any non-cancelled billing record (ready/draft/invoiced/overdue/paid) owns the project.
-      const existingRecord = selectBillingByProjectId(billing, projectId).find(isActiveOrClosedBilling)
-      if (existingRecord) return existingRecord
-
       const project = getProjectById(projectId)
       if (!project) return null
+
+      const existingRecord = selectBillingByProjectId(billing, projectId).find(isActiveOrClosedBilling)
+      if (existingRecord) {
+        if (existingRecord.status === 'ready' || existingRecord.status === 'draft') {
+          return await replaceRecord({
+            ...existingRecord,
+            description: payload.description.trim() || existingRecord.description || `Nalog za naplatu - ${project.title}`,
+            amount: Number.isFinite(payload.amount) ? payload.amount : existingRecord.amount,
+            currency: payload.currency.trim() || existingRecord.currency || 'RSD',
+            dueDate: payload.dueDate,
+            invoiceNumber: payload.invoiceNumber.trim(),
+            taskCount: payload.taskCount ?? existingRecord.taskCount ?? 0,
+            totalTimeMinutes: payload.totalTimeMinutes ?? existingRecord.totalTimeMinutes ?? 0,
+            totalLaborCost: payload.totalLaborCost ?? existingRecord.totalLaborCost ?? 0,
+            totalMaterialCost: payload.totalMaterialCost ?? existingRecord.totalMaterialCost ?? 0,
+            totalCost: payload.totalCost ?? existingRecord.totalCost ?? 0,
+            marginPercent: payload.marginPercent ?? existingRecord.marginPercent ?? 0,
+            netAmount: payload.netAmount ?? payload.amount ?? existingRecord.netAmount ?? existingRecord.amount ?? 0,
+            updatedAt: new Date().toISOString(),
+          })
+        }
+        return existingRecord
+      }
 
       const projectTasks = getTasksByProjectId(projectId)
       if (isSingleShotProject(project) && !isProjectFinishedForBilling(projectTasks)) {
@@ -415,7 +475,7 @@ export function BillingProvider({ children }: PropsWithChildren) {
       }
 
       const timestamp = new Date().toISOString()
-      const nextRecord: BillingRecord = {
+      const nextRecord: BillingRecord = alignBillingWithCommercialValue({
         id: makeBillingId(),
         clientId: String(project.clientId),
         projectId: String(projectId),
@@ -438,11 +498,11 @@ export function BillingProvider({ children }: PropsWithChildren) {
         updatedAt: timestamp,
         invoicedAt: null,
         paidAt: null,
-      }
+      })
 
       return await replaceRecord(nextRecord)
     },
-    [billing, getProjectById, getTasksByProjectId, isDemoMode, replaceRecord, showReadOnlyNotice],
+    [alignBillingWithCommercialValue, billing, getProjectById, getTasksByProjectId, isDemoMode, replaceRecord, showReadOnlyNotice],
   )
 
   const updateBillingRecord = useCallback(
