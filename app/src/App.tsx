@@ -80,7 +80,7 @@ function AppRoutes() {
   useEffect(() => {
     setUsageTrackingContext({
       workspaceId: cloud.activeWorkspace?.id || null,
-      userId: cloud.user?.id || currentUser.id,
+      userId: cloud.user?.id || null,
       userEmail: cloud.profile?.email || cloud.user?.email || currentUser.email,
       isDemoMode: demo.isDemoMode,
     })
@@ -118,6 +118,7 @@ function AppRoutes() {
       <BrowserRouter basename="/CRM">
         <SetupChecklistOverlay />
         <Routes>
+        <Route path="/admin/usage" element={canAccessUsage ? <AdminUsagePage /> : <NoAccessPage />} />
         <Route element={layoutElement}>
           <Route path="/" element={homeElement} />
           <Route path="/admin" element={role === 'admin' ? <AdminHome /> : <NoAccessPage />} />
@@ -154,7 +155,6 @@ function AppRoutes() {
           <Route path="/billing" element={role === 'user' ? <NoAccessPage /> : <BillingPage />} />
           <Route path="/workspace" element={role === 'admin' ? <WorkspacePage /> : <NoAccessPage />} />
           <Route path="/data" element={role === 'admin' ? <DataPage /> : <NoAccessPage />} />
-          <Route path="/admin/usage" element={canAccessUsage ? <AdminUsagePage /> : <NoAccessPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

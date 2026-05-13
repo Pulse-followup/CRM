@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuthStore } from '../features/auth/authStore'
 import { isUsageOwnerEmail } from '../features/usage/usageAccess'
 import { getSupabaseClient } from '../lib/supabaseClient'
@@ -16,12 +16,37 @@ type UsageEventRow = {
   created_at: string
 }
 
-type WorkspaceRow = {
-  id: string
-  name: string
+type RangeKey = 'today' | '7d' | '14d' | '30d'
+
+type SnapshotBucket = {
+  total: number
+  new7d: number
+  new30d: number
+  older: number
 }
 
-type RangeKey = 'today' | '7d' | '14d' | '30d'
+type SnapshotResponse = {
+  workspaces: SnapshotBucket
+  users: SnapshotBucket
+  clients: SnapshotBucket
+  products: SnapshotBucket
+  tasks: SnapshotBucket
+}
+
+const EMPTY_BUCKET: SnapshotBucket = {
+  total: 0,
+  new7d: 0,
+  new30d: 0,
+  older: 0,
+}
+
+const EMPTY_SNAPSHOT: SnapshotResponse = {
+  workspaces: EMPTY_BUCKET,
+  users: EMPTY_BUCKET,
+  clients: EMPTY_BUCKET,
+  products: EMPTY_BUCKET,
+  tasks: EMPTY_BUCKET,
+}
 
 const RANGE_OPTIONS: Array<{ key: RangeKey; label: string; days: number }> = [
   { key: 'today', label: 'Danas', days: 1 },
@@ -29,6 +54,22 @@ const RANGE_OPTIONS: Array<{ key: RangeKey; label: string; days: number }> = [
   { key: '14d', label: '14 dana', days: 14 },
   { key: '30d', label: '30 dana', days: 30 },
 ]
+
+const EVENT_LABELS: Record<string, string> = {
+  app_opened: 'Otvorio app',
+  login_success: 'Uspešan login',
+  demo_opened: 'Otvorio demo',
+  client_opened: 'Otvorio klijenta',
+  project_opened: 'Otvorio projekat',
+  task_opened: 'Otvorio task',
+  task_created: 'Kreirao task',
+  task_completed: 'Završio task',
+  billing_opened: 'Otvorio naplatu',
+  invite_created: 'Kreirao invite',
+  notification_clicked: 'Kliknuo notifikaciju',
+  push_enabled: 'Uključio push',
+  onboarding_completed: 'Završio onboarding',
+}
 
 function formatDateTime(value: string) {
   const date = new Date(value)
@@ -84,7 +125,20 @@ function topEvent(events: UsageEventRow[]) {
       max = count
     }
   })
-  return winner
+  return EVENT_LABELS[winner] || winner
+}
+
+function formatWorkspace(workspaceId: string | null, metadata: Record<string, unknown> | null) {
+  if (metadata?.demoMode) return 'DEMO'
+  if (!workspaceId) return '-'
+  return workspaceId.length > 16 ? `${workspaceId.slice(0, 8)}...` : workspaceId
+}
+
+function formatMetadata(metadata: Record<string, unknown> | null) {
+  if (!metadata || !Object.keys(metadata).length) return '-'
+  return Object.entries(metadata)
+    .map(([key, value]) => `${key}: ${String(value)}`)
+    .join(' | ')
 }
 
 function AdminUsagePage() {
@@ -94,7 +148,7 @@ function AdminUsagePage() {
   const [eventTypeFilter, setEventTypeFilter] = useState('')
   const [events, setEvents] = useState<UsageEventRow[]>([])
   const [recentEvents, setRecentEvents] = useState<UsageEventRow[]>([])
-  const [workspaces, setWorkspaces] = useState<Record<string, string>>({})
+  const [snapshot, setSnapshot] = useState<SnapshotResponse>(EMPTY_SNAPSHOT)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -143,36 +197,26 @@ function AdminUsagePage() {
         recentQuery = recentQuery.eq('event_type', cleanEventType)
       }
 
-      const [{ data: summaryData, error: summaryError }, { data: recentData, error: recentError }] =
-        await Promise.all([summaryQuery, recentQuery])
+      const [
+        { data: snapshotData, error: snapshotError },
+        { data: summaryData, error: summaryError },
+        { data: recentData, error: recentError },
+      ] = await Promise.all([
+        supabase.rpc('owner_usage_snapshot'),
+        summaryQuery,
+        recentQuery,
+      ])
 
-      if (summaryError || recentError) {
-        throw new Error(summaryError?.message || recentError?.message || 'Usage podaci nisu dostupni.')
-      }
-
-      const allEvents = (summaryData || []) as UsageEventRow[]
-      const lastEvents = (recentData || []) as UsageEventRow[]
-      const workspaceIds = Array.from(
-        new Set(
-          [...allEvents, ...lastEvents]
-            .map((event) => event.workspace_id)
-            .filter((value): value is string => Boolean(value)),
-        ),
-      )
-
-      let workspaceMap: Record<string, string> = {}
-      if (workspaceIds.length) {
-        const { data: workspaceData } = await supabase
-          .from('workspaces')
-          .select('id,name')
-          .in('id', workspaceIds)
-        workspaceMap = Object.fromEntries(((workspaceData || []) as WorkspaceRow[]).map((item) => [item.id, item.name]))
+      if (snapshotError || summaryError || recentError) {
+        throw new Error(
+          snapshotError?.message || summaryError?.message || recentError?.message || 'Usage podaci nisu dostupni.',
+        )
       }
 
       if (!isMounted) return
-      setEvents(allEvents)
-      setRecentEvents(lastEvents)
-      setWorkspaces(workspaceMap)
+      setSnapshot((snapshotData as SnapshotResponse | null) || EMPTY_SNAPSHOT)
+      setEvents((summaryData || []) as UsageEventRow[])
+      setRecentEvents((recentData || []) as UsageEventRow[])
       setIsLoading(false)
     }
 
@@ -187,7 +231,7 @@ function AdminUsagePage() {
     }
   }, [canAccess, emailFilter, eventTypeFilter, range])
 
-  const stats = useMemo(() => {
+  const activityStats = useMemo(() => {
     const todayIso = startOfDayIso(1)
     const todayEvents = events.filter((event) => event.created_at >= todayIso)
     const last7Iso = startOfDayIso(7)
@@ -196,11 +240,11 @@ function AdminUsagePage() {
     return [
       { label: 'Aktivni korisnici danas', value: uniqueUsers(todayEvents) },
       { label: 'Aktivni korisnici 7 dana', value: uniqueUsers(last7Events) },
-      { label: 'Otvorene sesije danas', value: countEvent(todayEvents, 'app_opened') },
+      { label: 'Otvaranja app danas', value: countEvent(todayEvents, 'app_opened') },
       { label: 'Demo otvaranja', value: countEvent(events, 'demo_opened') },
       { label: 'Otvoreni taskovi', value: countEvent(events, 'task_opened') },
-      { label: 'Zavrseni taskovi', value: countEvent(events, 'task_completed') },
-      { label: 'Otvorene billing strane', value: countEvent(events, 'billing_opened') },
+      { label: 'Završeni taskovi', value: countEvent(events, 'task_completed') },
+      { label: 'Otvorena naplata', value: countEvent(events, 'billing_opened') },
       { label: 'Kreirani invite linkovi', value: countEvent(events, 'invite_created') },
     ]
   }, [events])
@@ -229,21 +273,75 @@ function AdminUsagePage() {
     return Array.from(new Set(events.map((event) => event.event_type))).sort((left, right) => left.localeCompare(right))
   }, [events])
 
+  const foundationCards = [
+    { key: 'workspaces', label: 'Workspace-ovi', bucket: snapshot.workspaces },
+    { key: 'users', label: 'Useri', bucket: snapshot.users },
+    { key: 'clients', label: 'Klijenti', bucket: snapshot.clients },
+    { key: 'products', label: 'Proizvodi', bucket: snapshot.products },
+    { key: 'tasks', label: 'Taskovi', bucket: snapshot.tasks },
+  ]
+
   if (!canAccess) {
     return <Navigate to="/" replace />
   }
 
   return (
-    <section className="page-card settings-page-shell account-page-shell admin-usage-shell">
-      <div className="account-page-head">
-        <h2>Usage / Beta activity</h2>
-        <p>Globalni pregled beta korišćenja aplikacije.</p>
-      </div>
+    <main className="usage-owner-screen">
+      <section className="usage-owner-hero">
+        <div>
+          <span className="usage-owner-kicker">PULSE Founder Dashboard</span>
+          <h1>Beta usage pregled</h1>
+          <p>Globalni pregled svih workspace-ova, usera i korišćenja aplikacije. Ovo je owner-only ekran za tebe, ne za workspace admina.</p>
+        </div>
+        <div className="usage-owner-actions">
+          <Link to="/" className="usage-owner-link">Nazad u app</Link>
+        </div>
+      </section>
 
-      <section className="account-card admin-usage-filters">
-        <div className="admin-usage-filter-grid">
+      <section className="usage-owner-panel usage-owner-explainer">
+        <div>
+          <strong>Event type</strong>
+          <span>šta je korisnik uradio</span>
+        </div>
+        <div>
+          <strong>Entity type</strong>
+          <span>na čemu je to uradio, npr. task ili projekat</span>
+        </div>
+        <div>
+          <strong>Metadata</strong>
+          <span>dodatni detalji, npr. koraci onboarding-a ili demo flag</span>
+        </div>
+      </section>
+
+      <section className="usage-owner-foundation-grid">
+        {foundationCards.map((item) => (
+          <article key={item.key} className="usage-owner-panel usage-entity-card">
+            <header>
+              <span>{item.label}</span>
+              <strong>{item.bucket.total}</strong>
+            </header>
+            <div className="usage-entity-breakdown">
+              <div>
+                <label>Novi 7 dana</label>
+                <b>{item.bucket.new7d}</b>
+              </div>
+              <div>
+                <label>Novi 30 dana</label>
+                <b>{item.bucket.new30d}</b>
+              </div>
+              <div>
+                <label>Stariji</label>
+                <b>{item.bucket.older}</b>
+              </div>
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <section className="usage-owner-panel usage-owner-filters">
+        <div className="usage-owner-filter-grid">
           <label>
-            <span>Period</span>
+            <span>Period usage-a</span>
             <select value={range} onChange={(event) => setRange(event.target.value as RangeKey)}>
               {RANGE_OPTIONS.map((option) => (
                 <option key={option.key} value={option.key}>{option.label}</option>
@@ -268,83 +366,85 @@ function AdminUsagePage() {
 
       {error ? <p className="settings-error-text">{error}</p> : null}
 
-      <section className="admin-usage-stats">
-        {stats.map((item) => (
-          <article key={item.label} className="account-card admin-usage-stat-card">
+      <section className="usage-owner-activity-grid">
+        {activityStats.map((item) => (
+          <article key={item.label} className="usage-owner-panel usage-owner-stat-card">
             <span>{item.label}</span>
             <strong>{item.value}</strong>
           </article>
         ))}
       </section>
 
-      <section className="account-card admin-usage-table-card">
-        <div className="settings-dev-tools-head">
-          <h3>Poslednjih 100 događaja</h3>
-          <p>{isLoading ? 'Učitavanje...' : `${recentEvents.length} događaja`}</p>
-        </div>
-        <div className="admin-usage-table-wrap">
-          <table className="admin-usage-table">
-            <thead>
-              <tr>
-                <th>Vreme</th>
-                <th>User email</th>
-                <th>Workspace</th>
-                <th>Event type</th>
-                <th>Entity type</th>
-                <th>Metadata</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentEvents.map((event) => (
-                <tr key={event.id}>
-                  <td>{formatDateTime(event.created_at)}</td>
-                  <td>{event.user_email || '-'}</td>
-                  <td>{event.workspace_id ? (workspaces[event.workspace_id] || event.workspace_id) : '-'}</td>
-                  <td>{event.event_type}</td>
-                  <td>{event.entity_type || '-'}</td>
-                  <td>{event.metadata ? JSON.stringify(event.metadata) : '-'}</td>
+      <section className="usage-owner-grid-2">
+        <section className="usage-owner-panel">
+          <div className="usage-owner-section-head">
+            <h2>Poslednjih 100 događaja</h2>
+            <p>{isLoading ? 'Učitavanje...' : `${recentEvents.length} događaja`}</p>
+          </div>
+          <div className="usage-owner-table-wrap">
+            <table className="usage-owner-table">
+              <thead>
+                <tr>
+                  <th>Vreme</th>
+                  <th>Korisnik</th>
+                  <th>Šta je uradio</th>
+                  <th>Objekat</th>
+                  <th>Workspace</th>
+                  <th>Detalji</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {recentEvents.map((event) => (
+                  <tr key={event.id}>
+                    <td>{formatDateTime(event.created_at)}</td>
+                    <td>{event.user_email || '-'}</td>
+                    <td>{EVENT_LABELS[event.event_type] || event.event_type}</td>
+                    <td>{event.entity_type || '-'}</td>
+                    <td>{formatWorkspace(event.workspace_id, event.metadata)}</td>
+                    <td>{formatMetadata(event.metadata)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-      <section className="account-card admin-usage-table-card">
-        <div className="settings-dev-tools-head">
-          <h3>Dnevni presek</h3>
-          <p>Default pregled za poslednjih {RANGE_OPTIONS.find((item) => item.key === range)?.days || 14} dana.</p>
-        </div>
-        <div className="admin-usage-table-wrap">
-          <table className="admin-usage-table">
-            <thead>
-              <tr>
-                <th>Datum</th>
-                <th>Aktivni useri</th>
-                <th>Broj eventova</th>
-                <th>Top event</th>
-                <th>task_opened</th>
-                <th>billing_opened</th>
-                <th>demo_opened</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dailySummary.map((row) => (
-                <tr key={row.date}>
-                  <td>{formatDay(row.date)}</td>
-                  <td>{row.activeUsers}</td>
-                  <td>{row.totalEvents}</td>
-                  <td>{row.topEvent}</td>
-                  <td>{row.taskOpened}</td>
-                  <td>{row.billingOpened}</td>
-                  <td>{row.demoOpened}</td>
+        <section className="usage-owner-panel">
+          <div className="usage-owner-section-head">
+            <h2>Dnevni trend</h2>
+            <p>Brzi pregled šta se dešava po danima.</p>
+          </div>
+          <div className="usage-owner-table-wrap">
+            <table className="usage-owner-table">
+              <thead>
+                <tr>
+                  <th>Datum</th>
+                  <th>Aktivni useri</th>
+                  <th>Eventi</th>
+                  <th>Top radnja</th>
+                  <th>Task open</th>
+                  <th>Billing open</th>
+                  <th>Demo open</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {dailySummary.map((row) => (
+                  <tr key={row.date}>
+                    <td>{formatDay(row.date)}</td>
+                    <td>{row.activeUsers}</td>
+                    <td>{row.totalEvents}</td>
+                    <td>{row.topEvent}</td>
+                    <td>{row.taskOpened}</td>
+                    <td>{row.billingOpened}</td>
+                    <td>{row.demoOpened}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
-    </section>
+    </main>
   )
 }
 
