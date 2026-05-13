@@ -2090,8 +2090,15 @@ function AdminHome() {
       0,
     );
     const totalCost = totalLaborCost + totalMaterialCost;
-    const marginPercent = 30;
-    const amountForFinance = Math.round(totalCost * (1 + marginPercent / 100));
+    const projectCommercialValue =
+      typeof project.value === "number" && Number.isFinite(project.value) && project.value > 0
+        ? Math.round(project.value)
+        : 0;
+    const hasCommercialValue = projectCommercialValue > 0;
+    const marginPercent = hasCommercialValue ? 0 : 30;
+    const amountForFinance = hasCommercialValue
+      ? projectCommercialValue
+      : Math.round(totalCost * (1 + marginPercent / 100));
     const record = await createBillingForProject(project.id, {
       description: `Nalog za naplatu - ${project.title}`,
       amount: amountForFinance,
@@ -2136,7 +2143,7 @@ function AdminHome() {
           total_cost: totalCost,
           margin_percent: marginPercent,
           margin: marginPercent,
-          net_amount: totalCost,
+          net_amount: amountForFinance,
           total_with_margin: amountForFinance,
           suggested_invoice_amount: amountForFinance,
           assigned_finance_user_id: financeMember?.user_id || null,
@@ -2172,7 +2179,7 @@ function AdminHome() {
         clientId: project.clientId,
         projectId: project.id,
         description: project.title,
-        amount: totalCost,
+        amount: amountForFinance,
         currency: "RSD",
         dueDate: null,
         status: "draft",
@@ -2180,6 +2187,8 @@ function AdminHome() {
         totalLaborCost,
         totalMaterialCost,
         totalCost,
+        marginPercent,
+        netAmount: amountForFinance,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },

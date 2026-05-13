@@ -183,18 +183,26 @@ function ProjectDetail() {
       0,
     );
     const netAmount = totalLaborCost + totalMaterialCost;
+    const commercialAmount =
+      typeof projectTotalValue === "number" && Number.isFinite(projectTotalValue) && projectTotalValue > 0
+        ? Math.round(projectTotalValue)
+        : 0;
     const margin = Number(marginPercent);
-    const suggestedAmount = Number.isFinite(margin)
-      ? Math.round(netAmount * (1 + margin / 100))
-      : netAmount;
+    const suggestedAmount =
+      commercialAmount > 0
+        ? commercialAmount
+        : Number.isFinite(margin)
+          ? Math.round(netAmount * (1 + margin / 100))
+          : netAmount;
     return {
       taskCount: billableTasks.length,
       totalTimeMinutes,
       totalLaborCost,
       totalMaterialCost,
       netAmount,
+      commercialAmount,
       suggestedAmount,
-      marginPercent: Number.isFinite(margin) ? margin : 0,
+      marginPercent: commercialAmount > 0 ? 0 : Number.isFinite(margin) ? margin : 0,
     };
   }, [billableTasks, marginPercent]);
 
@@ -237,7 +245,7 @@ function ProjectDetail() {
       totalMaterialCost: billingPreview.totalMaterialCost,
       totalCost: billingPreview.netAmount,
       marginPercent: billingPreview.marginPercent,
-      netAmount: billingPreview.netAmount,
+      netAmount: billingPreview.suggestedAmount,
     });
     const financeMember = members.find((member) => member.role === "finance");
     const supabase = getSupabaseClient();
@@ -268,7 +276,7 @@ function ProjectDetail() {
           total_cost: billingPreview.netAmount,
           margin_percent: billingPreview.marginPercent,
           margin: billingPreview.marginPercent,
-          net_amount: billingPreview.netAmount,
+          net_amount: billingPreview.suggestedAmount,
           total_with_margin: billingPreview.suggestedAmount,
           suggested_invoice_amount: billingPreview.suggestedAmount,
           assigned_finance_user_id: financeMember?.user_id || null,
