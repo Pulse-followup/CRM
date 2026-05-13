@@ -1657,6 +1657,9 @@ function AdminHome() {
   );
   const billingCommandStats = useMemo(() => {
     const draftCard = billingSummaryCards.find((card) => card.key === "draft");
+    const invoicedCard = billingSummaryCards.find(
+      (card) => card.key === "invoiced",
+    );
     const overdueCard = billingSummaryCards.find(
       (card) => card.key === "overdue",
     );
@@ -1664,14 +1667,22 @@ function AdminHome() {
       (card) => card.key === "paid-week",
     );
     const readyCount = draftCard?.count ?? 0;
-    const openAmount = draftCard?.amount ?? 0;
+    const invoicedCount = invoicedCard?.count ?? 0;
+    const openAmount =
+      (draftCard?.amount ?? 0) +
+      (invoicedCard?.amount ?? 0);
     const overdueCount = overdueCard?.count ?? 0;
     return {
       readyCount,
+      invoicedCount,
       openAmount,
       overdueCount,
       paidWeekAmount: paidWeekCard?.amount ?? 0,
-      targetFilter: overdueCount ? "overdue" : "draft",
+      targetFilter: overdueCount
+        ? "overdue"
+        : invoicedCount
+          ? "invoiced"
+          : "draft",
     };
   }, [billingSummaryCards]);
 
@@ -2316,7 +2327,7 @@ function AdminHome() {
                   </strong>
                 </div>
                 <div className="command-billing-stat">
-                  <span>Overdue stavke</span>
+                  <span>KASNI</span>
                   <strong ref={billingOverdueCountRef}>
                     {billingCommandStats.overdueCount}
                   </strong>
