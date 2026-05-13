@@ -181,19 +181,20 @@ function NotificationCenter() {
   const billing = getAllBilling()
   const [isOpen, setIsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const shouldUseStoredNotifications = currentUser.role !== 'finance' && notifications.length > 0
   const items = useMemo(() => {
     const storedItems = mapStoredNotifications(notifications)
-    if (storedItems.length) return sortByNewest(storedItems).slice(0, 12)
+    if (shouldUseStoredNotifications && storedItems.length) return sortByNewest(storedItems).slice(0, 12)
     return buildDerivedNotificationFeed(tasks, billing, currentUser)
-  }, [billing, currentUser, notifications, tasks])
+  }, [billing, currentUser, notifications, shouldUseStoredNotifications, tasks])
   const unreadItems = useMemo(() => {
-    if (notifications.length) {
+    if (shouldUseStoredNotifications) {
       return items.filter((item) => !item.readAt)
     }
     return items.filter((item) => !isNotificationSeen(item.id))
-  }, [isNotificationSeen, items, notifications.length])
+  }, [isNotificationSeen, items, shouldUseStoredNotifications])
   const derivedUnreadCount = unreadItems.length
-  const displayUnreadCount = notifications.length ? unreadCount : derivedUnreadCount
+  const displayUnreadCount = shouldUseStoredNotifications ? unreadCount : derivedUnreadCount
 
   useEffect(() => {
     if (!isOpen) return
@@ -247,7 +248,7 @@ function NotificationCenter() {
                 to={getNotificationLink(item.entityType, item.entityId)}
                 className="pulse-notification-item is-unread"
                 onClick={() => {
-                  if (notifications.length) {
+                  if (shouldUseStoredNotifications) {
                     void markNotificationRead(item.id)
                   } else {
                     markNotificationSeen(item.id)

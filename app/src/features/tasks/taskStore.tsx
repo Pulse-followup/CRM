@@ -245,7 +245,7 @@ function getTaskAdminRecipientIds(
   return Array.from(
     new Set(
       membersOrUsers
-        .filter((item) => item.role === 'admin' || item.role === 'finance')
+        .filter((item) => item.role === 'admin')
         .map((item) => item.user_id || item.id)
         .filter((value): value is string => Boolean(value)),
     ),
