@@ -18,6 +18,23 @@ export function readStoredArray<T>(key: string, fallback: T[]): T[] {
   }
 }
 
+export function readStoredValue<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') {
+    return fallback
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(key)
+    if (!rawValue) {
+      return fallback
+    }
+
+    return JSON.parse(rawValue) as T
+  } catch {
+    return fallback
+  }
+}
+
 export function writeStoredValue(key: string, value: unknown) {
   if (typeof window === 'undefined') {
     return

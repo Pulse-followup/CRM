@@ -9,7 +9,7 @@ import {
   type PropsWithChildren,
 } from 'react'
 import { getSupabaseClient } from '../../lib/supabaseClient'
-import { readStoredArray, writeStoredValue } from '../../shared/storage'
+import { readStoredArray, readStoredValue, writeStoredValue } from '../../shared/storage'
 import { useAuthStore } from '../auth/authStore'
 import { useCloudStore } from '../cloud/cloudStore'
 import { getAppBaseUrl } from './pushConfig'
@@ -18,6 +18,7 @@ import type { AppNotification, CreateNotificationInput, NotificationToast } from
 
 const NOTIFICATIONS_STORAGE_KEY = 'pulse.notifications.v1'
 const CLOUD_READ_STATE_STORAGE_KEY = 'pulse.notifications.seen.v1'
+const LAST_PUSH_RESULT_STORAGE_KEY = 'pulse.notifications.last-push-result.v1'
 
 type CloudReadStatus = 'local' | 'loading' | 'cloud' | 'cloud-empty' | 'error'
 
@@ -136,7 +137,9 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   const [cloudReadError, setCloudReadError] = useState<string | null>(null)
   const [toasts, setToasts] = useState<NotificationToast[]>([])
   const [pushStatus, setPushStatus] = useState<PushStatus>('idle')
-  const [lastPushResult, setLastPushResult] = useState<NotificationStoreValue['lastPushResult']>(null)
+  const [lastPushResult, setLastPushResult] = useState<NotificationStoreValue['lastPushResult']>(() =>
+    readStoredValue(LAST_PUSH_RESULT_STORAGE_KEY, null),
+  )
   const [seenVersion, setSeenVersion] = useState(0)
   const seenNotificationIdsRef = useRef<Set<string>>(new Set(readSeenNotificationIds()))
 
@@ -158,6 +161,10 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       writeStoredValue(NOTIFICATIONS_STORAGE_KEY, localNotifications)
     }
   }, [isCloudNotificationMode, localNotifications])
+
+  useEffect(() => {
+    writeStoredValue(LAST_PUSH_RESULT_STORAGE_KEY, lastPushResult)
+  }, [lastPushResult])
 
   const enqueueToasts = useCallback((records: AppNotification[]) => {
     const nextToasts = records
