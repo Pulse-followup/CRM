@@ -33,6 +33,18 @@ type SnapshotResponse = {
   tasks: SnapshotBucket
 }
 
+type OwnerEntityKey = keyof SnapshotResponse
+
+type OwnerEntityRow = {
+  entity_kind: string
+  entity_id: string
+  primary_label: string
+  secondary_label: string
+  status_label: string
+  workspace_label: string
+  created_at: string
+}
+
 const EMPTY_BUCKET: SnapshotBucket = {
   total: 0,
   new7d: 0,
@@ -149,7 +161,11 @@ function AdminUsagePage() {
   const [events, setEvents] = useState<UsageEventRow[]>([])
   const [recentEvents, setRecentEvents] = useState<UsageEventRow[]>([])
   const [snapshot, setSnapshot] = useState<SnapshotResponse>(EMPTY_SNAPSHOT)
+  const [selectedEntity, setSelectedEntity] = useState<OwnerEntityKey>('workspaces')
+  const [entityRows, setEntityRows] = useState<OwnerEntityRow[]>([])
+  const [entityRange, setEntityRange] = useState<'all' | '7' | '30'>('30')
   const [isLoading, setIsLoading] = useState(true)
+  const [isEntityLoading, setIsEntityLoading] = useState(false)
   const [error, setError] = useState('')
 
   const canAccess = isUsageOwnerEmail(currentUser.email)
@@ -231,6 +247,42 @@ function AdminUsagePage() {
     }
   }, [canAccess, emailFilter, eventTypeFilter, range])
 
+  useEffect(() => {
+    if (!canAccess) return
+
+    const supabase = getSupabaseClient()
+    if (!supabase) return
+
+    let isMounted = true
+    setIsEntityLoading(true)
+
+    const fetchEntityRows = async () => {
+      const daysValue = entityRange === 'all' ? null : Number(entityRange)
+      const { data, error: entityError } = await supabase.rpc('owner_usage_entities', {
+        p_entity: selectedEntity,
+        p_days: daysValue,
+      })
+
+      if (entityError) {
+        throw entityError
+      }
+
+      if (!isMounted) return
+      setEntityRows((data || []) as OwnerEntityRow[])
+      setIsEntityLoading(false)
+    }
+
+    void fetchEntityRows().catch((fetchError) => {
+      if (!isMounted) return
+      setError(fetchError instanceof Error ? fetchError.message : 'Detalji nisu dostupni.')
+      setIsEntityLoading(false)
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [canAccess, entityRange, selectedEntity])
+
   const activityStats = useMemo(() => {
     const todayIso = startOfDayIso(1)
     const todayEvents = events.filter((event) => event.created_at >= todayIso)
@@ -273,13 +325,16 @@ function AdminUsagePage() {
     return Array.from(new Set(events.map((event) => event.event_type))).sort((left, right) => left.localeCompare(right))
   }, [events])
 
-  const foundationCards = [
+  const foundationCards: Array<{ key: OwnerEntityKey; label: string; bucket: SnapshotBucket }> = [
     { key: 'workspaces', label: 'Workspace-ovi', bucket: snapshot.workspaces },
     { key: 'users', label: 'Useri', bucket: snapshot.users },
     { key: 'clients', label: 'Klijenti', bucket: snapshot.clients },
     { key: 'products', label: 'Proizvodi', bucket: snapshot.products },
     { key: 'tasks', label: 'Taskovi', bucket: snapshot.tasks },
   ]
+
+  const selectedEntityLabel =
+    foundationCards.find((item) => item.key === selectedEntity)?.label || 'Detalji'
 
   if (!canAccess) {
     return <Navigate to="/" replace />
@@ -290,32 +345,21 @@ function AdminUsagePage() {
       <section className="usage-owner-hero">
         <div>
           <span className="usage-owner-kicker">PULSE Founder Dashboard</span>
-          <h1>Beta usage pregled</h1>
-          <p>Globalni pregled svih workspace-ova, usera i korišćenja aplikacije. Ovo je owner-only ekran za tebe, ne za workspace admina.</p>
+          <h1>Control Center</h1>
         </div>
         <div className="usage-owner-actions">
           <Link to="/" className="usage-owner-link">Nazad u app</Link>
         </div>
       </section>
 
-      <section className="usage-owner-panel usage-owner-explainer">
-        <div>
-          <strong>Event type</strong>
-          <span>šta je korisnik uradio</span>
-        </div>
-        <div>
-          <strong>Entity type</strong>
-          <span>na čemu je to uradio, npr. task ili projekat</span>
-        </div>
-        <div>
-          <strong>Metadata</strong>
-          <span>dodatni detalji, npr. koraci onboarding-a ili demo flag</span>
-        </div>
-      </section>
-
       <section className="usage-owner-foundation-grid">
         {foundationCards.map((item) => (
-          <article key={item.key} className="usage-owner-panel usage-entity-card">
+          <button
+            key={item.key}
+            type="button"
+            className={`usage-owner-panel usage-entity-card${selectedEntity === item.key ? ' is-active' : ''}`}
+            onClick={() => setSelectedEntity(item.key)}
+          >
             <header>
               <span>{item.label}</span>
               <strong>{item.bucket.total}</strong>
@@ -334,8 +378,48 @@ function AdminUsagePage() {
                 <b>{item.bucket.older}</b>
               </div>
             </div>
-          </article>
+          </button>
         ))}
+      </section>
+
+      <section className="usage-owner-panel usage-owner-entity-detail">
+        <div className="usage-owner-section-head">
+          <h2>{selectedEntityLabel}</h2>
+          <div className="usage-owner-inline-filters">
+            <button type="button" className={entityRange === 'all' ? 'is-active' : ''} onClick={() => setEntityRange('all')}>Svi</button>
+            <button type="button" className={entityRange === '7' ? 'is-active' : ''} onClick={() => setEntityRange('7')}>7 dana</button>
+            <button type="button" className={entityRange === '30' ? 'is-active' : ''} onClick={() => setEntityRange('30')}>30 dana</button>
+          </div>
+        </div>
+        <div className="usage-owner-table-wrap">
+          <table className="usage-owner-table">
+            <thead>
+              <tr>
+                <th>Naziv</th>
+                <th>Dodatno</th>
+                <th>Status</th>
+                <th>Workspace</th>
+                <th>Kreirano</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entityRows.map((row) => (
+                <tr key={`${row.entity_kind}-${row.entity_id}`}>
+                  <td>{row.primary_label}</td>
+                  <td>{row.secondary_label || '-'}</td>
+                  <td>{row.status_label || '-'}</td>
+                  <td>{row.workspace_label || '-'}</td>
+                  <td>{formatDateTime(row.created_at)}</td>
+                </tr>
+              ))}
+              {!entityRows.length && !isEntityLoading ? (
+                <tr>
+                  <td colSpan={5}>Nema podataka za izabrani pregled.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="usage-owner-panel usage-owner-filters">

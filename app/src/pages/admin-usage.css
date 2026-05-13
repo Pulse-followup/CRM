@@ -66,7 +66,6 @@
   background: rgba(12, 26, 50, 0.82);
 }
 
-.usage-owner-explainer,
 .usage-owner-filter-grid,
 .usage-owner-activity-grid,
 .usage-owner-foundation-grid,
@@ -76,7 +75,6 @@
   gap: 16px;
 }
 
-.usage-owner-explainer,
 .usage-owner-filters,
 .usage-owner-section-head,
 .usage-entity-card header,
@@ -84,11 +82,6 @@
   padding: 22px;
 }
 
-.usage-owner-explainer {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.usage-owner-explainer strong,
 .usage-owner-filter-grid span,
 .usage-owner-stat-card span,
 .usage-entity-breakdown label,
@@ -99,16 +92,6 @@
   text-transform: uppercase;
 }
 
-.usage-owner-explainer span {
-  display: block;
-  margin-top: 6px;
-  color: #d4ddf3;
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 0.96rem;
-  line-height: 1.45;
-}
-
 .usage-owner-foundation-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
@@ -116,6 +99,19 @@
 .usage-entity-card {
   padding: 0;
   overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.usage-entity-card.is-active {
+  border-color: rgba(52, 137, 255, 0.48);
+  box-shadow: 0 24px 70px rgba(13, 47, 94, 0.32);
+}
+
+.usage-entity-card:hover {
+  transform: translateY(-2px);
 }
 
 .usage-entity-card header {
@@ -166,6 +162,28 @@
   padding: 14px 16px;
 }
 
+.usage-owner-inline-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.usage-owner-inline-filters button {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 152, 214, 0.22);
+  background: rgba(6, 14, 29, 0.92);
+  color: #dbe5ff;
+  cursor: pointer;
+}
+
+.usage-owner-inline-filters button.is-active {
+  border-color: rgba(52, 137, 255, 0.48);
+  background: rgba(18, 44, 86, 0.96);
+  color: #ffffff;
+}
+
 .usage-owner-activity-grid {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
@@ -177,6 +195,10 @@
 
 .usage-owner-grid-2 {
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+}
+
+.usage-owner-entity-detail {
+  overflow: hidden;
 }
 
 .usage-owner-section-head {
