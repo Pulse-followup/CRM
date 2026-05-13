@@ -16,8 +16,6 @@ type UsageEventRow = {
   created_at: string
 }
 
-type RangeKey = 'today' | '7d' | '14d' | '30d'
-
 type SnapshotBucket = {
   total: number
   new7d: number
@@ -59,13 +57,6 @@ const EMPTY_SNAPSHOT: SnapshotResponse = {
   products: EMPTY_BUCKET,
   tasks: EMPTY_BUCKET,
 }
-
-const RANGE_OPTIONS: Array<{ key: RangeKey; label: string; days: number }> = [
-  { key: 'today', label: 'Danas', days: 1 },
-  { key: '7d', label: '7 dana', days: 7 },
-  { key: '14d', label: '14 dana', days: 14 },
-  { key: '30d', label: '30 dana', days: 30 },
-]
 
 const EVENT_LABELS: Record<string, string> = {
   app_opened: 'Otvorio app',
@@ -155,9 +146,6 @@ function formatMetadata(metadata: Record<string, unknown> | null) {
 
 function AdminUsagePage() {
   const { currentUser } = useAuthStore()
-  const [range, setRange] = useState<RangeKey>('14d')
-  const [emailFilter, setEmailFilter] = useState('')
-  const [eventTypeFilter, setEventTypeFilter] = useState('')
   const [events, setEvents] = useState<UsageEventRow[]>([])
   const [recentEvents, setRecentEvents] = useState<UsageEventRow[]>([])
   const [snapshot, setSnapshot] = useState<SnapshotResponse>(EMPTY_SNAPSHOT)
@@ -180,10 +168,7 @@ function AdminUsagePage() {
       return
     }
 
-    const activeRange = RANGE_OPTIONS.find((item) => item.key === range) || RANGE_OPTIONS[2]
-    const fromIso = startOfDayIso(activeRange.days)
-    const cleanEmail = emailFilter.trim().toLowerCase()
-    const cleanEventType = eventTypeFilter.trim().toLowerCase()
+    const fromIso = startOfDayIso(14)
 
     let isMounted = true
     setIsLoading(true)
@@ -202,16 +187,6 @@ function AdminUsagePage() {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100)
-
-      if (cleanEmail) {
-        summaryQuery = summaryQuery.ilike('user_email', `%${cleanEmail}%`)
-        recentQuery = recentQuery.ilike('user_email', `%${cleanEmail}%`)
-      }
-
-      if (cleanEventType) {
-        summaryQuery = summaryQuery.eq('event_type', cleanEventType)
-        recentQuery = recentQuery.eq('event_type', cleanEventType)
-      }
 
       const [
         { data: snapshotData, error: snapshotError },
@@ -245,7 +220,7 @@ function AdminUsagePage() {
     return () => {
       isMounted = false
     }
-  }, [canAccess, emailFilter, eventTypeFilter, range])
+  }, [canAccess])
 
   useEffect(() => {
     if (!canAccess) return
@@ -255,6 +230,7 @@ function AdminUsagePage() {
 
     let isMounted = true
     setIsEntityLoading(true)
+    setEntityRows([])
 
     const fetchEntityRows = async () => {
       const daysValue = entityRange === 'all' ? null : Number(entityRange)
@@ -275,6 +251,7 @@ function AdminUsagePage() {
     void fetchEntityRows().catch((fetchError) => {
       if (!isMounted) return
       setError(fetchError instanceof Error ? fetchError.message : 'Detalji nisu dostupni.')
+      setEntityRows([])
       setIsEntityLoading(false)
     })
 
@@ -319,10 +296,6 @@ function AdminUsagePage() {
         billingOpened: countEvent(bucket, 'billing_opened'),
         demoOpened: countEvent(bucket, 'demo_opened'),
       }))
-  }, [events])
-
-  const eventTypes = useMemo(() => {
-    return Array.from(new Set(events.map((event) => event.event_type))).sort((left, right) => left.localeCompare(right))
   }, [events])
 
   const foundationCards: Array<{ key: OwnerEntityKey; label: string; bucket: SnapshotBucket }> = [
@@ -419,32 +392,6 @@ function AdminUsagePage() {
               ) : null}
             </tbody>
           </table>
-        </div>
-      </section>
-
-      <section className="usage-owner-panel usage-owner-filters">
-        <div className="usage-owner-filter-grid">
-          <label>
-            <span>Period usage-a</span>
-            <select value={range} onChange={(event) => setRange(event.target.value as RangeKey)}>
-              {RANGE_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>User email</span>
-            <input value={emailFilter} onChange={(event) => setEmailFilter(event.target.value)} placeholder="npr. ime@firma.rs" />
-          </label>
-          <label>
-            <span>Event type</span>
-            <input list="usage-event-types" value={eventTypeFilter} onChange={(event) => setEventTypeFilter(event.target.value)} placeholder="npr. task_opened" />
-            <datalist id="usage-event-types">
-              {eventTypes.map((eventType) => (
-                <option key={eventType} value={eventType} />
-              ))}
-            </datalist>
-          </label>
         </div>
       </section>
 

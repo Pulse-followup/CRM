@@ -56,8 +56,8 @@ begin
       'clients'::text,
       c.id::text,
       coalesce(c.name, 'Klijent'),
-      coalesce(c.city, '-')::text,
-      coalesce(c.status, '-')::text,
+      coalesce(c.client_city, '-')::text,
+      'client'::text,
       coalesce(w.name, '-')::text,
       c.created_at
     from public.clients c
