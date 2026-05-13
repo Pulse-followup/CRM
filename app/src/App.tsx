@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
+import './pages/admin-usage.css'
 import { AuthProvider, useAuthStore } from './features/auth/authStore'
 import { CloudProvider, useCloudStore } from './features/cloud/cloudStore'
-import { DemoProvider } from './features/demo/demoStore'
+import { DemoProvider, useDemoStore } from './features/demo/demoStore'
 import { BillingProvider } from './features/billing/billingStore'
 import { ClientProvider } from './features/clients/clientStore'
 import NotificationToasts from './features/notifications/NotificationToasts'
@@ -29,10 +30,13 @@ import TemplatesPage from './pages/TemplatesPage'
 import SettingsPage from './pages/SettingsPage'
 import WorkspacePage from './pages/WorkspacePage'
 import DataPage from './pages/DataPage'
+import AdminUsagePage from './pages/AdminUsagePage'
 import UserHome from './pages/UserHome'
 import UserTasks from './pages/UserTasks'
 import PulseWelcomeGuide, { PULSE_WELCOME_KEY } from './components/PulseWelcomeGuide'
 import SetupChecklistOverlay from './features/onboarding/SetupChecklistOverlay'
+import { isUsageOwnerEmail } from './features/usage/usageAccess'
+import { setUsageTrackingContext, trackEvent } from './features/usage/usageTracker'
 
 function App() {
   return (
@@ -59,7 +63,9 @@ function App() {
 function AppRoutes() {
   const { currentUser } = useAuthStore()
   const cloud = useCloudStore()
+  const demo = useDemoStore()
   const role = currentUser.role
+  const canAccessUsage = isUsageOwnerEmail(currentUser.email)
 
   const [isGuideOpen, setIsGuideOpen] = useState(false)
 
@@ -70,6 +76,28 @@ function AppRoutes() {
   useEffect(() => {
     if (cloud.rememberedInviteId && !cloud.activeWorkspace) setIsGuideOpen(true)
   }, [cloud.activeWorkspace, cloud.rememberedInviteId])
+
+  useEffect(() => {
+    setUsageTrackingContext({
+      workspaceId: cloud.activeWorkspace?.id || null,
+      userId: cloud.user?.id || currentUser.id,
+      userEmail: cloud.profile?.email || cloud.user?.email || currentUser.email,
+      isDemoMode: demo.isDemoMode,
+    })
+  }, [cloud.activeWorkspace?.id, cloud.profile?.email, cloud.user?.email, cloud.user?.id, currentUser.email, currentUser.id, demo.isDemoMode])
+
+  useEffect(() => {
+    trackEvent('app_opened', {
+      metadata: {
+        role,
+      },
+    })
+  }, [role])
+
+  useEffect(() => {
+    if (!demo.isDemoMode) return
+    trackEvent('demo_opened')
+  }, [demo.isDemoMode])
 
   const openGuide = () => setIsGuideOpen(true)
 
@@ -126,6 +154,7 @@ function AppRoutes() {
           <Route path="/billing" element={role === 'user' ? <NoAccessPage /> : <BillingPage />} />
           <Route path="/workspace" element={role === 'admin' ? <WorkspacePage /> : <NoAccessPage />} />
           <Route path="/data" element={role === 'admin' ? <DataPage /> : <NoAccessPage />} />
+          <Route path="/admin/usage" element={canAccessUsage ? <AdminUsagePage /> : <NoAccessPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

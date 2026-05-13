@@ -10,6 +10,7 @@ import { readProducts } from '../products/productStorage'
 import { isTaskCompleted } from '../tasks/taskLifecycle'
 import { useTaskStore } from '../tasks/taskStore'
 import { readProcessTemplates } from '../templates/templateStorage'
+import { trackEvent } from '../usage/usageTracker'
 
 const CHECKLIST_MINIMIZED_KEY = 'pulse.setupChecklist.minimized.v1'
 const CHECKLIST_TIPS_KEY = 'pulse.setupChecklist.tips.v1'
@@ -249,6 +250,15 @@ function SetupChecklistOverlay() {
   const completedCount = steps.filter((step) => step.complete).length
   const currentStep = steps.find((step) => !step.complete) || null
   const allDone = completedCount === steps.length
+
+  useEffect(() => {
+    if (!shouldShow || !allDone) return
+    trackEvent('onboarding_completed', {
+      metadata: {
+        steps: steps.length,
+      },
+    })
+  }, [allDone, shouldShow, steps.length])
 
   const routeTip = useMemo<RouteTip | null>(() => {
     const path = location.pathname

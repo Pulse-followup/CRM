@@ -18,6 +18,7 @@ import type {
   WorkspaceRole,
 } from "./types";
 import { normalizePlanType, type WorkspacePlanType } from "../subscription/plan";
+import { trackEvent } from "../usage/usageTracker";
 
 const ACTIVE_WORKSPACE_KEY = "pulse.activeWorkspaceId.v1";
 const INVITE_PARAM = "invite";
@@ -528,6 +529,10 @@ export function CloudProvider({ children }: PropsWithChildren) {
         setError(signInError.message);
         throw signInError;
       }
+      trackEvent("login_success", {
+        userEmail: email,
+        metadata: { source: "password" },
+      });
     },
     [supabase],
   );

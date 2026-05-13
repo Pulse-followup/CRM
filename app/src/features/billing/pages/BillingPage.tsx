@@ -16,6 +16,7 @@ import {
 import { useBillingStore } from '../billingStore'
 import BillingCard from '../components/BillingCard'
 import type { BillingStatus } from '../types'
+import { trackEvent } from '../../usage/usageTracker'
 
 const FILTER_OPTIONS: Array<{ key: 'all' | BillingStatus; label: string }> = [
   { key: 'all', label: 'Svi' },
@@ -47,6 +48,15 @@ function BillingPage() {
 
   useEffect(() => {
     setActiveFilter(normalizeFilterParam(externalFilter))
+  }, [externalFilter])
+
+  useEffect(() => {
+    trackEvent('billing_opened', {
+      entityType: 'billing',
+      metadata: {
+        filter: externalFilter || 'all',
+      },
+    })
   }, [externalFilter])
 
   const counts = useMemo(() => {

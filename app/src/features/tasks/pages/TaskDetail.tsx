@@ -10,6 +10,7 @@ import { TASK_STATUS_LABELS } from '../taskLabels'
 import { getTaskById as selectTaskById, getTasksByUser } from '../taskSelectors'
 import { useTaskStore } from '../taskStore'
 import type { Task } from '../types'
+import { trackEvent } from '../../usage/usageTracker'
 
 function formatDueDate(value?: string) {
   if (!value) return 'Bez roka'
@@ -144,6 +145,14 @@ function TaskDetail() {
       setIsCompleting(false)
     }
   }, [task, assignableUsers])
+
+  useEffect(() => {
+    if (!taskId) return
+    trackEvent('task_opened', {
+      entityType: 'task',
+      entityId: taskId,
+    })
+  }, [taskId])
 
   if (!task && isCloudTaskMode && (!hasAttemptedCloudReload || cloudReadStatus === 'loading')) {
     return (

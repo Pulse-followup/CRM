@@ -16,6 +16,7 @@ import { getOverdueTasks } from '../tasks/taskSignals'
 import type { Task } from '../tasks/types'
 import type { AppNotification } from './types'
 import { useNotificationStore } from './notificationStore'
+import { trackEvent } from '../usage/usageTracker'
 
 function getNotificationLink(entityType: 'task' | 'billing' | 'followup', entityId: string) {
   if (entityType === 'followup') return `/tasks/${entityId}`
@@ -248,6 +249,13 @@ function NotificationCenter() {
                 to={getNotificationLink(item.entityType, item.entityId)}
                 className="pulse-notification-item is-unread"
                 onClick={() => {
+                  trackEvent('notification_clicked', {
+                    entityType: item.entityType,
+                    entityId: item.entityId,
+                    metadata: {
+                      title: item.title,
+                    },
+                  })
                   if (shouldUseStoredNotifications) {
                     void markNotificationRead(item.id)
                   } else {

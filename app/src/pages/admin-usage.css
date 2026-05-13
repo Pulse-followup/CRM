@@ -1,0 +1,96 @@
+.admin-usage-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-usage-filters,
+.admin-usage-table-card,
+.admin-usage-stat-card {
+  background: rgba(13, 22, 40, 0.94);
+}
+
+.admin-usage-filter-grid,
+.admin-usage-stats {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-usage-filter-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-usage-filter-grid label {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-usage-filter-grid span,
+.admin-usage-stat-card span {
+  color: #90a1c3;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-usage-filter-grid input,
+.admin-usage-filter-grid select {
+  border: 1px solid rgba(126, 152, 214, 0.22);
+  border-radius: 16px;
+  background: rgba(6, 14, 29, 0.92);
+  color: #f6f8ff;
+  padding: 12px 14px;
+}
+
+.admin-usage-stats {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.admin-usage-stat-card {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-usage-stat-card strong {
+  font-size: 1.8rem;
+  color: #ffffff;
+}
+
+.admin-usage-table-wrap {
+  overflow: auto;
+}
+
+.admin-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.admin-usage-table th,
+.admin-usage-table td {
+  text-align: left;
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(126, 152, 214, 0.12);
+  vertical-align: top;
+}
+
+.admin-usage-table th {
+  color: #8ea0c8;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-usage-table td {
+  color: #eef2ff;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 720px) {
+  .admin-usage-shell {
+    gap: 14px;
+  }
+
+  .admin-usage-stat-card strong {
+    font-size: 1.5rem;
+  }
+}

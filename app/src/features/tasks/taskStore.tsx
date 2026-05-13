@@ -6,6 +6,7 @@ import { useCloudStore } from '../cloud/cloudStore'
 import { useDemoStore } from '../demo/demoStore'
 import { useNotificationStore } from '../notifications/notificationStore'
 import { getSupabaseClient } from '../../lib/supabaseClient'
+import { trackEvent } from '../usage/usageTracker'
 import {
   getTaskById as selectTaskById,
   getTasksByClient as selectTasksByClient,
@@ -423,6 +424,15 @@ export function TaskProvider({ children }: PropsWithChildren) {
         }
         const justCompleted = previousTask ? !isTaskCompleted(previousTask) && isTaskCompleted(normalizedTask) : false
         if (justCompleted) {
+          trackEvent('task_completed', {
+            entityType: 'task',
+            entityId: normalizedTask.id,
+            metadata: {
+              projectId: normalizedTask.projectId,
+              clientId: normalizedTask.clientId,
+              title: normalizedTask.title,
+            },
+          })
           notifications.push(...getTaskCompletedNotifications(normalizedTask, adminAndFinanceIds))
         }
         if (notifications.length) {
@@ -456,6 +466,15 @@ export function TaskProvider({ children }: PropsWithChildren) {
       }
       const justCompleted = previousTask ? !isTaskCompleted(previousTask) && isTaskCompleted(normalizedTask) : false
       if (justCompleted) {
+        trackEvent('task_completed', {
+          entityType: 'task',
+          entityId: normalizedTask.id,
+          metadata: {
+            projectId: normalizedTask.projectId,
+            clientId: normalizedTask.clientId,
+            title: normalizedTask.title,
+          },
+        })
         notifications.push(...getTaskCompletedNotifications(normalizedTask, adminAndFinanceIds))
       }
       if (notifications.length) {
@@ -492,6 +511,15 @@ export function TaskProvider({ children }: PropsWithChildren) {
           const savedTask = mapTaskRowToReact(data as Record<string, unknown>)
           setCloudTasks((current) => [savedTask, ...current.filter((item) => item.id !== nextTask.id)])
           setCloudReadStatus('cloud')
+          trackEvent('task_created', {
+            entityType: 'task',
+            entityId: savedTask.id,
+            metadata: {
+              projectId: savedTask.projectId,
+              clientId: savedTask.clientId,
+              title: savedTask.title,
+            },
+          })
           const assignedNotification = getTaskAssigneeNotification(savedTask)
           if (assignedNotification) void createNotifications([assignedNotification])
           return savedTask
@@ -500,6 +528,15 @@ export function TaskProvider({ children }: PropsWithChildren) {
       }
 
       setLocalTasks((current) => [task, ...current])
+      trackEvent('task_created', {
+        entityType: 'task',
+        entityId: task.id,
+        metadata: {
+          projectId: task.projectId,
+          clientId: task.clientId,
+          title: task.title,
+        },
+      })
       const assignedNotification = getTaskAssigneeNotification(task)
       if (assignedNotification) void createNotifications([assignedNotification])
       return task

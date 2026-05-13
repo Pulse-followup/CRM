@@ -15,6 +15,7 @@ import { useCloudStore } from '../cloud/cloudStore'
 import { getAppBaseUrl } from './pushConfig'
 import { ensurePushRegistration, type PushStatus } from './pushService'
 import type { AppNotification, CreateNotificationInput, NotificationToast } from './types'
+import { trackEvent } from '../usage/usageTracker'
 
 const NOTIFICATIONS_STORAGE_KEY = 'pulse.notifications.v1'
 const CLOUD_READ_STATE_STORAGE_KEY = 'pulse.notifications.seen.v1'
@@ -275,7 +276,12 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       allowPrompt: false,
       onForegroundMessage: () => undefined,
     }).then((status) => {
-      if (!isCancelled) setPushStatus(status)
+      if (!isCancelled) {
+        setPushStatus(status)
+        if (status === 'ready') {
+          trackEvent('push_enabled')
+        }
+      }
     })
 
     return () => {

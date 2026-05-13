@@ -8,6 +8,7 @@ import { useCloudStore } from '../features/cloud/cloudStore'
 import NotificationCenter from '../features/notifications/NotificationCenter'
 import { useProjectStore } from '../features/projects/projectStore'
 import { useTaskStore } from '../features/tasks/taskStore'
+import { isUsageOwnerEmail } from '../features/usage/usageAccess'
 
 type AppTopBarProps = {
   onOpenGuide?: () => void
@@ -85,6 +86,7 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
 
   const isAdmin = currentUser.role === 'admin'
   const isFinance = currentUser.role === 'finance'
+  const canAccessUsage = isUsageOwnerEmail(currentUser.email)
   const userName = currentUser.name || currentUser.email || 'Korisnik'
 
   const menuItems: MenuItem[] = [
@@ -95,6 +97,7 @@ function AppTopBar({ onOpenGuide }: AppTopBarProps) {
     ...(isAdmin ? [{ to: '/products', label: 'Proizvodi', section: 'primary' as const }] : []),
     ...(isAdmin ? [{ to: '/templates', label: 'Procesi', section: 'primary' as const }] : []),
     ...(isAdmin ? [{ to: '/data', label: 'Data', section: 'primary' as const }] : []),
+    ...(canAccessUsage ? [{ to: '/admin/usage', label: 'Usage / Beta activity', section: 'primary' as const }] : []),
     { to: '/settings', label: 'Moj nalog', section: 'secondary' },
     { label: 'Uputstvo', action: () => onOpenGuide?.(), section: 'secondary' },
   ]

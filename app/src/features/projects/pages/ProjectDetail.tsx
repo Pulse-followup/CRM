@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import BillingCard from "../../billing/components/BillingCard";
 import { BILLING_STATUS_LABELS } from "../../billing/billingLabels";
@@ -21,6 +21,7 @@ import type { Task } from "../../tasks/types";
 import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from "../projectLabels";
 import { getProjectLifecycle, getProjectProgress } from "../projectLifecycle";
 import { useProjectStore } from "../projectStore";
+import { trackEvent } from "../../usage/usageTracker";
 
 function makeId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -205,6 +206,14 @@ function ProjectDetail() {
       marginPercent: commercialAmount > 0 ? 0 : Number.isFinite(margin) ? margin : 0,
     };
   }, [billableTasks, marginPercent]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    trackEvent("project_opened", {
+      entityType: "project",
+      entityId: projectId,
+    });
+  }, [projectId]);
 
   const handleCreateTask = (values: CreateTaskFormValues) => {
     if (!project) return;

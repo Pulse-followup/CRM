@@ -6,6 +6,7 @@ import ProLimitModal from '../features/subscription/ProLimitModal'
 import { formatMemberUsage, getWorkspaceLimits, normalizePlanType } from '../features/subscription/plan'
 import { getOverdueTasks } from '../features/tasks/taskSignals'
 import { useTaskStore } from '../features/tasks/taskStore'
+import { trackEvent } from '../features/usage/usageTracker'
 
 const PRODUCTION_ROLES = [
   'ACCOUNT',
@@ -95,7 +96,17 @@ function WorkspacePage() {
         hourlyRate: inviteRate.trim() ? Number(inviteRate) : null,
         productionRole: inviteProductionRole.trim() ? inviteProductionRole.trim().toUpperCase() : null,
       })
-      if (invite) setLastInviteLink(cloud.buildInviteLink(invite))
+      if (invite) {
+        setLastInviteLink(cloud.buildInviteLink(invite))
+        trackEvent('invite_created', {
+          entityType: 'workspace_invite',
+          entityId: invite.id,
+          metadata: {
+            email: invite.email,
+            role: invite.role,
+          },
+        })
+      }
       setInviteEmail('')
       setInviteName('')
       setInviteRate('')

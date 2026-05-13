@@ -40,6 +40,7 @@ import ClientEditForm, {
 import ClientHeader from "../components/ClientHeader";
 import ClientCardSections from "../components/ClientCardSections";
 import { useCloudStore } from "../../cloud/cloudStore";
+import { trackEvent } from "../../usage/usageTracker";
 import "./client-detail.css";
 
 const PRIORITY_LABELS = {
@@ -100,6 +101,14 @@ function ClientDetail() {
       isMounted = false;
     };
   }, [cloud.activeWorkspace?.id, cloud.isConfigured]);
+
+  useEffect(() => {
+    if (!clientId) return;
+    trackEvent("client_opened", {
+      entityType: "client",
+      entityId: clientId,
+    });
+  }, [clientId]);
 
   useEffect(() => {
     if (setupTarget === "create-project") {
