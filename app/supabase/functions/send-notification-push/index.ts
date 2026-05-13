@@ -164,9 +164,11 @@ async function sendPushMessage(
     const error = new Error(`FCM send failed: ${response.status} ${errorText}`) as Error & {
       status?: string
       errorCode?: string
+      rawResponse?: string
     }
     error.status = parsed?.error?.status
     error.errorCode = parsed?.error?.details?.[0]?.errorCode
+    error.rawResponse = errorText
     throw error
   }
 }
@@ -270,6 +272,7 @@ Deno.serve(async (request) => {
   let lastErrorStatus = ''
   let lastErrorCode = ''
   let lastErrorMessage = ''
+  let lastErrorRawResponse = ''
 
   for (const notification of typedNotifications) {
     const recipientTokens = tokenMap.get(notification.recipient_user_id) || []
@@ -300,10 +303,11 @@ Deno.serve(async (request) => {
         sent += 1
       } catch (error) {
         failed += 1
-        const candidate = error as { status?: string; errorCode?: string; message?: string }
+        const candidate = error as { status?: string; errorCode?: string; message?: string; rawResponse?: string }
         lastErrorStatus = candidate.status || lastErrorStatus
         lastErrorCode = candidate.errorCode || lastErrorCode
         lastErrorMessage = candidate.message || lastErrorMessage
+        lastErrorRawResponse = candidate.rawResponse || lastErrorRawResponse
         if (isRevokableTokenError(error)) {
           revokedTokens.add(token)
         }
@@ -333,5 +337,6 @@ Deno.serve(async (request) => {
     lastErrorStatus,
     lastErrorCode,
     lastErrorMessage,
+    lastErrorRawResponse,
   })
 })

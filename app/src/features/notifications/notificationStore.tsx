@@ -36,6 +36,7 @@ interface NotificationStoreValue {
     lastErrorStatus: string
     lastErrorCode: string
     lastErrorMessage: string
+    lastErrorRawResponse: string
     recordedAt: string
   } | null
   isNotificationSeen: (notificationId: string) => boolean
@@ -412,6 +413,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
                 lastErrorStatus: '',
                 lastErrorCode: '',
                 lastErrorMessage: error.message || 'Edge function invoke failed.',
+                lastErrorRawResponse: '',
                 recordedAt: new Date().toISOString(),
               })
               return
@@ -425,6 +427,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
               lastErrorStatus: string
               lastErrorCode: string
               lastErrorMessage: string
+              lastErrorRawResponse: string
             }>
             setLastPushResult({
               sent: Number(payload.sent || 0),
@@ -433,7 +436,14 @@ export function NotificationProvider({ children }: PropsWithChildren) {
               revokedTokens: Number(payload.revokedTokens || 0),
               lastErrorStatus: typeof payload.lastErrorStatus === 'string' ? payload.lastErrorStatus : '',
               lastErrorCode: typeof payload.lastErrorCode === 'string' ? payload.lastErrorCode : '',
-              lastErrorMessage: typeof payload.lastErrorMessage === 'string' ? payload.lastErrorMessage : '',
+              lastErrorMessage:
+                typeof payload.lastErrorMessage === 'string' && payload.lastErrorMessage
+                  ? payload.lastErrorMessage
+                  : typeof data === 'object' && data !== null
+                    ? JSON.stringify(data)
+                    : '',
+              lastErrorRawResponse:
+                typeof payload.lastErrorRawResponse === 'string' ? payload.lastErrorRawResponse : '',
               recordedAt: new Date().toISOString(),
             })
           })

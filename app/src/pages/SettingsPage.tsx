@@ -233,6 +233,7 @@ function SettingsPage() {
           <div><span>Last push error status</span><strong>{lastPushResult?.lastErrorStatus || '-'}</strong></div>
           <div><span>Last push error code</span><strong>{lastPushResult?.lastErrorCode || '-'}</strong></div>
           <div><span>Last push error message</span><strong>{lastPushResult?.lastErrorMessage || '-'}</strong></div>
+          <div><span>Last push raw response</span><strong>{lastPushResult?.lastErrorRawResponse || '-'}</strong></div>
         </div>
 
         <div className="settings-button-row">
