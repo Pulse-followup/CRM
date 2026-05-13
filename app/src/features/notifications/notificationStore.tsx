@@ -33,6 +33,9 @@ interface NotificationStoreValue {
     skipped: number
     failed: number
     revokedTokens: number
+    lastErrorStatus: string
+    lastErrorCode: string
+    lastErrorMessage: string
     recordedAt: string
   } | null
   isNotificationSeen: (notificationId: string) => boolean
@@ -406,6 +409,9 @@ export function NotificationProvider({ children }: PropsWithChildren) {
                 skipped: 0,
                 failed: savedRecords.length,
                 revokedTokens: 0,
+                lastErrorStatus: '',
+                lastErrorCode: '',
+                lastErrorMessage: error.message || 'Edge function invoke failed.',
                 recordedAt: new Date().toISOString(),
               })
               return
@@ -416,12 +422,18 @@ export function NotificationProvider({ children }: PropsWithChildren) {
               skipped: number
               failed: number
               revokedTokens: number
+              lastErrorStatus: string
+              lastErrorCode: string
+              lastErrorMessage: string
             }>
             setLastPushResult({
               sent: Number(payload.sent || 0),
               skipped: Number(payload.skipped || 0),
               failed: Number(payload.failed || 0),
               revokedTokens: Number(payload.revokedTokens || 0),
+              lastErrorStatus: typeof payload.lastErrorStatus === 'string' ? payload.lastErrorStatus : '',
+              lastErrorCode: typeof payload.lastErrorCode === 'string' ? payload.lastErrorCode : '',
+              lastErrorMessage: typeof payload.lastErrorMessage === 'string' ? payload.lastErrorMessage : '',
               recordedAt: new Date().toISOString(),
             })
           })

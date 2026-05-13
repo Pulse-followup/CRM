@@ -230,6 +230,9 @@ function SettingsPage() {
           <div><span>Last push skipped</span><strong>{lastPushResult ? String(lastPushResult.skipped) : '-'}</strong></div>
           <div><span>Revoked tokens</span><strong>{lastPushResult ? String(lastPushResult.revokedTokens) : '-'}</strong></div>
           <div><span>Last push at</span><strong>{lastPushResult?.recordedAt ? new Date(lastPushResult.recordedAt).toLocaleString('sr-RS') : '-'}</strong></div>
+          <div><span>Last push error status</span><strong>{lastPushResult?.lastErrorStatus || '-'}</strong></div>
+          <div><span>Last push error code</span><strong>{lastPushResult?.lastErrorCode || '-'}</strong></div>
+          <div><span>Last push error message</span><strong>{lastPushResult?.lastErrorMessage || '-'}</strong></div>
         </div>
 
         <div className="settings-button-row">

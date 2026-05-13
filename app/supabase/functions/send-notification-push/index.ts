@@ -267,6 +267,9 @@ Deno.serve(async (request) => {
   let skipped = 0
   let failed = 0
   const revokedTokens = new Set<string>()
+  let lastErrorStatus = ''
+  let lastErrorCode = ''
+  let lastErrorMessage = ''
 
   for (const notification of typedNotifications) {
     const recipientTokens = tokenMap.get(notification.recipient_user_id) || []
@@ -297,6 +300,10 @@ Deno.serve(async (request) => {
         sent += 1
       } catch (error) {
         failed += 1
+        const candidate = error as { status?: string; errorCode?: string; message?: string }
+        lastErrorStatus = candidate.status || lastErrorStatus
+        lastErrorCode = candidate.errorCode || lastErrorCode
+        lastErrorMessage = candidate.message || lastErrorMessage
         if (isRevokableTokenError(error)) {
           revokedTokens.add(token)
         }
@@ -323,5 +330,8 @@ Deno.serve(async (request) => {
     skipped,
     failed,
     revokedTokens: revokedTokens.size,
+    lastErrorStatus,
+    lastErrorCode,
+    lastErrorMessage,
   })
 })
