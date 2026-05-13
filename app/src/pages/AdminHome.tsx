@@ -81,14 +81,18 @@ import {
   type PulseSignal as AiPulseSignal,
 } from "../features/admin/aiSignals";
 import {
-  buildFollowUpMessage,
+  buildClientFollowUpMessage,
+  buildClientFollowUpVariants,
+  buildInternalFollowUpMessage,
   buildFollowUpProposals,
-  canOpenFollowUpEmail,
+  getDefaultClientFollowUpKind,
   getFollowUpBadgeTone,
-  getFollowUpToneLabel,
+  type ClientFollowUpKind,
   type FollowUpProposal,
   type FollowUpTone,
 } from "../features/commandCenter/followupEngine";
+import { appendInternalFollowUpLog } from "../features/commandCenter/internalFollowups";
+import { useNotificationStore } from "../features/notifications/notificationStore";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import "../features/clients/pages/client-detail.css";
 import "./admin-home-command-center.css";
@@ -818,14 +822,36 @@ function AdminModal({
   onAssignTask: (task: Task, memberId: string) => void | Promise<void>;
   onOpenTask: (task: Task) => void;
 }) {
+  const { createNotification, pushToast } = useNotificationStore();
+  const { currentUser } = useAuthStore();
   const [followUpTone, setFollowUpTone] = useState<FollowUpTone>("neutral");
+  const [followUpTab, setFollowUpTab] = useState<"internal" | "client">("internal");
+  const [clientFollowUpKind, setClientFollowUpKind] =
+    useState<ClientFollowUpKind>("general");
+  const [clientVariantIndex, setClientVariantIndex] = useState(0);
   const [followUpCopied, setFollowUpCopied] = useState(false);
+  const [internalDraft, setInternalDraft] = useState("");
+  const [clientDraft, setClientDraft] = useState("");
 
   useEffect(() => {
     if (state?.type !== "followup") return;
-    setFollowUpTone(state.proposal.category === "Interno" ? "internal" : "neutral");
+    setFollowUpTone("neutral");
+    setFollowUpTab("internal");
+    setClientFollowUpKind(getDefaultClientFollowUpKind(state.proposal));
+    setClientVariantIndex(0);
     setFollowUpCopied(false);
   }, [state?.type, state?.type === "followup" ? state.proposal.id : null]);
+
+  useEffect(() => {
+    if (state?.type !== "followup") return;
+    setInternalDraft(buildInternalFollowUpMessage(state.proposal, followUpTone));
+  }, [followUpTone, state]);
+
+  useEffect(() => {
+    if (state?.type !== "followup") return;
+    const variants = buildClientFollowUpVariants(state.proposal, clientFollowUpKind);
+    setClientDraft(variants[clientVariantIndex] ?? buildClientFollowUpMessage(state.proposal, clientFollowUpKind));
+  }, [clientFollowUpKind, clientVariantIndex, state]);
 
   if (!state) return null;
   const clientProjects =
@@ -851,7 +877,7 @@ function AdminModal({
   return (
     <div className="pulse-modal-backdrop" onMouseDown={onClose}>
       <div
-        className={`pulse-modal ${state.type === "client" ? "pulse-client-drawer" : ""} ${state.type === "create-client" ? "pulse-create-client-modal" : ""} ${state.type === "create-project" ? "pulse-create-project-modal" : ""}`}
+        className={`pulse-modal ${state.type === "followup" ? "pulse-followup-modal" : ""} ${state.type === "client" ? "pulse-client-drawer" : ""} ${state.type === "create-client" ? "pulse-create-client-modal" : ""} ${state.type === "create-project" ? "pulse-create-project-modal" : ""}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button className="pulse-modal-x" type="button" onClick={onClose}>
@@ -893,75 +919,171 @@ function AdminModal({
         ) : null}
         {state.type === "followup" ? (
           <>
-            <h3>Follow-up predlog</h3>
-            <div className="command-followup-modal-head">
-              <span
-                className={`command-followup-badge ${getFollowUpBadgeTone(state.proposal.category)}`}
+            <h3>Follow-up centar</h3>
+            <div className="command-followup-compact-meta">
+              <div>
+                <span>Task</span>
+                <strong>{state.proposal.taskTitle || "-"}</strong>
+              </div>
+              <div>
+                <span>Projekat</span>
+                <strong>{state.proposal.projectTitle || "-"}</strong>
+              </div>
+              <div>
+                <span>{followUpTab === "internal" ? "Ide korisniku" : "Klijent"}</span>
+                <strong>
+                  {followUpTab === "internal"
+                    ? state.proposal.assignedUserName || "-"
+                    : state.proposal.clientName || "-"}
+                </strong>
+              </div>
+            </div>
+            <p className="command-followup-subtitle">
+              Brza interna koordinacija i praćenje taskova.
+            </p>
+            <div className="command-followup-tabs">
+              <button
+                type="button"
+                className={`command-followup-tab ${followUpTab === "internal" ? "is-active" : ""}`}
+                onClick={() => {
+                  setFollowUpTab("internal");
+                  setFollowUpCopied(false);
+                }}
               >
+                Interni
+              </button>
+              <button
+                type="button"
+                className={`command-followup-tab ${followUpTab === "client" ? "is-active" : ""}`}
+                onClick={() => {
+                  setFollowUpTab("client");
+                  setFollowUpCopied(false);
+                }}
+              >
+                Klijent
+              </button>
+            </div>
+            <div className="command-followup-modal-head">
+              <span className={`command-followup-badge ${getFollowUpBadgeTone(state.proposal.category)}`}>
                 {state.proposal.category}
               </span>
               <span className="command-followup-priority">
                 Prioritet: {state.proposal.priority}
               </span>
             </div>
-            <p className="command-followup-context">{state.proposal.contextLabel}</p>
-            <div className="command-followup-tone-row">
-              {(
-                ["neutral", "warm", "direct", "internal"] as FollowUpTone[]
-              ).map((tone) => (
-                <button
-                  key={tone}
-                  type="button"
-                  className={`command-followup-tone ${followUpTone === tone ? "is-active" : ""}`}
-                  onClick={() => {
-                    setFollowUpTone(tone);
-                    setFollowUpCopied(false);
-                  }}
-                >
-                  {getFollowUpToneLabel(tone)}
-                </button>
-              ))}
+            <div className="command-followup-meta-grid">
+              <div><span>Klijent</span><strong>{state.proposal.clientName || "-"}</strong></div>
+              <div><span>Projekat</span><strong>{state.proposal.projectTitle || "-"}</strong></div>
+              <div><span>Task</span><strong>{state.proposal.taskTitle || "-"}</strong></div>
+              <div><span>Status</span><strong>{state.proposal.taskStatus || "-"}</strong></div>
+              <div><span>Kašnjenje</span><strong>{state.proposal.daysOverdue ? `${state.proposal.daysOverdue} dana` : "Nema"}</strong></div>
+              <div><span>Dodeljen korisnik</span><strong>{state.proposal.assignedUserName || "-"}</strong></div>
             </div>
-            <div className="pulse-project-billing-summary command-followup-copy-box">
-              <p style={{ whiteSpace: "pre-wrap" }}>
-                {buildFollowUpMessage(state.proposal, followUpTone)}
-              </p>
-            </div>
+            {followUpTab === "internal" ? (
+              <div className="command-followup-pane is-internal">
+                <textarea
+                  className="command-followup-textarea is-internal"
+                  value={internalDraft}
+                  onChange={(event) => setInternalDraft(event.target.value)}
+                />
+                <div className="command-followup-actions">
+                  <button
+                    type="button"
+                    className="command-signal-action"
+                    onClick={async () => {
+                      let createdNotification = null;
+                      if (state.proposal.assignedUserId && state.proposal.relatedTaskId) {
+                        createdNotification = await createNotification({
+                          recipientUserId: state.proposal.assignedUserId,
+                          type: "internal_followup",
+                          title: "Novi interni follow-up",
+                          body: internalDraft,
+                          entityType: "followup",
+                          entityId: state.proposal.relatedTaskId,
+                        });
+                        if (!createdNotification) {
+                          pushToast(
+                            "Follow-up centar",
+                            "Interni follow-up nije isporučen. Proveri notifications setup.",
+                          );
+                          return;
+                        }
+                      }
+
+                      appendInternalFollowUpLog({
+                        id: `internal-followup-${Date.now()}`,
+                        type: "internal_followup",
+                        mode: "internal",
+                        taskId: state.proposal.relatedTaskId || "",
+                        projectId: state.proposal.relatedProjectId || "",
+                        clientId: state.proposal.relatedClientId || "",
+                        assignedUserId: state.proposal.assignedUserId || "",
+                        assignedUserName: state.proposal.assignedUserName || "Korisnik",
+                        message: internalDraft,
+                        tone: followUpTone,
+                        createdAt: new Date().toISOString(),
+                        createdBy: currentUser.name || "Admin",
+                        read: false,
+                      });
+
+                      pushToast(
+                        "Follow-up centar",
+                        state.proposal.assignedUserName
+                          ? `Follow-up poslat korisniku ${state.proposal.assignedUserName}.`
+                          : "Interni follow-up je poslat.",
+                      );
+                      onClose();
+                    }}
+                  >
+                    Pošalji interno
+                  </button>
+                  <button type="button" className="command-signal-action is-muted" onClick={onClose}>
+                    Zatvori
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="command-followup-pane is-client">
+                <div className="command-followup-variants">
+                  {buildClientFollowUpVariants(state.proposal, clientFollowUpKind).map((_, index) => (
+                    <button
+                      key={`client-variant-${index}`}
+                      type="button"
+                      className={`command-followup-variant ${clientVariantIndex === index ? "is-active" : ""}`}
+                      onClick={() => {
+                        setClientVariantIndex(index);
+                        setFollowUpCopied(false);
+                      }}
+                    >
+                      Varijanta {index + 1}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  className="command-followup-textarea is-client"
+                  value={clientDraft}
+                  onChange={(event) => setClientDraft(event.target.value)}
+                />
+                <div className="command-followup-actions">
+                  <button
+                    type="button"
+                    className="command-signal-action"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(clientDraft);
+                      setFollowUpCopied(true);
+                    }}
+                  >
+                    Kopiraj poruku
+                  </button>
+                  <button type="button" className="command-signal-action is-muted" onClick={onClose}>
+                    Zatvori
+                  </button>
+                </div>
+              </div>
+            )}
             {followUpCopied ? (
               <p className="command-followup-feedback">Tekst je kopiran.</p>
             ) : null}
-            <div className="command-followup-actions">
-              <button
-                type="button"
-                className="command-signal-action"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(
-                    buildFollowUpMessage(state.proposal, followUpTone),
-                  );
-                  setFollowUpCopied(true);
-                }}
-              >
-                Kopiraj za mail / Viber / WhatsApp
-              </button>
-              {canOpenFollowUpEmail(state.proposal) ? (
-                <button
-                  type="button"
-                  className="command-signal-action"
-                  onClick={() => {
-                    const body = buildFollowUpMessage(state.proposal, followUpTone);
-                    const mailto = `mailto:${state.proposal.recipientEmail}?subject=${encodeURIComponent(
-                      state.proposal.subject,
-                    )}&body=${encodeURIComponent(body)}`;
-                    window.location.href = mailto;
-                  }}
-                >
-                  Otvori email
-                </button>
-              ) : null}
-              <button type="button" className="command-signal-action" onClick={onClose}>
-                Zatvori
-              </button>
-            </div>
           </>
         ) : null}
         {state.type === "task" ? (

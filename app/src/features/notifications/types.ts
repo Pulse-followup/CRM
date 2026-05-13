@@ -3,6 +3,7 @@ export type NotificationType =
   | 'task_taken'
   | 'task_completed'
   | 'invoice_overdue'
+  | 'internal_followup'
 
 export interface AppNotification {
   id: string
@@ -11,7 +12,7 @@ export interface AppNotification {
   type: NotificationType
   title: string
   body: string
-  entityType: 'task' | 'billing'
+  entityType: 'task' | 'billing' | 'followup'
   entityId: string
   readAt?: string | null
   createdAt: string
@@ -22,7 +23,7 @@ export interface CreateNotificationInput {
   type: NotificationType
   title: string
   body: string
-  entityType: 'task' | 'billing'
+  entityType: 'task' | 'billing' | 'followup'
   entityId: string
 }
 

@@ -42,11 +42,63 @@ function getStatusTone(task: Task) {
   }
 }
 
+function UserTaskCompletionForm({
+  defaultTimeSpentMinutes,
+  defaultMaterialCost,
+  defaultMaterialDescription,
+  onCancel,
+  onSubmit,
+}: {
+  defaultTimeSpentMinutes?: number
+  defaultMaterialCost?: number
+  defaultMaterialDescription?: string
+  onCancel: () => void
+  onSubmit: (payload: { timeSpentMinutes: number; materialCost: number; materialDescription: string }) => void
+}) {
+  const [timeSpentMinutes, setTimeSpentMinutes] = useState(String(defaultTimeSpentMinutes ?? ''))
+  const [materialCost, setMaterialCost] = useState(String(defaultMaterialCost ?? 0))
+  const [materialDescription, setMaterialDescription] = useState(defaultMaterialDescription ?? '')
+
+  const handleSubmit = () => {
+    const parsedTime = Number(timeSpentMinutes)
+    const parsedMaterial = Number(materialCost)
+    if (!Number.isFinite(parsedTime) || parsedTime < 0) return
+    if (!Number.isFinite(parsedMaterial) || parsedMaterial < 0) return
+    onSubmit({
+      timeSpentMinutes: parsedTime,
+      materialCost: parsedMaterial,
+      materialDescription,
+    })
+  }
+
+  return (
+    <div className="pulse-complete-form">
+      <h4>Unos utrošenog vremena i materijala</h4>
+      <label className="pulse-form-field">
+        <span>Utrošeno vreme (min)</span>
+        <input type="number" min="0" value={timeSpentMinutes} onChange={(event) => setTimeSpentMinutes(event.target.value)} placeholder="npr. 45" />
+      </label>
+      <label className="pulse-form-field">
+        <span>Trošak materijala (RSD)</span>
+        <input type="number" min="0" value={materialCost} onChange={(event) => setMaterialCost(event.target.value)} placeholder="npr. 1200" />
+      </label>
+      <label className="pulse-form-field">
+        <span>Opis materijala</span>
+        <input type="text" value={materialDescription} onChange={(event) => setMaterialDescription(event.target.value)} placeholder="npr. štampa, nosači, transport..." />
+      </label>
+      <div className="pulse-modal-actions">
+        <button className="pulse-modal-btn pulse-modal-btn-green" type="button" onClick={handleSubmit}>POTVRDI ZAVRŠETAK</button>
+        <button className="pulse-modal-btn pulse-modal-btn-red" type="button" onClick={onCancel}>OTKAŽI</button>
+      </div>
+    </div>
+  )
+}
+
 function TaskDetail() {
   const navigate = useNavigate()
   const { taskId } = useParams()
   const { currentUser, users } = useAuthStore()
-  const { tasks, updateTask } = useTaskStore()
+  const { tasks, updateTask, refreshTasksFromCloud, isCloudTaskMode, cloudReadStatus } = useTaskStore()
   const { getClientById } = useClientStore()
   const { getProjectById } = useProjectStore()
 
@@ -68,6 +120,18 @@ function TaskDetail() {
   const [timeSpentMinutes, setTimeSpentMinutes] = useState(String(task?.timeSpentMinutes ?? ''))
   const [materialCost, setMaterialCost] = useState(String(task?.materialCost ?? 0))
   const [materialDescription, setMaterialDescription] = useState(task?.materialDescription ?? '')
+  const [hasAttemptedCloudReload, setHasAttemptedCloudReload] = useState(false)
+
+  useEffect(() => {
+    setHasAttemptedCloudReload(false)
+  }, [taskId])
+
+  useEffect(() => {
+    if (!isCloudTaskMode || !taskId || task || hasAttemptedCloudReload) return
+
+    setHasAttemptedCloudReload(true)
+    void refreshTasksFromCloud()
+  }, [hasAttemptedCloudReload, isCloudTaskMode, refreshTasksFromCloud, task, taskId])
 
   useEffect(() => {
     setTimeSpentMinutes(String(task?.timeSpentMinutes ?? ''))
@@ -80,6 +144,21 @@ function TaskDetail() {
       setIsCompleting(false)
     }
   }, [task, assignableUsers])
+
+  if (!task && isCloudTaskMode && (!hasAttemptedCloudReload || cloudReadStatus === 'loading')) {
+    return (
+      <section className="page-card client-detail-shell task-detail-clean">
+        <button type="button" className="secondary-link-button" onClick={() => navigate('/')}>
+          Nazad
+        </button>
+
+        <div className="clients-empty-state">
+          <h2>Učitavam task...</h2>
+          <p>Proveravamo najnovije podatke iz workspace-a.</p>
+        </div>
+      </section>
+    )
+  }
 
   if (!task) {
     return (
@@ -152,6 +231,52 @@ function TaskDetail() {
       }),
     )
     setIsCompleting(false)
+  }
+
+  if (currentUser.role === 'user') {
+    return (
+      <div className="pulse-user-task-route">
+        <div className="pulse-modal-backdrop" onMouseDown={() => navigate('/')}>
+          <div className="pulse-modal" onMouseDown={(event) => event.stopPropagation()}>
+          <button className="pulse-modal-x" type="button" onClick={() => navigate('/')}>x</button>
+          <h3>{task.title}</h3>
+          <div className="pulse-task-order">
+            <p><strong>Klijent</strong> - {client?.name ?? '-'}</p>
+            <p><strong>Opis:</strong> {task.description || '-'}</p>
+            <p><strong>Rok</strong> - {formatDueDate(task.dueDate)}</p>
+          </div>
+
+          {isCompleting ? (
+            <UserTaskCompletionForm
+              defaultTimeSpentMinutes={task.timeSpentMinutes}
+              defaultMaterialCost={task.materialCost}
+              defaultMaterialDescription={task.materialDescription}
+              onCancel={handleCancelComplete}
+              onSubmit={(payload) => {
+                updateTask(
+                  completeTask(task, {
+                    timeSpentMinutes: payload.timeSpentMinutes,
+                    materialCost: payload.materialCost,
+                    materialDescription: payload.materialDescription,
+                  }),
+                )
+                setIsCompleting(false)
+                navigate('/')
+              }}
+            />
+          ) : (
+            <div className="pulse-modal-actions">
+              {canTakeTask ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={handleStart}>PREUZMI TASK</button> : null}
+              {canPauseTask ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={handlePause}>STAVI NA ČEKANJE</button> : null}
+              {isWaitingForPreviousStep ? <span className="pulse-pill pulse-pill-blue">ČEKA PRETHODNI KORAK</span> : null}
+              {canResumeTask ? <button className="pulse-modal-btn pulse-modal-btn-blue" type="button" onClick={handleResume}>NASTAVI RAD</button> : null}
+              {canCompleteTask ? <button className="pulse-modal-btn pulse-modal-btn-green" type="button" onClick={() => setIsCompleting(true)}>ZAVRŠI TASK</button> : null}
+            </div>
+          )}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const handleReturnForRevision = () => {

@@ -15,10 +15,17 @@ export type FollowUpSignalType =
   | "BILLING_READY"
   | "PAYMENT_OVERDUE_CLIENT";
 
-export type FollowUpTone = "neutral" | "warm" | "direct" | "internal";
+export type FollowUpTone = "neutral" | "friendly" | "direct" | "team";
+
+export type ClientFollowUpKind =
+  | "project_confirmation"
+  | "waiting_material"
+  | "project_stalled"
+  | "post_meeting"
+  | "billing"
+  | "general";
 
 export type FollowUpCategory = "Interno" | "Klijent" | "Naplata";
-
 export type FollowUpPriority = "Visok" | "Srednji" | "Nizak";
 
 export type FollowUpProposal = {
@@ -31,12 +38,16 @@ export type FollowUpProposal = {
   clientName?: string;
   projectTitle?: string;
   taskTitle?: string;
+  assignedUserId?: string;
   assignedUserName?: string;
   recipientEmail?: string;
   recipientName?: string;
   subject: string;
   daysOverdue?: number;
   daysInactive?: number;
+  taskStatus?: string;
+  billingStatus?: string;
+  phaseName?: string;
   relatedTaskId?: string;
   relatedProjectId?: string;
   relatedClientId?: string;
@@ -50,10 +61,7 @@ function daysBetweenNow(value?: string | null) {
   if (!value) return 0;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 0;
-  return Math.max(
-    0,
-    Math.floor((startOfDay(new Date()) - startOfDay(date)) / 86400000),
-  );
+  return Math.max(0, Math.floor((startOfDay(new Date()) - startOfDay(date)) / 86400000));
 }
 
 function clientEmail(client?: Client | null) {
@@ -68,18 +76,12 @@ function clientContactName(client?: Client | null) {
   return withEmail?.name?.trim() || null;
 }
 
-function projectClient(
-  project: Project | null | undefined,
-  clientById: Map<string, Client>,
-) {
+function projectClient(project: Project | null | undefined, clientById: Map<string, Client>) {
   if (!project) return null;
   return clientById.get(String(project.clientId)) ?? null;
 }
 
-function memberName(
-  member: CloudWorkspaceMember | undefined,
-  fallback?: string | null,
-) {
+function memberName(member: CloudWorkspaceMember | undefined, fallback?: string | null) {
   const label =
     member?.display_name?.trim() ||
     member?.profile?.full_name?.trim() ||
@@ -124,101 +126,156 @@ function includesWaitingKeywords(value: string) {
   ].some((keyword) => normalized.includes(keyword));
 }
 
-function isClientFacingSignalType(signalType: FollowUpSignalType) {
+function getActiveProjectPhase(project?: Project | null) {
   return (
-    signalType === "PROJECT_INACTIVE_CLIENT" ||
-    signalType === "WAITING_CLIENT_CONFIRMATION" ||
-    signalType === "PAYMENT_OVERDUE_CLIENT"
+    project?.stages?.find((stage) => stage.status === "active")?.name ||
+    project?.stages?.find((stage) => stage.status !== "done")?.name ||
+    null
   );
 }
 
-function taskContextSentence(proposal: FollowUpProposal) {
-  if (!proposal.taskTitle) return "";
-  return ` Aktivnost "${proposal.taskTitle}" je trenutno otvorena.`;
+function proposalTarget(proposal: FollowUpProposal) {
+  return proposal.projectTitle || proposal.taskTitle || proposal.clientName || "ovoga";
 }
 
-function delaySentence(days?: number, mode: "soft" | "direct" | "internal" = "soft") {
-  if (!days) return "";
-  if (mode === "direct") return ` Rok je probijen vec ${days} dan${days === 1 ? "" : "a"}.`;
-  if (mode === "internal") {
-    return ` Deluje da stoji duze nego sto bi trebalo, vec ${days} dan${days === 1 ? "" : "a"} posle roka.`;
-  }
-  return ` Rok je prosao pre ${days} dan${days === 1 ? "" : "a"}.`;
+function inactivityNote(days?: number) {
+  return days ? ` Već stoji ${days} dana.` : "";
 }
 
-function clientGreeting(name?: string) {
-  return name ? `Postovani ${name},` : "Postovani,";
-}
+export function buildInternalFollowUpMessage(proposal: FollowUpProposal, tone: FollowUpTone) {
+  const target = proposalTarget(proposal);
 
-export function buildFollowUpMessage(
-  proposal: FollowUpProposal,
-  tone: FollowUpTone,
-) {
-  const contextTarget = proposal.projectTitle || proposal.clientName || "realizaciju";
-  const taskMention = taskContextSentence(proposal);
-  const recipientName = clientGreeting(proposal.recipientName);
-  const assignedName = proposal.assignedUserName || "tim";
-
-  switch (proposal.signalType) {
-    case "TASK_OVERDUE_INTERNAL": {
-      if (tone === "direct") {
-        return `Cao ${assignedName}, potreban nam je konkretan status za ${contextTarget}.${taskMention}${delaySentence(proposal.daysOverdue, "direct")} Javi odmah da li postoji blokada, sta ceka potvrdu i koji je realan sledeci korak da se ovo ne razvuce dalje.`;
+  switch (tone) {
+    case "friendly":
+      if (proposal.signalType === "WAITING_CLIENT_CONFIRMATION") {
+        return `Je l' imamo neki update ovde, da li još čekamo klijenta za ${target}?`;
       }
-      if (tone === "warm") {
-        return `Cao ${assignedName}, samo proveravam status oko realizacije za ${contextTarget}.${taskMention}${delaySentence(proposal.daysOverdue)} Javi ako postoji blokada ili treba pomoc da poguramo dalje bez dodatnog pomeranja. Ako je sve pod kontrolom, znacilo bi da imamo samo kratak update.`;
+      if (proposal.signalType === "PROJECT_INACTIVE_CLIENT") {
+        return `Je l' možemo da proverimo gde je stalo oko ${target}?${inactivityNote(proposal.daysInactive)}`;
       }
-      if (tone === "internal") {
-        return `Cao ${assignedName}, proveri molim te status za ${contextTarget}.${taskMention}${delaySentence(proposal.daysOverdue, "internal")} Javi da li nesto ceka klijenta, materijal ili internu potvrdu i ko zatvara sledeci korak.`;
+      if (proposal.signalType === "PAYMENT_OVERDUE_CLIENT") {
+        return `Je l' imamo info da li je klijentu javljeno za uplatu oko ${target}?`;
       }
-      return `Cao ${assignedName}, samo proveravam status oko realizacije za ${contextTarget}.${taskMention}${delaySentence(proposal.daysOverdue)} Javi da li postoji blokada ili treba nesto da uskladimo da bismo nastavili bez zastoja.`;
-    }
-    case "PROJECT_INACTIVE_CLIENT": {
-      if (tone === "direct") {
-        return `${recipientName} potrebna nam je potvrda ili konkretan status za ${contextTarget} kako bismo nastavili realizaciju bez dodatnog kasnjenja. Bez te informacije ne mozemo da pomerimo sledeci korak.`;
+      return `Je l' imamo neki update ovde za ${target}?`;
+    case "direct":
+      if (proposal.daysOverdue) return `Ovo kasni već ${proposal.daysOverdue} dana, treba nam update danas.`;
+      if (proposal.signalType === "WAITING_CLIENT_CONFIRMATION") {
+        return "Treba nam jasan status danas, da li je ovo blokirano ili čekamo odgovor klijenta?";
       }
-      if (tone === "warm") {
-        return `${recipientName} samo kratka provera vezano za ${contextTarget}. Da ne izgubimo ritam realizacije, znacila bi nam potvrda ili eventualne korekcije sa Vase strane. Cim dobijemo povratnu informaciju, nastavljamo dalje.`;
+      return `Treba nam konkretan update danas za ${target}.`;
+    case "team":
+      if (proposal.signalType === "WAITING_CLIENT_CONFIRMATION") {
+        return "Da poguramo ovo danas ako možemo, deluje da čekamo potvrdu klijenta.";
       }
-      if (tone === "internal") {
-        return `Interna napomena: projekat ${contextTarget} nema novih aktivnosti${proposal.daysInactive ? ` vec ${proposal.daysInactive} dana` : ""}. Proveriti da li cekamo odgovor klijenta, materijal ili finalnu potvrdu i ko preuzima follow-up danas.`;
+      if (proposal.signalType === "PROJECT_INACTIVE_CLIENT") {
+        return `Da proverimo ko preuzima follow-up za ${target} danas.`;
       }
-      return `${recipientName} samo kratka provera vezano za ${contextTarget}. Da bismo nastavili realizaciju bez dodatnog pomeranja rokova, znacila bi nam potvrda ili eventualne korekcije.`;
-    }
-    case "WAITING_CLIENT_CONFIRMATION": {
-      if (tone === "direct") {
-        return `${recipientName} potrebna nam je potvrda ili komentar za ${contextTarget} kako bismo nastavili bez zastoja. Bez toga ne mozemo da zatvorimo pripremu i prebacimo projekat u sledecu fazu.`;
-      }
-      if (tone === "warm") {
-        return `${recipientName} samo proveravam da li imate komentar ili potvrdu za materijale i korekcije oko ${contextTarget}, kako bismo nastavili dalje bez zastoja. Ako je sve u redu, dovoljan nam je i kratak odgovor.`;
-      }
-      if (tone === "internal") {
-        return `Interna napomena: za ${contextTarget} cekamo potvrdu klijenta. Proveriti ko radi follow-up, kada saljemo sledeci podsetnik i sta ostaje na cekanju dok odgovor ne stigne.`;
-      }
-      return `${recipientName} samo proveravam da li imate komentar ili potvrdu za materijale vezano za ${contextTarget}, kako bismo nastavili dalje bez zastoja.`;
-    }
-    case "BILLING_READY": {
-      if (tone === "direct") {
-        return `Projekat ${contextTarget} je zavrsen i obracun je spreman. Potrebno je odmah pripremiti nalog za naplatu i proslediti finansijama kako ne bismo izgubili jos jedan ciklus naplate.`;
-      }
-      if (tone === "warm") {
-        return `Projekat ${contextTarget} je zavrsen i obracun je spreman za fakturisanje. Predlog je da pripremimo nalog za naplatu i prosledimo finansijama bez odlaganja, dok je kontekst jos potpuno svež.`;
-      }
-      return `Projekat ${contextTarget} je zavrsen i obracun je spreman za fakturisanje. Predlog je da se pripremi nalog za naplatu i prosledi finansijama.`;
-    }
-    case "PAYMENT_OVERDUE_CLIENT": {
-      if (tone === "direct") {
-        return `${recipientName} faktura za ${contextTarget} je i dalje otvorena${proposal.daysOverdue ? `, sa kasnjenjem od ${proposal.daysOverdue} dana` : ""}. Molimo potvrdu termina uplate ili informaciju ako je potrebna dodatna dokumentacija sa nase strane.`;
-      }
-      if (tone === "warm") {
-        return `${recipientName} samo ljubazan podsetnik da je faktura za ${contextTarget} trenutno otvorena. Ukoliko je uplata vec poslata, slobodno zanemarite poruku. Ako je potrebno jos nesto sa nase strane, stojimo na raspolaganju i rado cemo dopuniti dokumentaciju.`;
-      }
-      if (tone === "internal") {
-        return `Interna napomena: uplata za ${contextTarget} kasni${proposal.daysOverdue ? ` ${proposal.daysOverdue} dana` : ""}. Proveriti da li ide novi podsetnik, direktan kontakt sa finansijama klijenta ili eskalacija preko account-a.`;
-      }
-      return `${recipientName} samo ljubazan podsetnik da je faktura za ${contextTarget} trenutno otvorena. Ukoliko je uplata vec poslata, slobodno zanemarite poruku. Ako je potrebno jos nesto sa nase strane, stojimo na raspolaganju.`;
-    }
+      return "Da poguramo ovo danas ako možemo.";
+    case "neutral":
     default:
-      return "";
+      if (proposal.signalType === "WAITING_CLIENT_CONFIRMATION") {
+        return "Da li je ovo blokirano ili čekamo odgovor klijenta?";
+      }
+      if (proposal.signalType === "PAYMENT_OVERDUE_CLIENT") {
+        return `Možemo li da proverimo status naplate za ${target}?`;
+      }
+      return "Kakav je status ovog taska?";
+  }
+}
+
+export function getDefaultClientFollowUpKind(proposal: FollowUpProposal): ClientFollowUpKind {
+  if (proposal.signalType === "WAITING_CLIENT_CONFIRMATION") return "project_confirmation";
+  if (proposal.signalType === "PAYMENT_OVERDUE_CLIENT") return "billing";
+  if (proposal.signalType === "PROJECT_INACTIVE_CLIENT") return "project_stalled";
+  return "general";
+}
+
+export function getClientFollowUpKindLabel(kind: ClientFollowUpKind) {
+  switch (kind) {
+    case "project_confirmation":
+      return "Potvrda projekta";
+    case "waiting_material":
+      return "Čekamo materijal";
+    case "project_stalled":
+      return "Projekat stoji";
+    case "post_meeting":
+      return "Follow-up posle sastanka";
+    case "billing":
+      return "Naplata";
+    case "general":
+    default:
+      return "Opšti follow-up";
+  }
+}
+
+export function buildClientFollowUpMessage(proposal: FollowUpProposal, kind: ClientFollowUpKind) {
+  const target = proposal.projectTitle || proposal.clientName || "projekat";
+  const phase = proposal.phaseName ? ` u fazi ${proposal.phaseName}` : "";
+  const inactivity = proposal.daysInactive ? ` Već neko vreme nemamo novi update (${proposal.daysInactive} dana).` : "";
+
+  switch (kind) {
+    case "project_confirmation":
+      return `Želeli smo samo da proverimo da li ste stigli da pogledate predlog za ${target}${phase}.`;
+    case "waiting_material":
+      return `Kada budete imali vremena, pošaljite nam potrebne materijale za ${target} kako bismo nastavili dalje.`;
+    case "project_stalled":
+      return `Želeli smo samo da proverimo da li možemo da nastavimo sa sledećom fazom projekta ${target}.${inactivity}`.trim();
+    case "post_meeting":
+      return `Hvala još jednom na sastanku. Javljamo se samo kratko da proverimo da li imate dodatna pitanja ili naredni korak za ${target}.`;
+    case "billing":
+      return `Želeli smo samo da proverimo da li je sve u redu sa dokumentacijom za uplatu vezano za ${target}${proposal.billingStatus ? ` (${proposal.billingStatus})` : ""}.`;
+    case "general":
+    default:
+      return `Javljamo se kratko da proverimo status za ${target} i da li sa vaše strane postoji nešto što vam treba od nas da bismo nastavili dalje.`;
+  }
+}
+
+export function buildClientFollowUpVariants(
+  proposal: FollowUpProposal,
+  kind: ClientFollowUpKind,
+) {
+  const target = proposal.projectTitle || proposal.clientName || "projekat";
+  const phase = proposal.phaseName ? ` u fazi ${proposal.phaseName}` : "";
+  const inactivity = proposal.daysInactive ? ` Imamo utisak da je komunikacija malo stala poslednjih ${proposal.daysInactive} dana.` : "";
+
+  switch (kind) {
+    case "project_confirmation":
+      return [
+        `Želeli smo samo da proverimo da li ste stigli da pogledate predlog za ${target}${phase}.`,
+        `Javljamo se kratko da proverimo da li ste imali priliku da pogledate predlog za ${target}.`,
+        `Kad budete imali trenutak, javite nam da li možemo da računamo na potvrdu za ${target}.`,
+      ];
+    case "waiting_material":
+      return [
+        `Kada budete imali vremena, pošaljite nam potrebne materijale za ${target} kako bismo nastavili dalje.`,
+        `Javljamo se samo kratko kao podsetnik za materijale koji su nam potrebni za ${target}.`,
+        `Čim vam bude odgovaralo, pošaljite nam materijale za ${target} da možemo da nastavimo sledeći korak.`,
+      ];
+    case "project_stalled":
+      return [
+        `Želeli smo samo da proverimo da li možemo da nastavimo sa sledećom fazom projekta ${target}.${inactivity}`.trim(),
+        `Javljamo se kratko da proverimo status projekta ${target} i da li ima nečega što vam je potrebno od nas za nastavak.`,
+        `Kad budete imali trenutak, javite nam da li možemo da pokrenemo sledeći korak za ${target}.`,
+      ];
+    case "post_meeting":
+      return [
+        `Hvala još jednom na sastanku. Javljamo se samo kratko da proverimo da li imate dodatna pitanja ili naredni korak za ${target}.`,
+        `Drago nam je što smo se čuli. Kad budete imali vremena, javite nam kako želite da nastavimo oko ${target}.`,
+        `Samo kratko da se nadovežemo na sastanak i proverimo sledeći korak za ${target}.`,
+      ];
+    case "billing":
+      return [
+        `Želeli smo samo da proverimo da li je sve u redu sa dokumentacijom za uplatu vezano za ${target}${proposal.billingStatus ? ` (${proposal.billingStatus})` : ""}.`,
+        `Javljamo se kratko da proverimo da li je sve spremno sa vaše strane oko uplate za ${target}.`,
+        `Kad budete imali trenutak, javite nam da li postoji još nešto što treba da uskladimo oko dokumentacije za uplatu za ${target}.`,
+      ];
+    case "general":
+    default:
+      return [
+        `Javljamo se kratko da proverimo status za ${target} i da li sa vaše strane postoji nešto što vam treba od nas da bismo nastavili dalje.`,
+        `Samo kratko da proverimo gde smo stali oko ${target} i da li možemo da pomognemo sa narednim korakom.`,
+        `Kad budete imali trenutak, javite nam status za ${target} kako bismo znali kako dalje da planiramo.`,
+      ];
   }
 }
 
@@ -226,11 +283,11 @@ export function getFollowUpToneLabel(tone: FollowUpTone) {
   switch (tone) {
     case "neutral":
       return "Neutralno";
-    case "warm":
-      return "Ljubazno";
+    case "friendly":
+      return "Prijateljski";
     case "direct":
       return "Direktnije";
-    case "internal":
+    case "team":
       return "Interno timu";
     default:
       return "Neutralno";
@@ -273,12 +330,12 @@ export function buildFollowUpProposals({
         clientName: client?.name,
         projectTitle: project?.title,
         taskTitle: task.title,
-        assignedUserName: memberName(
-          memberById.get(assignedUserId),
-          task.assignedToLabel,
-        ),
+        assignedUserId,
+        assignedUserName: memberName(memberById.get(assignedUserId), task.assignedToLabel),
         subject: "Interna provera statusa zadatka",
         daysOverdue: overdueDays,
+        taskStatus: task.status,
+        phaseName: getActiveProjectPhase(project) ?? undefined,
         relatedTaskId: task.id,
         relatedProjectId: project?.id,
         relatedClientId: client ? String(client.id) : undefined,
@@ -286,9 +343,7 @@ export function buildFollowUpProposals({
     });
 
   projects.forEach((project) => {
-    const projectTasks = tasks.filter(
-      (task) => task.projectId === project.id && isTaskOpen(task),
-    );
+    const projectTasks = tasks.filter((task) => task.projectId === project.id && isTaskOpen(task));
     if (!projectTasks.length) return;
     const lastActivity = projectActivityDate(projectTasks);
     const idleDays = daysBetweenNow(lastActivity);
@@ -308,6 +363,9 @@ export function buildFollowUpProposals({
       recipientName: clientContactName(client) ?? undefined,
       subject: "Provera statusa projekta",
       daysInactive: idleDays,
+      taskStatus: project.status,
+      billingStatus: project.billingStatus,
+      phaseName: getActiveProjectPhase(project) ?? undefined,
       relatedProjectId: project.id,
       relatedClientId: client ? String(client.id) : undefined,
     });
@@ -315,11 +373,7 @@ export function buildFollowUpProposals({
 
   tasks
     .filter((task) => isTaskOpen(task))
-    .filter((task) =>
-      includesWaitingKeywords(
-        [task.title, task.description, task.status].filter(Boolean).join(" "),
-      ),
-    )
+    .filter((task) => includesWaitingKeywords([task.title, task.description, task.status].filter(Boolean).join(" ")))
     .forEach((task) => {
       const project = task.projectId ? projectById.get(task.projectId) ?? null : null;
       const client = clientById.get(String(task.clientId)) ?? projectClient(project, clientById);
@@ -329,7 +383,7 @@ export function buildFollowUpProposals({
         signalType: "WAITING_CLIENT_CONFIRMATION",
         category: "Klijent",
         priority: inactivity >= 5 ? "Visok" : "Srednji",
-        summary: `${project?.title || task.title} ceka potvrdu ili komentar klijenta.`,
+        summary: `${project?.title || task.title} čeka potvrdu ili komentar klijenta.`,
         contextLabel: contextLabel([client?.name, project?.title, task.title]),
         clientName: client?.name,
         projectTitle: project?.title,
@@ -338,6 +392,8 @@ export function buildFollowUpProposals({
         recipientName: clientContactName(client) ?? undefined,
         subject: "Potvrda materijala",
         daysInactive: inactivity || undefined,
+        taskStatus: task.status,
+        phaseName: getActiveProjectPhase(project) ?? undefined,
         relatedTaskId: task.id,
         relatedProjectId: project?.id,
         relatedClientId: client ? String(client.id) : undefined,
@@ -348,8 +404,7 @@ export function buildFollowUpProposals({
 
   billingCollections.ready.forEach((record) => {
     const project = projectById.get(record.projectId) ?? null;
-    const client =
-      clientById.get(String(record.clientId)) ?? projectClient(project, clientById);
+    const client = clientById.get(String(record.clientId)) ?? projectClient(project, clientById);
     proposals.push({
       id: `billing-ready-${record.id}`,
       signalType: "BILLING_READY",
@@ -360,6 +415,8 @@ export function buildFollowUpProposals({
       clientName: client?.name,
       projectTitle: project?.title || record.projectName,
       subject: "Priprema naloga za naplatu",
+      billingStatus: record.status,
+      phaseName: getActiveProjectPhase(project) ?? undefined,
       relatedProjectId: project?.id,
       relatedClientId: client ? String(client.id) : undefined,
     });
@@ -367,8 +424,7 @@ export function buildFollowUpProposals({
 
   billingCollections.overdue.forEach((record) => {
     const project = projectById.get(record.projectId) ?? null;
-    const client =
-      clientById.get(String(record.clientId)) ?? projectClient(project, clientById);
+    const client = clientById.get(String(record.clientId)) ?? projectClient(project, clientById);
     const lateDays = getBillingStatus(record) === "overdue" ? daysBetweenNow(record.dueDate) : 0;
     proposals.push({
       id: `payment-overdue-${record.id}`,
@@ -383,17 +439,15 @@ export function buildFollowUpProposals({
       recipientName: clientContactName(client) ?? undefined,
       subject: "Podsetnik za otvorenu fakturu",
       daysOverdue: lateDays || undefined,
+      billingStatus: record.status,
+      phaseName: getActiveProjectPhase(project) ?? undefined,
       relatedProjectId: project?.id,
       relatedClientId: client ? String(client.id) : undefined,
     });
   });
 
   const unique = Array.from(new Map(proposals.map((item) => [item.id, item])).values());
-  const priorityWeight: Record<FollowUpPriority, number> = {
-    Visok: 0,
-    Srednji: 1,
-    Nizak: 2,
-  };
+  const priorityWeight: Record<FollowUpPriority, number> = { Visok: 0, Srednji: 1, Nizak: 2 };
 
   return unique
     .sort((first, second) => priorityWeight[first.priority] - priorityWeight[second.priority])
@@ -404,8 +458,4 @@ export function getFollowUpBadgeTone(category: FollowUpCategory) {
   if (category === "Interno") return "is-red";
   if (category === "Naplata") return "is-yellow";
   return "is-blue";
-}
-
-export function canOpenFollowUpEmail(proposal: FollowUpProposal) {
-  return Boolean(proposal.recipientEmail && isClientFacingSignalType(proposal.signalType));
 }

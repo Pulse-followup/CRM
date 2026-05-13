@@ -13,6 +13,7 @@ import { readProcessTemplates } from '../templates/templateStorage'
 
 const CHECKLIST_MINIMIZED_KEY = 'pulse.setupChecklist.minimized.v1'
 const CHECKLIST_TIPS_KEY = 'pulse.setupChecklist.tips.v1'
+const CHECKLIST_DISMISSED_KEY = 'pulse.onboarding.dismissed'
 
 type ChecklistStep = {
   key: string
@@ -78,6 +79,9 @@ function SetupChecklistOverlay() {
   const [isMinimized, setIsMinimized] = useState(() =>
     readBooleanFlag(CHECKLIST_MINIMIZED_KEY, false),
   )
+  const [isDismissed, setIsDismissed] = useState(() =>
+    readBooleanFlag(CHECKLIST_DISMISSED_KEY, false),
+  )
   const [seenTips, setSeenTips] = useState<Record<string, boolean>>(() => readSeenTips())
   const [catalogSnapshot, setCatalogSnapshot] = useState(() => ({
     products: readProducts().length,
@@ -87,6 +91,10 @@ function SetupChecklistOverlay() {
   useEffect(() => {
     writeBooleanFlag(CHECKLIST_MINIMIZED_KEY, isMinimized)
   }, [isMinimized])
+
+  useEffect(() => {
+    writeBooleanFlag(CHECKLIST_DISMISSED_KEY, isDismissed)
+  }, [isDismissed])
 
   useEffect(() => {
     writeSeenTips(seenTips)
@@ -304,10 +312,10 @@ function SetupChecklistOverlay() {
   }, [location.pathname])
 
   const shouldShowRouteTip = Boolean(
-    routeTip && !seenTips[routeTip.key] && !allDone && shouldShow,
+    routeTip && !seenTips[routeTip.key] && !allDone && !isDismissed && shouldShow,
   )
 
-  if (!shouldShow) return null
+  if (!shouldShow || allDone || isDismissed || isMinimized) return null
 
   return (
     <>
@@ -340,8 +348,11 @@ function SetupChecklistOverlay() {
               <button
                 type="button"
                 className="pulse-setup-close"
-                onClick={() => setIsMinimized(true)}
-                aria-label="Sklopi setup checklist"
+                onClick={() => {
+                  setIsDismissed(true)
+                  setIsMinimized(false)
+                }}
+                aria-label="Sakrij setup checklist"
               >
                 −
               </button>

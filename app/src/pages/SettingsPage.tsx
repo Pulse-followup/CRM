@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCloudStore } from '../features/cloud/cloudStore'
 import { useClientStore } from '../features/clients/clientStore'
+import { useNotificationStore } from '../features/notifications/notificationStore'
+import { isFirebasePushConfigured } from '../features/notifications/pushConfig'
 import { formatClientUsage, normalizePlanType } from '../features/subscription/plan'
+import { getSupabaseClient } from '../lib/supabaseClient'
 
 function roleLabel(role?: string | null) {
   if (role === 'admin') return 'Admin'
@@ -19,16 +22,99 @@ function readableName(profileName?: string | null, fallback?: string | null) {
 function SettingsPage() {
   const cloud = useCloudStore()
   const { clients } = useClientStore()
+  const { pushStatus, enablePushNotifications } = useNotificationStore()
   const navigate = useNavigate()
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [workspaceName, setWorkspaceName] = useState('')
   const [message, setMessage] = useState('')
+  const [pushPermission, setPushPermission] = useState<string>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported',
+  )
+  const [hasPushServiceWorker, setHasPushServiceWorker] = useState<boolean | null>(null)
+  const [registeredDeviceCount, setRegisteredDeviceCount] = useState<number | null>(null)
+  const [lastDeviceSeenAt, setLastDeviceSeenAt] = useState<string | null>(null)
 
   const loggedEmail = cloud.user?.email || cloud.profile?.email || '-'
   const displayName = readableName(cloud.profile?.full_name, loggedEmail)
   const planType = normalizePlanType(cloud.activeWorkspace?.plan_type)
   const planBadge = planType === 'PRO' ? 'PRO ACTIVE' : formatClientUsage(clients.length, planType)
+  const isPushConfigured = isFirebasePushConfigured()
+
+  useEffect(() => {
+    const nextPermission =
+      typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+    setPushPermission(nextPermission)
+  }, [pushStatus])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    async function loadPushDiagnostics() {
+      if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+        if (!isCancelled) setHasPushServiceWorker(false)
+        return
+      }
+
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations()
+        const hasRegistration = registrations.some((registration) =>
+          (registration.active?.scriptURL || registration.waiting?.scriptURL || registration.installing?.scriptURL || '')
+            .includes('firebase-messaging-sw.js'),
+        )
+        if (!isCancelled) setHasPushServiceWorker(hasRegistration)
+      } catch {
+        if (!isCancelled) setHasPushServiceWorker(false)
+      }
+    }
+
+    void loadPushDiagnostics()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [pushStatus])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    async function loadRegisteredDevices() {
+      if (!cloud.activeWorkspace?.id || !cloud.user?.id) {
+        if (!isCancelled) {
+          setRegisteredDeviceCount(null)
+          setLastDeviceSeenAt(null)
+        }
+        return
+      }
+
+      const supabase = getSupabaseClient()
+      if (!supabase) return
+
+      const { data, error } = await supabase
+        .from('device_tokens')
+        .select('last_seen_at, revoked_at')
+        .eq('workspace_id', cloud.activeWorkspace.id)
+        .eq('recipient_user_id', cloud.user.id)
+        .is('revoked_at', null)
+
+      if (error) return
+      if (isCancelled) return
+
+      const rows = Array.isArray(data) ? data : []
+      setRegisteredDeviceCount(rows.length)
+      const sortedSeenAt = rows
+        .map((row) => (typeof row.last_seen_at === 'string' ? row.last_seen_at : ''))
+        .filter(Boolean)
+        .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())
+      setLastDeviceSeenAt(sortedSeenAt[0] || null)
+    }
+
+    void loadRegisteredDevices()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [cloud.activeWorkspace?.id, cloud.user?.id, pushStatus])
 
   const runAction = async (action: () => Promise<void>, successMessage: string) => {
     setMessage('')
@@ -56,6 +142,16 @@ function SettingsPage() {
       await cloud.createWorkspace({ name: workspaceName })
       setWorkspaceName('')
     }, 'Workspace je kreiran.')
+  }
+
+  const handleEnablePush = async () => {
+    await runAction(async () => {
+      const status = await enablePushNotifications(true)
+      setPushPermission(typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported')
+      if (status !== 'ready') {
+        throw new Error(`Push nije spreman. Status: ${status}.`)
+      }
+    }, 'Push notifikacije su aktivirane za ovaj uređaj.')
   }
 
   return (
@@ -114,6 +210,28 @@ function SettingsPage() {
         ) : null}
 
         {cloud.user ? <div className="settings-button-row"><button type="button" className="settings-danger-button" onClick={() => void cloud.signOut()}>Logout</button></div> : null}
+      </section>
+
+      <section className="settings-dev-tools settings-cloud-panel account-card">
+        <div className="settings-dev-tools-head">
+          <h3>Push diagnostics</h3>
+          <p>Brza provera Firebase / service worker / device token statusa za ovaj uređaj.</p>
+        </div>
+
+        <div className="account-info-grid">
+          <div><span>Firebase config</span><strong>{isPushConfigured ? 'OK' : 'Nedostaje'}</strong></div>
+          <div><span>Push status</span><strong>{pushStatus}</strong></div>
+          <div><span>Notification permission</span><strong>{pushPermission}</strong></div>
+          <div><span>Service worker</span><strong>{hasPushServiceWorker === null ? 'Provera...' : hasPushServiceWorker ? 'Registrovan' : 'Nije registrovan'}</strong></div>
+          <div><span>Aktivni device tokeni</span><strong>{registeredDeviceCount === null ? '-' : String(registeredDeviceCount)}</strong></div>
+          <div><span>Poslednji device seen</span><strong>{lastDeviceSeenAt ? new Date(lastDeviceSeenAt).toLocaleString('sr-RS') : '-'}</strong></div>
+        </div>
+
+        <div className="settings-button-row">
+          <button type="button" className="settings-secondary-button" onClick={() => void handleEnablePush()}>
+            Aktiviraj push na ovom uređaju
+          </button>
+        </div>
       </section>
     </section>
   )

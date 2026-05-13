@@ -14,9 +14,11 @@ import { useTaskStore } from '../tasks/taskStore'
 import { getCompletedTasks, getTasksByUser } from '../tasks/taskSelectors'
 import { getOverdueTasks } from '../tasks/taskSignals'
 import type { Task } from '../tasks/types'
+import type { AppNotification } from './types'
 import { useNotificationStore } from './notificationStore'
 
-function getNotificationLink(entityType: 'task' | 'billing', entityId: string) {
+function getNotificationLink(entityType: 'task' | 'billing' | 'followup', entityId: string) {
+  if (entityType === 'followup') return `/tasks/${entityId}`
   if (entityType === 'task') return `/tasks/${entityId}`
   return '/billing'
 }
@@ -25,9 +27,10 @@ type NotificationFeedItem = {
   id: string
   title: string
   body: string
-  entityType: 'task' | 'billing'
+  entityType: 'task' | 'billing' | 'followup'
   entityId: string
   createdAt: string
+  readAt?: string | null
 }
 
 function sortByNewest(items: NotificationFeedItem[]) {
@@ -158,20 +161,39 @@ function buildDerivedNotificationFeed(tasks: Task[], billing: BillingRecord[], c
   return sortByNewest(buildAssignedTaskNotifications(tasks, currentUser)).slice(0, 12)
 }
 
+function mapStoredNotifications(notifications: AppNotification[]): NotificationFeedItem[] {
+  return notifications.map((item) => ({
+    id: item.id,
+    title: item.title,
+    body: item.body,
+    entityType: item.entityType,
+    entityId: item.entityId,
+    createdAt: item.createdAt,
+    readAt: item.readAt,
+  }))
+}
+
 function NotificationCenter() {
-  const { enablePushNotifications, isNotificationSeen, markNotificationSeen } = useNotificationStore()
+  const { notifications, enablePushNotifications, isNotificationSeen, markNotificationSeen, markNotificationRead, unreadCount } = useNotificationStore()
   const { currentUser } = useAuthStore()
   const { tasks } = useTaskStore()
   const { getAllBilling } = useBillingStore()
   const billing = getAllBilling()
   const [isOpen, setIsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
-  const items = useMemo(() => buildDerivedNotificationFeed(tasks, billing, currentUser), [billing, currentUser, tasks])
-  const unreadItems = useMemo(
-    () => items.filter((item) => !isNotificationSeen(item.id)),
-    [isNotificationSeen, items],
-  )
-  const unreadCount = unreadItems.length
+  const items = useMemo(() => {
+    const storedItems = mapStoredNotifications(notifications)
+    if (storedItems.length) return sortByNewest(storedItems).slice(0, 12)
+    return buildDerivedNotificationFeed(tasks, billing, currentUser)
+  }, [billing, currentUser, notifications, tasks])
+  const unreadItems = useMemo(() => {
+    if (notifications.length) {
+      return items.filter((item) => !item.readAt)
+    }
+    return items.filter((item) => !isNotificationSeen(item.id))
+  }, [isNotificationSeen, items, notifications.length])
+  const derivedUnreadCount = unreadItems.length
+  const displayUnreadCount = notifications.length ? unreadCount : derivedUnreadCount
 
   useEffect(() => {
     if (!isOpen) return
@@ -210,13 +232,13 @@ function NotificationCenter() {
         aria-expanded={isOpen}
       >
         <span aria-hidden="true">{"\uD83D\uDD14"}</span>
-        {unreadCount > 0 ? <span className="pulse-bell-counter">{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
+        {displayUnreadCount > 0 ? <span className="pulse-bell-counter">{displayUnreadCount > 99 ? '99+' : displayUnreadCount}</span> : null}
       </button>
       {isOpen ? (
         <div className="pulse-notification-dropdown">
           <div className="pulse-notification-head">
             <strong>Notifikacije</strong>
-            <span>{unreadCount ? `${unreadCount} neprocitanih` : 'Sve procitano'}</span>
+            <span>{displayUnreadCount ? `${displayUnreadCount} neprocitanih` : 'Sve procitano'}</span>
           </div>
           <div className="pulse-notification-list">
             {unreadItems.length ? unreadItems.map((item) => (
@@ -225,7 +247,11 @@ function NotificationCenter() {
                 to={getNotificationLink(item.entityType, item.entityId)}
                 className="pulse-notification-item is-unread"
                 onClick={() => {
-                  markNotificationSeen(item.id)
+                  if (notifications.length) {
+                    void markNotificationRead(item.id)
+                  } else {
+                    markNotificationSeen(item.id)
+                  }
                   setIsOpen(false)
                 }}
               >

@@ -35,6 +35,7 @@ interface NotificationStoreValue {
   createNotifications: (inputs: CreateNotificationInput[]) => Promise<AppNotification[]>
   markNotificationRead: (notificationId: string) => Promise<void>
   dismissToast: (toastId: string) => void
+  pushToast: (title: string, body: string) => void
   enablePushNotifications: (allowPrompt?: boolean) => Promise<PushStatus>
 }
 
@@ -108,6 +109,10 @@ function writeSeenNotificationIds(ids: string[]) {
   }
 }
 
+function upsertNotificationRecord(records: AppNotification[], nextRecord: AppNotification) {
+  return mergeNotifications([nextRecord, ...records.filter((record) => record.id !== nextRecord.id)])
+}
+
 export function NotificationProvider({ children }: PropsWithChildren) {
   const { currentUser, isCloudUser } = useAuthStore()
   const { isConfigured, activeWorkspace } = useCloudStore()
@@ -179,10 +184,38 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       return
     }
 
-    setCloudNotifications([])
-    setCloudReadStatus('cloud-empty')
+    const supabase = getSupabaseClient()
+    if (!supabase || !currentUser.id) {
+      setCloudReadStatus('cloud-empty')
+      setCloudReadError(null)
+      return
+    }
+
+    setCloudReadStatus('loading')
     setCloudReadError(null)
-  }, [activeWorkspace?.id, isCloudUser, isConfigured])
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('workspace_id', activeWorkspace.id)
+      .eq('recipient_user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (error) {
+      setCloudReadStatus('error')
+      setCloudReadError(error.message || 'Notifikacije nisu učitane.')
+      return
+    }
+
+    const nextNotifications = Array.isArray(data)
+      ? data.map((row) => mapNotificationRowToReact(row as Record<string, unknown>))
+      : []
+
+    setCloudNotifications(nextNotifications)
+    setCloudReadStatus(nextNotifications.length ? 'cloud' : 'cloud-empty')
+    enqueueToasts(nextNotifications)
+  }, [activeWorkspace?.id, currentUser.id, enqueueToasts, isCloudUser, isConfigured])
 
   const enablePushNotifications = useCallback(async (allowPrompt = false) => {
     if (!activeWorkspace?.id || !currentUser.id || !isCloudNotificationMode) {
@@ -231,6 +264,79 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     }
   }, [activeWorkspace?.id, currentUser.id, isCloudNotificationMode])
 
+  useEffect(() => {
+    if (!isCloudNotificationMode) return
+
+    void refreshNotificationsFromCloud()
+
+    const intervalId = window.setInterval(() => {
+      void refreshNotificationsFromCloud()
+    }, 5000)
+
+    const handleFocus = () => {
+      void refreshNotificationsFromCloud()
+    }
+
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [isCloudNotificationMode, refreshNotificationsFromCloud])
+
+  useEffect(() => {
+    if (!isCloudNotificationMode || !activeWorkspace?.id || !currentUser.id) return
+
+    const supabase = getSupabaseClient()
+    if (!supabase) return
+
+    const channel = supabase.channel(`notifications:${activeWorkspace.id}:${currentUser.id}`)
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `workspace_id=eq.${activeWorkspace.id}`,
+      },
+      (payload) => {
+        const sourceRow =
+          payload.eventType === 'DELETE'
+            ? (payload.old as Record<string, unknown> | null)
+            : (payload.new as Record<string, unknown> | null)
+        if (!sourceRow) return
+
+        const nextNotification = mapNotificationRowToReact(sourceRow)
+        if (nextNotification.recipientUserId !== currentUser.id) return
+
+        if (payload.eventType === 'DELETE') {
+          setCloudNotifications((current) =>
+            current.filter((notification) => notification.id !== nextNotification.id),
+          )
+          return
+        }
+
+        setCloudNotifications((current) => upsertNotificationRecord(current, nextNotification))
+        if (payload.eventType === 'INSERT') {
+          enqueueToasts([nextNotification])
+        }
+      },
+    )
+
+    void channel.subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [
+    activeWorkspace?.id,
+    currentUser.id,
+    enqueueToasts,
+    isCloudNotificationMode,
+  ])
+
   const createNotifications = useCallback(async (inputs: CreateNotificationInput[]) => {
     const deduped = inputs.filter((input, index, array) =>
       Boolean(input.recipientUserId) &&
@@ -262,10 +368,9 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       const supabase = getSupabaseClient()
       if (!supabase || !activeWorkspace?.id) return []
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('notifications')
         .insert(records.map((record) => mapNotificationToSupabaseRow(record, activeWorkspace.id!)))
-        .select('*')
 
       if (error) {
         setCloudReadStatus('error')
@@ -273,9 +378,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
         return []
       }
 
-      const savedRecords = Array.isArray(data)
-        ? data.map((row) => mapNotificationRowToReact(row as Record<string, unknown>))
-        : records
+      const savedRecords = records
       setCloudNotifications((current) => mergeNotifications([...savedRecords, ...current]))
       enqueueToasts(savedRecords)
       if (savedRecords.length) {
@@ -340,6 +443,15 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     setToasts((current) => current.filter((toast) => toast.id !== toastId))
   }, [])
 
+  const pushToast = useCallback((title: string, body: string) => {
+    setToasts((current) => [...current, {
+      id: makeId('toast'),
+      notificationId: makeId('toast-message'),
+      title,
+      body,
+    }].slice(-4))
+  }, [])
+
   const value = useMemo<NotificationStoreValue>(
     () => ({
       notifications,
@@ -355,6 +467,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       createNotifications,
       markNotificationRead,
       dismissToast,
+      pushToast,
       enablePushNotifications,
     }),
     [
@@ -368,6 +481,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       markNotificationSeen,
       markNotificationRead,
       notifications,
+      pushToast,
       pushStatus,
       refreshNotificationsFromCloud,
       toasts,
